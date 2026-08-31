@@ -28,8 +28,8 @@ criteria (IMP-0xx) · §14 Future scope · §15 Open questions
 **Technical (§16+ — written across `SPEC/IMPLEMENTATION-PLAN.md` Phases 1–5):**
 §16 Technology stack · §17 System architecture · §18 Project structure *(Phase 1 — done)* ·
 §19 Data models (final) · §20 Persistence & migrations · §21 Data-access layer · §22 Application
-state *(Phase 2)* · §23 SMS parsing · §24 Account normalization · §25 Categorization ·
-§26 Analytics computation · §27 Formatting / time / undo / running balance *(Phase 3)* ·
+state *(Phase 2 — done)* · §23 SMS parsing · §24 Account normalization · §25 Categorization ·
+§26 Analytics computation · §27 Formatting / time / undo / running balance *(Phase 3 — done)* ·
 §28 Navigation · §29 Component architecture · §30 Screen specs *(Phase 4)* · §31 Notifications ·
 §32 Error handling · §33 Security & privacy · §34 Testing strategy · §35 Build & release *(Phase 5)*
 
@@ -64,6 +64,12 @@ state *(Phase 2)* · §23 SMS parsing · §24 Account normalization · §25 Cate
 | D23 | **SMS-while-killed pipeline: native manifest receiver → headless JS.** A Kotlin `BroadcastReceiver` registered in `AndroidManifest.xml` (via the config plugin) fires on `SMS_RECEIVED` even when the app is terminated and starts a **headless JS task**; **all** parsing, the DB write and the notification post run in JS/TS. `expo-background-task` is **rejected** for this path — its WorkManager scheduling has a 15-minute floor and does not run when the app is killed. | Phase 1. Confirms D18. Contingency (native posts a provisional notification) documented in §17, not built. |
 | D24 | **Notification `Save` while killed: all-JS headless task.** The `expo-notifications` background response handler (a TaskManager task) spins up headless JS, reads the `AccountRule` via Drizzle, and writes the `Transaction` — no rule-matching or SQLite logic duplicated in Kotlin. The native module's surface stays "SMS receiver bridge only". | Phase 1. Preserves D18's "one testable codebase". If the rule was deleted between post and tap, the action deep-links into the Confirmation sheet instead of writing blind. |
 | D25 | **Sheets are a root-mounted `@gorhom/bottom-sheet` registry, not `expo-router` modal routes; the tab bar is custom, not `NativeTabs`.** Add / Edit / Confirmation / Filter / Category-picker / Create-Edit-Category are opened imperatively from a `SheetRegistry` mounted once in the root layout. | Phase 1. §6.4's docked keypad + collapse-on-scroll + dirty-discard + OS-keyboard swap need one controlled sheet host; the raised centre **Add** "FAB notch" (§8) isn't expressible with `unstable-native-tabs`, and iOS is Future. |
+| D26 | **Undo = soft-delete + purge-on-launch.** `transaction.deletedAt` (nullable); delete sets it, Undo clears it, every read filters `deletedAt IS NULL`, and rows are hard-purged on next launch once past a ~60 s grace. **`suggestion` dismiss is a hard `DELETE`** — `suggestion.status` is `pending` \| `confirmed` only (`confirmed` kept ~24 h for stale-tap routing, then purged). | Phase 2. Survives an app-kill mid-window; keeps delete/restore as ordinary writes reachable from any context. See §19.1 / §19.4 / §20.6. |
+| D27 | **Search = FTS5 external-content table + sync triggers.** `transaction_fts` over `note` / `description` / `account`, kept in sync by AFTER INSERT/UPDATE/DELETE triggers, shipped as a hand-written migration. SDK 57 `expo-sqlite` has `enableFTS` on by default. Fallback if a device lacks FTS5: a maintained `searchText` column + `LIKE`. | Phase 2. See §19.6. |
+| D28 | **Money is INTEGER paise end-to-end** (parse → store → `SUM()` → format); zero floating-point in the money pipeline. Timestamps are INTEGER epoch-ms UTC with local-day/week/month math in a domain helper (P-11). IDs are `expo-crypto` UUID `text`; enums are `text` with Drizzle enum guards. | Phase 2. Resolves the §6-sketch ambiguity. See §19.0. |
+| D29 | **Parser = hybrid, no confidence score.** Data tables for the sender seed + keyword sets + VPA shapes; code for assembly. Output is a `ParseResult` discriminated union (`transaction` with `parsedFlags` + `warnings`, or `ignored` with a `reason`). `occurredAt` is the SMS timestamp — **no in-body date parsing** in V1. The sender seed is a curated, code-versioned constant (not a table, not user-editable); expansion is Future. | Phase 3. See §23. The corpus fixture file is the primary unit-test asset. |
+| D30 | **Account matching is exact `normalizedKey` equality only in V1.** The normalization algorithm (§24.1) lower-cases, strips punctuation / `*` / trailing ref-order digits / company suffixes, and preserves VPA structure. Residual near-misses create separate rules — accepted. No fuzzy / substring / ML. | Phase 3. See §24. |
+| D31 | **Analytics Week-mode comparison target = the previous ISO week**, tiles labelled "Last week" (Month mode unchanged: previous calendar month, "Last month"). Resolves D14. Recorded as **CR-1** against `SPEC-UI-UX.md` §6.10 / `UI-055` (wording only — no layout change). Money formatting: hand-rolled Indian grouping (not `Intl`), paise only when non-zero, thin-space sign. | Phase 3. See §26.7 / §27.1 and `SPEC-UI-UX.md` §9. |
 
 Technical decisions (stack, architecture layers, project structure) and the phased plan for
 completing this document live in `SPEC/IMPLEMENTATION-PLAN.md`.
@@ -1017,3 +1023,778 @@ the `.web.tsx` / `.native.ts` split rather than scattering `Platform.OS` branche
 Full component file list + prop contracts (§29, Phase 4) · per-screen data/state binding and the
 `UI-0xx → IMP-0xx` map per screen (§30, Phase 4) · the `SheetRegistry` API and deep-link URL
 shapes (§28, Phase 4) · the `theme.ts` rewrite (§3.7 / §29, Phase 4).
+
+### 18.6 §16 addendum (found in Phase 2)
+
+`expo-file-system` + `expo-sharing` (`~57.x`, Expo-pinned) are added for **Export** (D17 / §20.8)
+— the JSON / CSV file is written to app cache and handed to the OS share sheet. Missed in the
+Phase 1 list; no other change.
+
+---
+
+## 19. Data models (final)
+
+Supersedes the §6 sketch. Frozen for V1 unless a change-request (`SPEC/PLAN.md` §10) reopens it.
+
+### 19.0 Conventions
+
+| Concern | Rule |
+|---|---|
+| **Money** | every amount is an **`integer` count of paise** (`amountMinor`, 100 paise = ₹1), always **> 0**; direction is carried by `direction` / `type`, never by the sign of the stored number. **No `REAL` / float anywhere** — parse → store → `SUM()` → format all stay integer (D28). |
+| **Timestamps** | `integer` **Unix epoch milliseconds, UTC** (`occurredAt`, `createdAt`, `updatedAt`, `deletedAt`, `smsReceivedAt`). Local calendar-day / month / ISO-week boundaries (P-11) are computed in the domain `period.ts` helper from the device zone — never stored as local strings (D28). |
+| **IDs** | `text` UUIDv4 from `expo-crypto.randomUUID()` (D28). Exception: `account_rule` is keyed by its natural `normalizedKey`; `category` also carries a stable `key` slug for the seeded rows. |
+| **Enums** | stored as `text` with a Drizzle `{ enum: [...] }` guard (SQLite has no enum type). Values are the lowercase tokens listed per field. |
+| **Booleans** | `integer` `0` / `1` (Drizzle `integer({ mode: 'boolean' })`). |
+| **FK policy** | `PRAGMA foreign_keys = ON`. `categoryId` FKs are `ON DELETE SET NULL` (a deleted category ⇒ Uncategorized, F6). |
+| **Raw SMS** | never a column, in any table (P-9). Only `smsSender` + `smsReceivedAt` survive. |
+
+### 19.1 `transaction`
+
+| Field | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | text uuid | no | — | PK |
+| `amountMinor` | integer | no | — | paise, > 0 |
+| `direction` | text `debit`\|`credit` | no | — | the money-movement direction (parser / manual segment) |
+| `type` | text `expense`\|`income` | no | — | reserved (not user-selectable in V1): `transfer`, `refund`, `reimbursement` (P-8). V1 maps `debit→expense`, `credit→income` at write time but stores `type` independently so reserved types land later with **no migration** (IMP-012) |
+| `categoryId` | text uuid | yes | null | FK → `category.id` `ON DELETE SET NULL`; `null` ⇒ Uncategorized (F7). Forced `null` when `type = income` (IMP-011) |
+| `paymentMethod` | text `upi`\|`card`\|`cash`\|`bank_transfer`\|`wallet` | yes | null | D5 |
+| `account` | text | yes | null | display form of the payee / payer (D13); the row label falls back to this when `note` is empty |
+| `normalizedAccountKey` | text | yes | null | `normalize(account)` (§8 / §24) cached at write time; FK-less link to `account_rule.normalizedKey`; re-derived on every write / edit |
+| `note` | text | yes | null | the card label (§6.2); fallback chain note → account → "No note" |
+| `description` | text | yes | null | longer detail |
+| `occurredAt` | integer ms | no | — | SMS timestamp preferred, else `smsReceivedAt`; manual = now; a future value is allowed (§6.5 edge) |
+| `createdAt` | integer ms | no | `now` | |
+| `updatedAt` | integer ms | no | `now` | bumped on every edit |
+| `deletedAt` | integer ms | yes | null | **soft-delete for Undo (D26).** Set on delete, cleared on Undo. Every read filters `deletedAt IS NULL`; rows are hard-purged on launch once `deletedAt < now − PURGE_GRACE_MS` (§20.6) |
+| `source` | text `manual`\|`sms` | no | — | |
+| `smsSender` | text | yes | null | set only when `source = sms` — the DLT header / short-code label |
+| `smsReceivedAt` | integer ms | yes | null | set only when `source = sms` |
+| `dedupeKey` | text | yes | null | copied from the originating `suggestion` (§17.3 step 4); lets the ingest guard see already-confirmed transactions |
+| `editedByUser` | integer bool | no | `0` | set `1` on the first user edit — the P2 "edited" marker (§6.8) |
+
+**Indices**
+
+| Name | Columns | Backs |
+|---|---|---|
+| `idx_txn_occurred` | `(deletedAt, occurredAt DESC)` | Transactions list (§6.7), Home Recent, day grouping |
+| `idx_txn_type_occurred` | `(deletedAt, type, occurredAt)` | period Spent / Income, daily series, running balance (§9 / §26) |
+| `idx_txn_category` | `(deletedAt, categoryId, occurredAt)` | "Where it went", category drill-down (§6.10) |
+| `idx_txn_dedupe` | `(dedupeKey)` | ingest idempotency (§17.3) |
+| `idx_txn_normkey` | `(normalizedAccountKey)` | account-rule-adjacent lookups; "Top accounts" (Future) |
+
+### 19.2 `category`
+
+| Field | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | text uuid | no | — | PK |
+| `key` | text | yes | null | stable slug for the seeded rows — `uncategorized`, `food`, `transport`, `shopping`, `entertainment`, `education`, `bills`, `groceries`, `health`, `other`; `null` for custom. **UNIQUE** |
+| `name` | text | no | — | ≤ 24 chars (app-validated, §6.12); **unique case-insensitively** among live rows (IMP-019) |
+| `icon` | text | no | — | Lucide glyph name (§3.4) from the fixed picker grid (§6.12) |
+| `kind` | text `system`\|`default`\|`custom` | no | — | `system` = the Uncategorized row only (it exists for Analytics labelling + the picker; a transaction is Uncategorized by `categoryId IS NULL`, not by pointing here). `default` = the 9. `custom` = user-created |
+| `isProtected` | integer bool | no | `0` | `1` for `other` and `uncategorized` — cannot be deleted (F6 / §6.11); the other 8 defaults **can** be deleted |
+| `order` | integer | no | — | display order; user reorder (onboarding step 3, §6.1) writes here |
+| `createdAt` / `updatedAt` | integer ms | no | `now` | |
+
+No `colour` (D12). No soft-delete — **delete is immediate**: `UPDATE transaction SET categoryId = NULL, updatedAt = now WHERE categoryId = ?` then `DELETE`, in one transaction; the count of reassigned rows feeds the confirm dialog (§6.11 edge / IMP-018).
+
+### 19.3 `account_rule` (F8)
+
+| Field | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `normalizedKey` | text | no | — | **PK** — the §8 / §24 normalized account string |
+| `displayAccount` | text | no | — | most recent display form |
+| `lastNote` | text | yes | null | set to the note just used; **explicit `NULL` when the user cleared the note** (P-6) |
+| `categoryId` | text uuid | yes | null | FK → `category.id` `ON DELETE SET NULL`; written **only when the saved transaction's category ≠ Uncategorized** (§8) |
+| `lastPaymentMethod` | text (same enum as `transaction`) | yes | null | |
+| `hitCount` | integer | no | `0` | `+1` on every upsert |
+| `createdAt` / `updatedAt` | integer ms | no | `now` | `updatedAt` bumped on upsert — **last write wins** |
+
+**Upsert** (from every transaction insert / edit with a non-empty `account`, UI **and** the headless Save):
+
+```sql
+INSERT INTO account_rule (normalizedKey, displayAccount, lastNote, categoryId, lastPaymentMethod, hitCount, createdAt, updatedAt)
+VALUES (?, ?, ?, ?, ?, 1, :now, :now)
+ON CONFLICT(normalizedKey) DO UPDATE SET
+  displayAccount     = excluded.displayAccount,
+  hitCount           = hitCount + 1,
+  lastNote           = excluded.lastNote,                       -- NULL when the note was cleared
+  lastPaymentMethod  = excluded.lastPaymentMethod,
+  categoryId         = CASE WHEN :newCategoryIsUncategorized     -- categoryId param IS NULL
+                            THEN account_rule.categoryId          -- keep the previously learned one
+                            ELSE excluded.categoryId END,
+  updatedAt          = :now;
+```
+
+**Index** `idx_rule_prefix` on `(displayAccount COLLATE NOCASE)` for the Add-sheet autocomplete
+prefix search (§6.5).
+
+### 19.4 `suggestion` (F1 / F11)
+
+| Field | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | text uuid | no | — | PK |
+| `amountMinor` | integer | yes | null | may be a partial parse |
+| `direction` | text `debit`\|`credit` | yes | null | |
+| `occurredAt` | integer ms | yes | null | from the SMS; `null` ⇒ the UI shows `smsReceivedAt` |
+| `account` | text | yes | null | raw parsed payee / VPA |
+| `normalizedKey` | text | yes | null | `normalize(account)`; used to pick the notification action set (known vs new account) |
+| `paymentMethod` | text (same enum) | yes | null | inferred hint |
+| `smsSender` | text | no | — | |
+| `smsReceivedAt` | integer ms | no | — | |
+| `dedupeKey` | text | no | — | §17.3 step 4; **UNIQUE** |
+| `status` | text `pending`\|`confirmed` | no | `pending` | **dismiss is a hard `DELETE` (D26)** — `dismissed` is not a stored state. `confirmed` is kept briefly so a stale notification tap can route to the created transaction (§10); purged on launch when `createdAt < now − 24 h` (§20.6) |
+| `confirmedTransactionId` | text uuid | yes | null | FK → `transaction.id` `ON DELETE SET NULL` |
+| `createdAt` | integer ms | no | `now` | |
+
+No confidence field (§6). "Which fields parsed" is implicit — a non-null column parsed. No raw
+body (P-9).
+
+**Indices** `idx_sugg_status` on `(status, createdAt DESC)`; `uniq_sugg_dedupe` **UNIQUE** on
+`(dedupeKey)`.
+
+### 19.5 `app_setting` (KV)
+
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `key` | text | no | PK |
+| `value` | text | no | JSON-encoded scalar / small object |
+| `updatedAt` | integer ms | no | |
+
+V1 keys: `onboardingDone` (bool) · `smsBannerDismissedAt` (ms\|null) · `notifBannerDismissedAt`
+(ms\|null) · `crashReportingEnabled` (bool — default decided in §33) · `schemaSeededVersion`
+(int — seed idempotency, §20.5) · `lastPurgeAt` (ms) · `analyticsPeriodMode` (`month`\|`week`,
+last used — optional convenience). **Category order is not here** — it lives in `category.order`.
+
+### 19.6 `transaction_fts` (FTS5)
+
+External-content FTS5 table for search (§6.7 / IMP-015):
+
+```sql
+CREATE VIRTUAL TABLE transaction_fts USING fts5(
+  note, description, account,
+  content='transaction', content_rowid='rowid'
+);
+-- + AFTER INSERT / AFTER DELETE / AFTER UPDATE triggers on `transaction`
+--   that keep transaction_fts in sync (standard external-content trigger trio),
+--   using new.rowid / old.rowid.
+```
+
+Search query: `SELECT t.* FROM transaction_fts f JOIN "transaction" t ON t.rowid = f.rowid
+WHERE f.transaction_fts MATCH ? AND t.deletedAt IS NULL ORDER BY t.occurredAt DESC` — the user
+string is tokenised and each token wrapped as a prefix term (`foo*`). Drizzle does not model FTS
+tables, so this table + its triggers ship as a **hand-written migration** (§20.3).
+
+**Fallback (D27):** if a device's SQLite lacks FTS5 (probed once at startup with a
+`CREATE VIRTUAL TABLE … fts5` in `try/catch`), the repo switches to a maintained
+`searchText` TEXT column (`lower(coalesce(note,'')||' '||coalesce(description,'')||' '||
+coalesce(account,''))`, refreshed on write) queried with `LIKE '%term%'`. SDK 57 ships
+`enableFTS` **on by default**, so FTS5 is the expected path.
+
+---
+
+## 20. Persistence & migrations
+
+### 20.1 The database handle
+
+One handle in `src/db/client.ts`:
+
+```ts
+export const sqlite = SQLite.openDatabaseSync('coinflow.db', { enableChangeListener: true });
+sqlite.execSync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+export const db = drizzle(sqlite, { schema });
+```
+
+`openDatabaseSync` (not the async variant) so the **headless tasks** (§17) and the UI share one
+code path. `enableChangeListener: true` is what makes Drizzle's `useLiveQuery` re-emit (§22).
+WAL for read/write concurrency between an open screen and a background write.
+
+### 20.2 Schema & config
+
+`src/db/schema.ts` holds the Drizzle table definitions (§19.1–§19.5). `drizzle.config.ts` at the
+repo root: `dialect: 'sqlite'`, `driver: 'expo'`, `schema: './src/db/schema.ts'`,
+`out: './src/db/migrations'`.
+
+### 20.3 Migration generation & bundling
+
+- `npx drizzle-kit generate` writes versioned SQL + a journal into `src/db/migrations/`, which is
+  **committed** (not generated at build time).
+- The **FTS5 virtual table + triggers** (§19.6) and any other statement Drizzle can't express are
+  added as extra numbered `.sql` files in the same folder, ordered after the table they depend on.
+- `src/db/migrations/migrations.js` (Drizzle's generated barrel) is `import`ed into the bundle —
+  no filesystem copy, no asset. `migrate()` / `useMigrations()` from
+  `drizzle-orm/expo-sqlite/migrator` applies anything unapplied, tracked in Drizzle's
+  `__drizzle_migrations` table.
+
+### 20.4 Run-on-launch (`<MigrationGate>`)
+
+The root layout (§18.2) mounts `<MigrationGate>`, which calls `useMigrations(db, migrations)` and
+**holds first paint** (splash stays / a skeleton shows) until `success`. Then it runs
+§20.5 (seed) and §20.6 (purge) once, synchronously, before children mount.
+
+- **On migration `error`:** a non-dismissible screen — "CoinFlow can't open your data" + **Retry**
+  + a **Export a copy** escape hatch if the DB is readable (P-4); **no raw SQL shown, no auto-wipe.**
+  Reported to Sentry with **no row data** (§33).
+- **Headless task hits a pending migration** (Phase 1 open item — **resolved**): every task calls
+  a shared `ensureMigrated()` that runs `migrate(db, migrations)` **before any read / write**.
+  Migrations are small; running them from the task is safe and prevents a silently-dropped
+  background write. If `migrate()` throws inside a task, the task aborts cleanly with **no partial
+  write** (the Suggestion is simply not created); detection is dark until the app is next opened
+  and the migration succeeds. Logged. This only happens on a broken build.
+
+### 20.5 Seed (idempotent)
+
+Runs in the gate after `migrate()`, guarded by `app_setting.schemaSeededVersion`:
+
+1. The **system** row: `category(key='uncategorized', name='Uncategorized', icon='help-circle',
+   kind='system', isProtected=1, order=0)`.
+2. The **9 defaults** — `kind='default'`, `isProtected=1` only for `other`:
+
+   | order | key | name | Lucide icon |
+   |---|---|---|---|
+   | 1 | `food` | Food | `utensils` |
+   | 2 | `transport` | Transport | `bus` |
+   | 3 | `groceries` | Groceries | `shopping-basket` |
+   | 4 | `bills` | Bills | `receipt` |
+   | 5 | `shopping` | Shopping | `shopping-bag` |
+   | 6 | `entertainment` | Entertainment | `clapperboard` |
+   | 7 | `health` | Health | `heart-pulse` |
+   | 8 | `education` | Education | `graduation-cap` |
+   | 9 | `other` | Other | `shapes` |
+
+   *(icons are the Phase 2 proposal — Phase 4 confirms them against the final Lucide wrapper and
+   the §3.4 chrome set.)*
+3. All inserts use `ON CONFLICT(key) DO NOTHING` so **user renames / re-icons survive** a re-seed.
+   When the seed content changes in a future release, bump `schemaSeededVersion`; the merge rule
+   is **add missing `key`s only, never overwrite a modified row**.
+4. The **SMS sender seed set** is **not** a table — it is a versioned constant
+   (`src/constants/sms-senders.ts`), finalised in §23 (Phase 3). Not user-editable in V1.
+
+### 20.6 Purge-on-launch
+
+In the gate, after seed; also re-runnable from `AppState → active` if the app has been open past
+midnight:
+
+```sql
+DELETE FROM "transaction" WHERE deletedAt IS NOT NULL AND deletedAt < (:now - :PURGE_GRACE_MS);   -- PURGE_GRACE_MS ≈ 60_000, well past the 5 s Undo + snackbar
+DELETE FROM suggestion   WHERE status = 'confirmed' AND createdAt < (:now - 86_400_000);           -- 24 h
+```
+
+then write `lastPurgeAt`. FTS rows follow via the §19.6 delete trigger.
+
+### 20.7 Clear all data (§12 / IMP-044)
+
+One transaction: `DELETE` from `suggestion`, `transaction` (FTS follows), `account_rule`, and
+`category WHERE kind = 'custom'`; reset the 10 seeded rows to their §20.5 values; delete every
+`app_setting` row (so `onboardingDone` is absent ⇒ the app returns to onboarding). `VACUUM`
+after. The two-step `CONFIRM`-typed dialog is UI (§6.14 / IMP-065).
+
+### 20.8 Export (D17 / §12 / IMP-043)
+
+Read-only, no import in V1. `src/features/settings/export.ts`:
+
+- **JSON** — `{ version, exportedAt, transactions[], customCategories[], accountRules[] }` (live
+  rows only; paise as integers; timestamps as epoch-ms). 
+- **CSV** — transactions only, one header row + one row per transaction, amounts rendered as
+  rupees with two decimals for spreadsheet use, `occurredAt` as ISO-8601 local.
+
+Written to `FileSystem.cacheDirectory` then passed to `Sharing.shareAsync(...)` (§18.6). Nothing
+leaves the device except through that user-initiated share sheet (P-9 / IMP-045).
+
+---
+
+## 21. Data-access layer
+
+`src/db/repositories/*.ts` — plain typed functions over the shared `db`. Reads that a screen
+watches are exposed as `use*` hooks built on `useLiveQuery` (`drizzle-orm/expo-sqlite`), which
+re-runs the query on `expo-sqlite` change events (§20.1). Writes come in `async` (UI) and, where a
+**headless task** needs them, `*Sync` variants over the same SQL. **Every write path below that is
+marked ✅ is reachable from a background task and shares its implementation with the UI call — no
+logic fork** (Phase 1 §17.0 rule 2).
+
+### 21.1 `transactionRepo`
+
+| Method | Kind | Backs | Headless |
+|---|---|---|---|
+| `insertTransaction(input)` / `…Sync` | write | Add (§6.5), Confirmation (§6.4), notification **Save** (§17.4b). Derives `normalizedAccountKey`, sets `type` from `direction`, copies `dedupeKey`, forces `categoryId=null` when `type='income'` | ✅ |
+| `updateTransaction(id, patch)` | write | Edit (§6.6), inline category fix on Details (§6.8 / J5). Re-derives `normalizedAccountKey`, sets `editedByUser=1`, bumps `updatedAt` | — |
+| `softDeleteTransaction(id)` | write | swipe-delete (§6.7 / §6.8) — sets `deletedAt=now` | — |
+| `restoreTransaction(id)` | write | Undo (§6.7 / IMP-016) — clears `deletedAt` | — |
+| `purgeDeleted(before)` | write | launch job (§20.6) | ✅ (gate) |
+| `getTransaction(id)` / `…Sync` | read | Details, stale-notification routing | ✅ |
+| `useTransaction(id)` | live | Details (§6.8) | — |
+| `useTransactionList(query)` | live | Transactions (§6.7). `query = { search?, categoryIds?, type?, methods?, from?, to?, limit, cursor }`; FTS join when `search` set; returns rows + `daySubtotals` | — |
+| `useRecentTransactions(limit=8)` | live | Home Recent (§6.2) | — |
+| `hasDedupeKey(key)` → bool | read-Sync | §17.3 step-4 guard (checks `transaction` **and** `suggestion`) | ✅ |
+
+### 21.2 `categoryRepo`
+
+| Method | Kind | Backs |
+|---|---|---|
+| `useCategories()` | live | pickers, Categories (§6.11), onboarding step 3 |
+| `getCategoryMap()` / `…Sync` | read | icon / name resolution in lists |
+| `createCategory({name, icon})` | write | Create sheet (§6.12); rejects a case-insensitive duplicate with a typed error (IMP-019) |
+| `updateCategory(id, {name?, icon?, order?})` | write | Edit sheet, reorder |
+| `deleteCategory(id)` → `{ reassigned }` | write | Categories swipe (§6.11); throws on `isProtected`; reassigns transactions to `null` and returns the count for the confirm (IMP-018) |
+| `reorderCategories(idsInOrder)` | write | drag reorder / onboarding |
+
+### 21.3 `accountRuleRepo`
+
+| Method | Kind | Backs | Headless |
+|---|---|---|---|
+| `upsertFromTransaction(txn)` / `…Sync` | write | after any insert/edit with a non-empty `account` — UI **and** notification Save. Implements §19.3 | ✅ |
+| `getAccountRule(normalizedKey)` → rule\|null | read-Sync | notification action-set choice (§17.3 step 6) + re-match on Save (§17.4b) | ✅ |
+| `useAccountRules()` | live | Settings › Account rules (§6.14 / D16) | — |
+| `searchByPrefix(prefix, limit)` | read | Add/Edit/Confirmation account autocomplete (§6.5) | — |
+| `updateAccountRule(key, {lastNote?, categoryId?})` | write | Account rules screen edit | — |
+| `deleteAccountRule(key)` | write | Account rules screen | — |
+
+### 21.4 `suggestionRepo`
+
+| Method | Kind | Backs | Headless |
+|---|---|---|---|
+| `insertIfNew(input)` → `{ created, id }` | write-Sync | `SMS_INGEST_TASK` (§17.3 step 5); relies on `uniq_sugg_dedupe` + `ON CONFLICT DO NOTHING` | ✅ |
+| `getSuggestion(id)` / `…Sync` | read | notification routing, Review Queue row | ✅ |
+| `confirmSuggestion(id, transactionId)` / `…Sync` | write | set `status='confirmed'` + link — in the **same DB transaction** as the transaction insert, from both the Confirmation sheet and the headless Save | ✅ |
+| `dismissSuggestion(id)` / `…Sync` | write | **hard `DELETE`** (D26) — notification Discard + Review Queue swipe | ✅ |
+| `dismissAllPending()` → count | write | Review Queue "Dismiss all" (§6.3) | — |
+| `usePendingSuggestions()` | live | Review Queue list (§6.3) | — |
+| `usePendingCount()` | live | Home action strip + Home-tab badge (§6.2) | — |
+| `purgeConfirmed(before)` | write | launch job (§20.6) | ✅ (gate) |
+
+### 21.5 `analyticsRepo` (raw SQL — exact statements in §26)
+
+All `live`. `SUM`s stay integer (paise). Period bounds from `period.ts` (P-11).
+
+| Method | Backs |
+|---|---|
+| `usePeriodSummary(period)` | Analytics "This month" card + Home Income/Spending tiles — Σ expense, Σ income, Balance |
+| `useRunningBalance()` | Home hero (D2) — `SUM(CASE type WHEN 'income' THEN amountMinor WHEN 'expense' THEN -amountMinor END)` over all live rows |
+| `useMoMDeltas(period)` | Home tiles — current vs previous calendar month `(cur−prev)/prev` |
+| `useCategoryBreakdown(period)` | "Where it went" — group by `categoryId` (Uncategorized = `NULL` bucket), share of spend, desc |
+| `useDailySeries(period)` | "Day by day" — Σ expense per local day, zero-filled in JS; mean + median in JS |
+| `useLargestExpenses(period, n=5)` | "Biggest expenses" |
+| `useUncategorizedCount(period?)` | Home "N uncategorized", Analytics "Fix N" |
+
+### 21.6 `settingsRepo` / `maintenanceRepo`
+
+| Method | Kind | Notes |
+|---|---|---|
+| `getSetting<T>(key, fallback)` / `useSetting(key)` / `setSetting(key, value)` | read-Sync / live / write | KV over `app_setting` (§19.5); sync read available to startup / tasks |
+| `runLaunchMaintenance()` | write-Sync | migrate → seed → purge; returns a summary for logging (§20.4–§20.6) |
+| `clearAllData()` | write | §20.7 |
+| `exportJson()` / `exportCsv()` → file uri | read | §20.8 |
+
+### 21.7 Live-query re-emit
+
+`use*` hooks wrap `useLiveQuery(db.select()…)`. A write from **any** context (UI or a headless
+task) hits the one `coinflow.db`; `expo-sqlite`'s change listener fires and every mounted
+subscriber re-runs its query — no manual invalidation, no cache layer. While the app is fully
+killed there is nothing mounted to update; the durable rows are simply read fresh by the gate on
+next launch.
+
+---
+
+## 22. Application state
+
+Three tiers, no overlap.
+
+### 22.1 SQLite-derived (the single source of truth)
+
+Everything durable — transactions, categories, rules, suggestions, settings — is read **only**
+through §21 live-query hooks. It is never copied into React state or a store beyond what a
+component renders this frame. No optimistic-update cache: writes are local and fast, and the
+live query re-emits within a frame or two.
+
+### 22.2 Zustand ephemeral stores (`src/stores/`, never persisted)
+
+| Store | Holds | Cleared |
+|---|---|---|
+| `useAddSheetDraft` | the Add / Edit / Confirmation working copy — `{ mode, sourceId?, amountMinor, direction, type, categoryId, paymentMethod, account, note, description, occurredAt, dirty, submitting, error }`. Seeded on open from a Suggestion, an existing Transaction, or defaults. `dirty` drives the discard-confirm (V-6) | on sheet close / app kill |
+| `useKeypad` | numeric-keypad buffer, decimal state, and `mode` (`amount` full-height vs collapsed summary bar, §6.4); writes through to `useAddSheetDraft.amountMinor` | with the sheet |
+| `useFilterDraft` | the Filter sheet's working selection **before Apply** (§6.9). The **applied** filter is held in Transactions route params (survives tab switches + deep links), not here | on Apply / cancel |
+| `useOnboarding` | step index (1–3) + pending per-step selections (category toggles) before commit | on "Done" (then committed to DB, `onboardingDone` set) |
+| `useSheetRegistry` | `{ current: SheetName\|null, params, open(name, params), close(), requestClose() }` — the imperative sheet host (D25; API detailed in §28) | app kill |
+| `useUndo` | `{ transactionId, timerId } \| null` — drives the Undo snackbar + its ~5 s auto-hide. The **data** is already safe via soft-delete, so this store never holds row content; Undo just calls `restoreTransaction` | on Undo / timeout / app kill |
+
+### 22.3 Persisted preferences
+
+`app_setting` KV rows (§19.5) via `settingsRepo` — **not** a store, **not** AsyncStorage/MMKV.
+`onboardingDone` gates the onboarding redirect in the root layout; `*BannerDismissedAt` gate the
+V-9 permission banner; `crashReportingEnabled` is read once at startup to arm/disarm Sentry
+(§33). The headless task can read these synchronously if ever needed.
+
+### 22.4 Permission state is not stored
+
+SMS + notification permission status is read live from the OS
+(`coinflowSms.getPermissionsAsync()`, `Notifications.getPermissionsAsync()`) on the screens that
+show it (Home banner, onboarding step 2, Settings › SMS & notifications) and re-checked on
+`AppState → active`. Only the banner **dismissal** is persisted (§22.3).
+
+### 22.5 Cross-context update path
+
+```
+headless task writes coinflow.db
+        │
+        ▼  (app in foreground)
+expo-sqlite change event  ──▶  every mounted useLiveQuery re-runs
+        │                              │
+        ▼                              ▼
+Home "N to review" / "N uncategorized"   Review Queue list, Transactions list, Analytics
+updates with no manual invalidation
+```
+
+Cold start: the `<MigrationGate>` finishes → first render already reads fresh rows.
+
+### 22.6 Deferred to later phases
+
+The exact `SheetRegistry` / draft-store API surface and the Reduce-Motion hook (§28–§29, Phase 4).
+
+---
+
+## 23. SMS parsing
+
+`src/domain/parser/` — pure TS, no RN / Expo imports (§18.1). Entry
+`parseSms(input: RawSms): ParseResult`, `RawSms = { sender: string; body: string; receivedAt: number }`.
+
+### 23.1 Pipeline
+
+```
+RawSms
+  → 23.2 sender gate      non-match  ⇒ { kind:'ignored', reason:'sender' }
+  → 23.3 ignore gate      OTP / promo / balance-only / request-money / forex / not-yet-settled ⇒ ignored
+  → 23.4 field extraction amount · direction · account · paymentMethod
+  → 23.5 transaction gate need direction OR amount, else ⇒ { kind:'ignored', reason:'not-a-txn' }
+  ⇒ { kind:'transaction', fields, parsedFlags, warnings }
+```
+
+`occurredAt` is **not parsed from the body** — it is `input.receivedAt`, the SMS timestamp handed
+in by the native receiver (§7 / P-11). No in-body date parsing in V1 (a clearly back-dated value
+is logged as Future).
+
+### 23.2 Sender gate
+
+`isKnownSender(sender)` against `SENDER_SEED` (`src/constants/sms-senders.ts`). Indian
+transactional SMS come from 6-char DLT header IDs (`AD-HDFCBK`, `VM-SBIINB`, `JD-ICICIB`,
+`BZ-PAYTMB`, …) plus a few numeric short codes. Match: drop the `XX-` telco prefix and a trailing
+`-S`/`-T`, upper-case, test the 4–8-char core against the seed (exact + a prefix set:
+`HDFCBK`, `SBIINB`, `ICICI`, `AXISBK`, `KOTAK`, `PNBSMS`, `CBSSBI`, `BOIIND`, `PAYTM`, `PHONPE`,
+`GPAY`, `AMZNPY`, `CRED`, …). The seed is **curated, code-versioned, not user-editable in V1**;
+expansion and any learn-from-use is Future (§14). Unknown sender ⇒ `ignored:'sender'`; nothing
+else runs (IMP-002).
+
+### 23.3 Ignore gate
+
+Ordered checks on the lower-cased, whitespace-collapsed body; first hit wins ⇒
+`{ kind:'ignored', reason }`. Runs **before** extraction so a promo mentioning `₹500` never
+becomes a Suggestion.
+
+| reason | trigger (indicative) |
+|---|---|
+| `otp` | `\botp\b`, `one[- ]time password`, `verification code`, `do not share`, `\b\d{4,8}\b is your` |
+| `promo` | `offer`, `cashback up to`, `apply now`, `pre-?approved`, `\bloan\b`, `emi option`, `\bsale\b`, `discount`, a bare link with no debit/credit keyword |
+| `balance-only` | `avl bal` / `available balance` / `a/c balance` **and** no debit/credit keyword and no directional amount |
+| `request-money` | `requesting`, `collect request`, `has requested`, `payment request`, `debited if you approve` |
+| `foreign-currency` | an amount prefixed by `\b(usd|eur|gbp|aed|sgd)\b` / `\$` / `€` / `£` and no INR amount present (logged for Future) |
+| `not-yet-settled` | `will be credited`, `has been initiated`, `is pending`, `on hold` — future-tense, no ledger entry in V1 |
+
+### 23.4 Field extraction (hybrid — data tables + code)
+
+Each extractor returns `value | null` and never throws.
+
+- **amount → `amountMinor: integer | null`.** INR amount regex: optional `rs`/`rs.`/`inr`/`₹`
+  (case-insensitive, optional space) then an Indian- or plain-grouped number with an optional
+  `.dd`:
+  `/(?:rs\.?|inr|₹)\s?((?:\d{1,2},)?(?:\d{2},)*\d{3}(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/i`.
+  Multiple amounts → prefer the one adjacent to a direction keyword, else the first. **To paise
+  as integer:** strip `,`; split on `.`; right-pad the fraction to 2 digits;
+  `major*100 + minorPadded`. **Never `parseFloat` into rupees** (D28). Values `≤ 0` or
+  `> 1,00,00,000_00` paise set `warnings:['amountOutOfRange']` but keep the value for review
+  (the UI's extra-confirm handles §6.4's edge).
+- **direction → `'debit' | 'credit' | null`.** Word-boundary keyword sets:
+  debit = `debited`, `debit`, `spent`, `paid`, `withdrawn`, `purchase of`, `sent to`,
+  `transferred to`, `payment of`, `\bdr\b`; credit = `credited`, `credit`, `received`,
+  `deposited`, `added to`, `refund of`, `\bcr\b`. Both present → the one nearest the chosen
+  amount; still tied → `null` + `warnings:['ambiguousDirection']`.
+- **account → `{ raw, normalizedKey } | null`.** First non-empty of:
+  (1) VPA `/\b[\w.\-]{2,}@[a-z]{2,}\b/i`; (2) `to|at|towards|for|in favour of <name>` trimmed at
+  the next keyword (`on`, `ref`, `upi`, `a/c`, `.`); (3) the alpha segment of a
+  `UPI/DR/123456/NAME/…` ref that isn't a bank/scheme token; (4) `from <name>` for credits.
+  `normalizedKey = normalize(raw)` (§24). No match ⇒ `null` (F7 — never guessed).
+- **paymentMethod → enum | null.** VPA / `upi` → `upi`; `card`, `card ending`, `xx\d{4}` →
+  `card`; `imps` / `neft` / `rtgs` → `bank_transfer`; `wallet`, `paytm wallet`,
+  `amazon pay balance`, `phonepe wallet` → `wallet`; else `null`.
+
+### 23.5 Transaction gate & output
+
+Qualifies when **`direction !== null` OR `amountMinor !== null`** (a partial parse is allowed —
+§7 / IMP-003); else `ignored:'not-a-txn'`.
+
+```ts
+type ParseResult =
+  | { kind: 'transaction';
+      fields: { amountMinor: number|null; direction: 'debit'|'credit'|null;
+                account: string|null; normalizedKey: string|null;
+                paymentMethod: PaymentMethod|null; occurredAt: number };
+      parsedFlags: { amount: boolean; direction: boolean; account: boolean; method: boolean };
+      warnings: ('amountOutOfRange'|'ambiguousDirection')[] }
+  | { kind: 'ignored'; reason: 'sender'|'otp'|'promo'|'balance-only'|'request-money'
+                              |'foreign-currency'|'not-yet-settled'|'not-a-txn' };
+```
+
+`SMS_INGEST_TASK` (§17.3) maps a `transaction` result to a `Suggestion` (§19.4) and computes
+`dedupeKey = sha256(sender | amountMinor | floor(occurredAt/60000) | direction)`. **No confidence
+score** (§7).
+
+### 23.6 Test corpus (primary unit-test asset — `SPEC/PLAN.md` §8)
+
+`src/domain/parser/__fixtures__/sms-corpus.ts` — `{ id, sender, body, receivedAt, expected }[]`,
+bodies **anonymised** (names / VPAs / refs replaced, amounts realistic). V1 coverage:
+
+- Banks — HDFC, SBI, ICICI, Axis, Kotak, PNB, BoB — debit + credit × UPI + card + IMPS/NEFT.
+- UPI apps — GPay, PhonePe, Paytm, CRED, Amazon Pay.
+- Each `ignored` reason ×2.
+- Partial parses — amount-only; direction-only; no account.
+- Hard shapes — two amounts in one body; `Rs.` vs `INR` vs `₹`; paise present; lakh grouping;
+  multi-line; a real debit with a trailing marketing sentence.
+
+Run over the whole corpus in `jest` CI; a mismatch fails the build. Every real-world miss becomes
+a fixture **before** the parser is changed (regression guard).
+
+---
+
+## 24. Account normalization
+
+`src/domain/normalize.ts` — `normalize(raw: string): string` → the `normalizedKey` that is the
+`account_rule` PK and is cached on `transaction.normalizedAccountKey` / `suggestion.normalizedKey`.
+
+### 24.1 Algorithm (ordered)
+
+1. Unicode NFKC; trim; collapse internal whitespace to single spaces.
+2. Lower-case.
+3. **VPA** (`local@psp`): keep `local@psp`; strip a leading/trailing digit run from `local`
+   **only if** `local` also contains letters (`swiggy@paytm` unchanged; `9876543210@ybl` keeps
+   its digits — a numeric handle *is* the identity). `psp` untouched.
+4. Else: replace `* # . , / \ _ - ( ) : ;` with spaces.
+5. Strip trailing reference / order / invoice tokens — repeat until stable:
+   `\b(ref|txn|rrn|order|inv|no|id)?\s?[:#]?\s?[a-z]*\d{3,}[a-z0-9]*$`.
+6. Strip company suffixes: `\b(pvt|private|ltd|limited|llp|inc|co|company|india)\b`.
+7. Collapse whitespace; trim. Empty result ⇒ fall back to the step-2 string.
+
+### 24.2 Worked table (with the §8 near-miss cases)
+
+| raw | normalizedKey |
+|---|---|
+| `swiggy@paytm` | `swiggy@paytm` |
+| `SWIGGY@paytm` | `swiggy@paytm` |
+| `Swiggy Limited` | `swiggy` |
+| `SWIGGY*ORDER123` | `swiggy` |
+| `SWIGGY LTD` | `swiggy` |
+| `Namma Metro` | `namma metro` |
+| `namma-metro@upi` | `namma-metro@upi` *(VPA — `local` punctuation kept)* |
+| `Amazon Pay India Pvt Ltd` | `amazon pay` |
+| `UBER   INDIA /RIDE/ 88213` | `uber india ride` |
+| `9876543210@ybl` | `9876543210@ybl` |
+| `BLINKIT#IN9921` | `blinkit` |
+
+### 24.3 Matching (V1)
+
+**Exact `normalizedKey` equality only** — `getAccountRule(key)` is a PK lookup. Residual
+near-misses (`namma-metro@upi` vs `namma metro`) create **separate** rules — accepted for V1
+(§8). No fuzzy match, edit-distance, substring, or ML. The §24.2 rows + ~12 more are a
+unit-test table.
+
+---
+
+## 25. Categorization
+
+`src/domain/categorize.ts` + `accountRuleRepo` (§21.3). No colour, no keyword map, no ML in V1.
+
+### 25.1 On detection / autocomplete pick
+
+`resolveCategoryForAccount(normalizedKey | null)` →
+`{ categoryId: string|null; note: string|null; paymentMethod: PaymentMethod|null }`:
+
+- `null` key ⇒ `{ null, null, null }` — stays **Uncategorized**, note blank (never guessed,
+  `idea.md` §7).
+- rule found ⇒ its `categoryId` (possibly `null`), `lastNote`, `lastPaymentMethod` — all still
+  editable (P-2).
+- **Notification action set** (§17.3 step 7 / §6.15): rule with a non-null `categoryId` **or** a
+  non-null `lastNote` ⇒ **known-account** (`Save` / `Add` / `Discard`); otherwise **new-account**
+  (`Add` / `Discard`).
+
+### 25.2 On save / edit — the learning step (P-6)
+
+After a `transaction` write with a non-empty `account`, `accountRuleRepo.upsertFromTransaction`
+runs **in the same DB transaction** as the insert/update (exactly §19.3):
+
+- `hitCount += 1`; `displayAccount = txn.account`; `updatedAt = now` (**last write wins**).
+- `lastNote = txn.note ?? null` — a cleared note (`'' → null`) clears `lastNote`.
+- `lastPaymentMethod = txn.paymentMethod ?? null`.
+- `categoryId` ← `txn.categoryId` **only when not Uncategorized**; when the transaction is
+  Uncategorized, **keep** the previously learned `categoryId` (don't un-learn).
+
+Income has no category (IMP-011) — an income save still updates `lastNote` / `lastPaymentMethod` /
+`displayAccount` / `hitCount`, leaving `categoryId` alone.
+
+### 25.3 Uncategorized (F7)
+
+`categoryId IS NULL` **is** the Uncategorized state — no id is stored on the row. Uncategorized
+expenses **count in every spend total** (§26) and are surfaced everywhere (Home count, Analytics
+row, list style V-4, a filter value).
+
+---
+
+## 26. Analytics computation
+
+`src/domain/analytics/` (pure) + `analyticsRepo` raw SQL (§21.5). Integer paise until the
+formatter (§27). `period = { mode:'month'|'week', startMs, endMsExclusive }` from §27.3.
+
+### 26.1 Core aggregates (SQL, per period)
+
+```sql
+SELECT
+  COALESCE(SUM(CASE WHEN type='expense' THEN amountMinor END), 0) AS spentMinor,
+  COALESCE(SUM(CASE WHEN type='income'  THEN amountMinor END), 0) AS incomeMinor
+FROM "transaction"
+WHERE deletedAt IS NULL AND occurredAt >= :startMs AND occurredAt < :endMsExclusive;
+```
+
+- **Balance (period)** = `incomeMinor − spentMinor` (JS; may be negative).
+- **Savings rate** = `incomeMinor === 0 ? null : balance / incomeMinor` (line omitted when
+  `null` — §9).
+- **Arc-gauge fill** = `clamp(balance / incomeMinor, 0, 1)`; `incomeMinor === 0 ⇒ 0`; caption
+  `"{round(fill*100)}% of income left"`. Negative balance ⇒ fill `0`, empty ring, Balance shown
+  with a leading `−` (IMP-037).
+
+### 26.2 Home hero — all-time running balance (D2)
+
+```sql
+SELECT COALESCE(SUM(CASE type WHEN 'income' THEN amountMinor WHEN 'expense' THEN -amountMinor END), 0)
+FROM "transaction" WHERE deletedAt IS NULL;
+```
+
+No period filter; never an SMS "Avl Bal" — a computed net over the ledger (D2). May be negative.
+
+### 26.3 Home tiles — MoM deltas (D2 / §9)
+
+`spentMinor` / `incomeMinor` (§26.1) for the current calendar month `M` and previous `M−1`.
+Tile delta = `prev === 0 ? null : (cur − prev) / prev`, shown as a signed `%` + trend glyph;
+`null ⇒ "—"`. The top-bar month scopes the **tiles**, not the hero (D2).
+
+### 26.4 By category — "Where it went"
+
+```sql
+SELECT categoryId, COALESCE(SUM(amountMinor),0) AS amountMinor, COUNT(*) AS n
+FROM "transaction"
+WHERE deletedAt IS NULL AND type='expense'
+  AND occurredAt >= :startMs AND occurredAt < :endMsExclusive
+GROUP BY categoryId ORDER BY amountMinor DESC;
+```
+
+`categoryId IS NULL` = the **Uncategorized** bucket (hatched, own row, "Fix N" — IMP-033). Row
+share = `amountMinor / spentMinor` (guard `0`). Colour from the fixed category palette (§3.1) —
+**the only coloured surface** (V-11); Uncategorized never coloured.
+
+### 26.5 Largest expenses
+
+Top `5` `type='expense'` in period by `amountMinor DESC`, ties by `occurredAt DESC`, `LIMIT 5` →
+Details (IMP-034).
+
+### 26.6 Daily series — "Day by day"
+
+Pull `(occurredAt, amountMinor)` for `type='expense'` in the period, bucket in **JS** by
+`dayIndex(occurredAt)` (§27.3 — correct local-day boundaries), then **zero-fill** every day from
+period start to `min(periodEnd, today)`.
+
+- **Mean daily spend** = `spentMinor / daysElapsed` — `daysElapsed` = local days from period
+  start through **today** for the current incomplete period, else the period's full day count
+  (IMP-035).
+- **Median daily spend** = median of the **zero-filled** series (JS; mean of the two middles on
+  an even count) — resists a rent-day spike.
+- Both are also computed for the **previous period** (previous calendar month in Month mode;
+  previous **ISO week** in Week mode — **CR-1** / D14) for the tile comparison; hidden when there
+  is no previous-period data (IMP-032).
+- **Dashed mean line** at the mean daily value, labelled `"avg ₹…"` (IMP-036).
+- **Outlier scaling:** y-max = `max(p95 of non-zero daily values, 1)`; a day above the axis is
+  clipped and inline-labelled `"₹X"` rather than compressing the rest (§9 / §6.10 edge).
+
+### 26.7 Week mode (D14)
+
+Same math; period = an **ISO week** (`date-fns startOfISOWeek` in the device zone → `+7d`). The
+stepper moves one ISO week; "next" disabled on the current week. Comparison target = the
+**previous ISO week**; the tile label reads **"Last week"** (CR-1). "Day by day" = 7 buckets.
+
+### 26.8 Uncategorized count
+
+`SELECT COUNT(*) FROM "transaction" WHERE deletedAt IS NULL AND type='expense' AND categoryId IS NULL`
+— period-scoped for the Analytics "Fix N"; unscoped for the Home action-strip row (F7).
+
+---
+
+## 27. Formatting · time · undo · running balance
+
+`src/domain/format/` + `src/domain/period.ts`. All pure, all unit-tested.
+
+### 27.1 Money formatter (V-1)
+
+`formatMoney(amountMinor, opts?: { sign?: 'always'|'none'; withCurrency?: boolean }): string`
+
+- `₹` prefix (unless `withCurrency:false`); **Indian grouping** — `₹1,23,456` (last group 3
+  digits, 2 thereafter). Hand-rolled on the integer rupee string — **not `Intl`** (Hermes `Intl`
+  is partial).
+- Rupees = `Math.trunc(amountMinor / 100)`; **paise shown only when non-zero**, always 2 digits
+  (`₹12.50`, `₹12`).
+- **Sign** (`opts.sign` default `'always'` for transaction amounts, `'none'` for neutral figures):
+  leading `+` / `−` with a **thin space U+2009** before `₹` — `+ ₹1,15,000`, `− ₹842`. A negative
+  input always shows `−`. Never colour (V-11).
+- `formatCount(n)` → `n > 99 ? '99+' : String(n)`.
+- `formatPercentDelta(x)` → `x == null ? '—' : (x>0?'+':'') + Math.round(x*100) + '%'`.
+
+### 27.2 Dates & time (V-2)
+
+`formatWhen(ts, now?)` — relative within ~7 days (`just now` < 60 s, `Nm ago`, `Nh ago`,
+`Yesterday`, `N days ago`), absolute beyond (`3 Aug`, `3 Aug 2025` outside the current year).
+`formatDayHeader(dayStartMs)` → `Today` / `Yesterday` / `Wed, 3 Sep`. `date-fns`, device
+locale/zone. Day-grouping keys come from §27.3, never a raw `toDateString`.
+
+### 27.3 Local boundaries & periods (P-11)
+
+- `startOfLocalDay(ts)` / `endOfLocalDayExclusive(ts)` — `date-fns`, device zone.
+- `dayIndex(ts)` — integer local-day count from the epoch (the grouping key).
+- `monthPeriod(anchorTs)` → `{ mode:'month', startMs, endMsExclusive, label }`
+  (`startOfMonth` → `startOfMonth(addMonths(1))`; label `August` or `Aug 2025`).
+- `isoWeekPeriod(anchorTs)` → `{ mode:'week', …, label:'25 Aug – 31 Aug' }`
+  (`startOfISOWeek` → `+7d`).
+- `previousPeriod(period)` — one calendar month, or one ISO week, back (CR-1).
+- `stepPeriod(period, dir: -1|+1)` — `+1` disallowed when the target `startMs > now` ("next"
+  disabled — §6.10).
+- Transaction `occurredAt` = the SMS timestamp when present, else `smsReceivedAt`, else
+  `Date.now()` for manual (P-11).
+
+### 27.4 Undo (P-3 / §6.7 / IMP-016)
+
+`UNDO_WINDOW_MS = 5000` (snackbar), `PURGE_GRACE_MS = 60000` (§20.6).
+
+1. Swipe-delete → confirm dialog → `softDeleteTransaction(id)` sets `deletedAt = now`; the row
+   leaves every live query at once (all filter `deletedAt IS NULL`) and collapses (motion §3.5).
+2. `useUndo` shows the snackbar for `UNDO_WINDOW_MS` with a single **Undo**.
+3. **Undo** → `restoreTransaction(id)` clears `deletedAt`; the row re-enters with the insert
+   animation.
+4. No action → the snackbar hides; the row is **already** persistently soft-deleted. It is hard
+   `DELETE`d by the launch purge once `deletedAt < now − PURGE_GRACE_MS`. **No timer writes to
+   the DB.** Killing the app inside the window leaves an invisible, non-undoable soft-deleted row
+   (equivalent to the delete having completed).
+5. Deleting a transaction that came from a Suggestion does **not** resurrect the Suggestion (it
+   is `confirmed`, purged at 24 h).
+
+### 27.5 Running balance
+
+`analyticsRepo.useRunningBalance()` = the §26.2 query. Rendered `formatMoney(v, { sign:'none' })`
+so only a genuine negative shows `−` (the hero label is "Total balance", not a signed delta —
+IMP-010).
+
+### 27.6 Deferred
+
+`date-fns` locale wiring + the Hermes grouping shim details (Phase 4, when components consume
+them) · the final `SENDER_SEED` contents (curated during Phase 3 implementation; device-driven
+expansion is Future) · keyword tuning from the first real-SMS field test.

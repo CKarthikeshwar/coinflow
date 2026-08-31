@@ -607,8 +607,11 @@ Health", no "Spending Distribution".
      **"N% of income left"** caption in its hollow; below, **Income** `+₹…` and **Spent** `−₹…`.
      No period-over-period sentence on this card.
   3. **"Mean" / "Median"** — two small tiles: mean daily spend and **median** daily spend (the
-     median resists a rent-day distortion). **Each tile also shows the previous month's value**
-     ("Last month ₹1,410") — this is where the period comparison now lives.
+     median resists a rent-day distortion). **Each tile also shows the previous period's value** —
+     this is where the period comparison now lives. The label tracks the period control: in
+     **Month** mode it reads "Last month ₹1,410" (compared to the previous calendar month); in
+     **Week** mode it reads "Last week ₹1,410" (compared to the previous ISO week). *(CR-1,
+     resolving impl. D14 — see change log.)*
   4. **"Where it went"** — the category breakdown, **the one place colour appears** (V-11 / §3
      carve-out): a ranked list (colour dot · category name · % of spend · ₹ · a thin colour bar),
      then a **colour donut**. **Uncategorized** is its own row — hatched, not coloured — with a
@@ -622,8 +625,9 @@ Health", no "Spending Distribution".
 - Controls: period control + stepper; category rows → Transactions filtered to that category +
   period; biggest-expense rows → Details.
 - States: *empty (no data in period)* — "Nothing recorded for August" + **Add transaction** / step
-  to a period with data. *Insufficient data (no prior month)* — the "Last month …" comparison
-  values on the daily tiles are hidden. *Loading* — skeleton cards + chart / bar placeholders.
+  to a period with data. *Insufficient data (no prior period)* — the "Last month …" / "Last week …"
+  comparison values on the daily tiles are hidden. *Loading* — skeleton cards + chart / bar
+  placeholders.
 - Edge: one category ≈ 90% of spend (donut + bars still legible; the list is not truncated);
   income but zero spend (spend sections show their empty state; the "This month" card still shows
   Balance = Income); a **negative Balance** shows a leading `−` and the arc fills full; a current
@@ -787,7 +791,8 @@ empty period shows an explanatory empty state, not a zeroed chart · `UI-054` no
 category palette appears outside the "Where it went" card — the arc gauge and the "Day by day"
 chart are greyscale ·
 `UI-055` the "Mean" and "Median" daily-spend tiles each show the current value and the previous
-month's value; the "Day by day" chart carries a dashed mean line · `UI-056` "Biggest expenses"
+period's value (labelled "Last month" in Month mode, "Last week" in Week mode — CR-1); the "Day by
+day" chart carries a dashed mean line · `UI-056` "Biggest expenses"
 lists ~5 ranked rows linking to Details.
 
 **Categories / Settings / Onboarding** — `UI-060` the Categories screen lists the nine defaults
@@ -825,3 +830,17 @@ ships one dark theme (§2), light is Future.**
 question that touches a designed screen — whether Settings › Account rules ships in V1 or the
 learning stays silent (§6.14) — is tracked in `SPEC-implementation.md` §15 and does not change
 the visual spec either way.
+
+---
+
+## 9. Change log (post-freeze)
+
+Change-requests accepted after the v1 freeze, per `SPEC/PLAN.md` §10 (spec updated first, then
+implementation follows).
+
+- **CR-1** (2026-09-01, `SPEC-implementation.md` Phase 3 / D14) — **Analytics Week-mode
+  comparison label.** §6.10 item 3 and `UI-055` originally specified only "Last month ₹…" on the
+  Mean / Median tiles. Week mode (D14, ships in V1) needs a comparison too, so the tile label is
+  now **period-aware**: "Last month" (vs the previous calendar month) in Month mode, "Last week"
+  (vs the previous ISO week) in Week mode. The empty-state wording ("no prior period") and
+  `UI-055` are updated to match. No layout or component change — same tile, dynamic string.

@@ -255,8 +255,8 @@ strategy · §35 Build & release. **Ends by freezing `SPEC-implementation.md`.**
 |---|---|
 | 0 — Planning & decisions | **Done** |
 | 1 — Foundations | **Done** — `SPEC-implementation.md` §16–§18; decisions D22–D25 added |
-| 2 — Data & persistence | Pending |
-| 3 — Business logic | Pending |
+| 2 — Data & persistence | **Done** — `SPEC-implementation.md` §19–§22; decisions D26–D28 added |
+| 3 — Business logic | **Done** — `SPEC-implementation.md` §23–§27; decisions D29–D31; CR-1 on `SPEC-UI-UX.md` §6.10 |
 | 4 — Navigation, components, wiring | Pending |
 | 5 — Notifications, errors, security, testing, release | Pending |
 
