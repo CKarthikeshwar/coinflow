@@ -1,0 +1,226 @@
+/* ============================================================================
+   CoinFlow prototype — shared device frame
+   Chrome only: gallery backdrop, phone bezel, status bar, home indicator.
+   Every screen supplies its own app palette + components via its direction's
+   app.css. Nothing here sets an app colour.
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    system-ui, sans-serif;
+  background: #d9dade;
+  background-image: radial-gradient(circle at 50% 0%, #e7e8ec 0%, #cdced4 70%);
+  min-height: 100vh;
+  color: #1c1c1e;
+}
+
+/* --- Gallery scaffolding (index / contact-sheet pages) ---------------------- */
+
+.stage {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 24px 72px;
+}
+
+.stage__caption {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #55565b;
+  text-align: center;
+}
+
+.contact-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 40px 32px;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 24px 96px;
+}
+
+.contact-sheet figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.contact-sheet figcaption {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #55565b;
+}
+
+/* iframe embeds render a screen at true device size */
+.embed {
+  width: 390px;
+  height: 844px;
+  border: 0;
+  border-radius: 46px;
+  background: #000;
+  box-shadow:
+    0 2px 4px rgba(20, 22, 30, 0.14),
+    0 24px 60px -12px rgba(20, 22, 30, 0.4);
+}
+
+/* --- Device bezel --------------------------------------------------------- */
+
+.device {
+  --safe-top: 46px;
+  --safe-bottom: 30px;
+  --nav-h: 76px; /* app bottom nav footprint, sits above the home indicator */
+
+  position: relative;
+  width: 390px;
+  height: 844px;
+  border-radius: 46px;
+  background: #000;
+  overflow: hidden;
+  flex: none;
+  box-shadow:
+    0 2px 4px rgba(20, 22, 30, 0.14),
+    0 24px 60px -12px rgba(20, 22, 30, 0.4);
+}
+
+/* Loaded directly it centres horizontally on the backdrop; embedded in a
+   390x844 iframe the auto margins collapse and it fills the frame exactly. */
+.device--solo {
+  margin: 0 auto;
+}
+body:has(> .device--solo) {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+.device--light {
+  --sb-fg: #0c0c0d;
+}
+.device--dark {
+  --sb-fg: #f6f6f7;
+}
+
+/* --- Status bar --------------------------------------------------------- */
+
+.statusbar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--safe-top);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px 0 34px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--sb-fg);
+  z-index: 40;
+  pointer-events: none;
+}
+
+.statusbar__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar__right {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.statusbar__right svg {
+  display: block;
+  fill: currentColor;
+}
+
+/* --- Home indicator --------------------------------------------------- */
+
+.homebar {
+  position: absolute;
+  left: 50%;
+  bottom: 9px;
+  transform: translateX(-50%);
+  width: 140px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--sb-fg);
+  opacity: 0.9;
+  z-index: 40;
+  pointer-events: none;
+}
+.device--light .homebar {
+  opacity: 0.35;
+}
+
+/* --- Screen scroll area --------------------------------------------------- */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.screen::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Utility for sheet-over-parent screens */
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 7, 10, 0.5);
+  z-index: 20;
+}
+
+/* --- Icons -------------------------------------------------------------- */
+
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.ic {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: inline-block;
+  vertical-align: middle;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75; /* a direction's app.css may override */
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ic--sm {
+  width: 18px;
+  height: 18px;
+}
+.ic--lg {
+  width: 28px;
+  height: 28px;
+}

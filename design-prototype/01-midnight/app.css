@@ -1,0 +1,2412 @@
+/* ============================================================================
+   MIDNIGHT — CoinFlow prototype (the only direction)
+   Pure black / white / grey. No accent, no semantic colour. Direction and state
+   are carried by the always-present +/- sign, by weight and size, and by fill vs
+   hairline — never by hue. Faithful to design-references/screen1.png + screen2.png.
+   Mode: Operate.
+   ========================================================================== */
+
+/* Type: Manrope on headings + figures, Geist on everything else.
+   Loads from Google Fonts — needs a connection. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+
+:root {
+  /* Ground carries a faint COOL tint + a soft glow behind the top of each screen
+     (V-11 exception #2 — an ambient wash, never a semantic / category colour).
+     --bg is the settled mid-dark; --bg-top is the glow hot-spot. */
+  --bg: #0d0e14;
+  --bg-top: #1b2238;
+  --surface: #16171d;
+  --surface-2: #1c1e26;
+  --surface-3: #262832;
+  --hairline: #2b2d38;
+
+  --text: #f5f5f6;
+  --text-2: #9a9aa1;
+  --text-3: #85858c;
+
+  /* "primary" is white; it is not a colour accent, just the top of the ramp */
+  --primary: #ffffff;
+  --primary-ink: #0b0b0c;
+
+  /* Category colours — the ONE deliberate exception to the B&W rule (V-11).
+     Used ONLY in the Analytics "Where it went" breakdown (dot / bar / donut),
+     because a greyscale split of 8+ categories is unreadable. Nowhere else. */
+  --cat-bills: #7fb2e8;
+  --cat-food: #efa98c;
+  --cat-groceries: #93ce85;
+  --cat-transport: #b69be0;
+  --cat-shopping: #e6c36b;
+  --cat-entertainment: #e79bc5;
+  --cat-health: #e58f8b;
+  --cat-education: #6fcec0;
+  --cat-other: #9aa0a6;
+
+  --r-card: 24px;
+  --r-ctl: 14px;
+  --r-pill: 999px;
+
+  /* card surfaces lift on a soft drop shadow + a hairline top edge (not just a
+     surface step) — the shipped elevation for hero / strip / txn / stat / an-card */
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.4);
+  --card-edge: 1px solid rgba(255, 255, 255, 0.05);
+  --shadow-pop: 0 12px 34px rgba(0, 0, 0, 0.6), 0 3px 10px rgba(0, 0, 0, 0.45);
+
+  --pad: 20px;
+}
+
+/* --- Shell -------------------------------------------------------------- */
+
+.app {
+  min-height: 100%;
+  background: radial-gradient(
+    135% 54% at 50% -8%,
+    var(--bg-top) 0%,
+    #0e0f18 42%,
+    #090a0d 100%
+  );
+  color: var(--text);
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  padding-bottom: calc(var(--safe-bottom) + var(--nav-h) + 12px);
+}
+
+/* Manrope carries the headings and every figure (amounts, balance, counts,
+   percentages, the clock). Geist (on .app) carries all remaining UI text. */
+.app :is(
+    .topbar__brand,
+    .topbar__title,
+    .section__title,
+    .sheet__title,
+    .an-card__title,
+    .hero__label,
+    .hero__amount,
+    .hero__cur,
+    .statcard__v,
+    .amount__value,
+    .amount__cur,
+    .detail__amount,
+    .summary__net,
+    .summary__split b,
+    .txn__amt,
+    .queue__amt,
+    .daygroup__sub,
+    .badge,
+    .cat__pct,
+    .an-row__amt
+  ),
+.lock__time,
+.notif__title {
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+.app .ic {
+  stroke-width: 1.6;
+}
+.app ::selection {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Card surfaces carry the hairline top edge that pairs with --shadow-card. */
+.hero,
+.actionstrip,
+.txncard,
+.statcard,
+.an-card {
+  border: var(--card-edge);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+/* direction is the sign + weight, not colour — kept as hooks, no hue */
+.pos,
+.neg {
+  color: var(--text);
+}
+
+.pad {
+  padding-inline: var(--pad);
+}
+
+/* --- Top bar ---------------------------------------------------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(var(--safe-top) + 6px) var(--pad) 12px;
+  /* matches the glow hot-spot so content fades out cleanly under the header */
+  background: linear-gradient(var(--bg-top) 58%, rgba(27, 34, 56, 0));
+}
+.topbar__brand {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.topbar__meta {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.topbar__title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.topbar__count {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.iconbtn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.iconbtn--bare {
+  background: transparent;
+}
+
+/* --- Permission banner (V-9) — neutral, hairline, no tint ----------- */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px var(--pad) 0;
+  padding: 11px 12px;
+  border-radius: var(--r-ctl);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.banner .ic {
+  color: var(--text-2);
+}
+.banner__text {
+  flex: 1;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+.banner__cta {
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font: inherit;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.banner__x {
+  color: var(--text-3);
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* --- Balance hero (6.2) — "Total balance" + big figure (ref 1.png) ------- */
+
+.hero {
+  margin: 16px var(--pad) 0;
+  padding: 20px 22px 22px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.hero__label {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-2);
+}
+.hero__amountline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 8px;
+}
+.hero__amount {
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  color: var(--text);
+  line-height: 1;
+}
+/* de-emphasised currency mark, like the "$" in 1.png */
+.hero__cur {
+  font-size: 0.6em;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-right: 3px;
+}
+
+/* --- Income / Spending tiles under the hero (ref 1.png) ---------------- */
+/* reuse .statgrid / .statcard from Analytics; --hero tunes them + adds a
+   MoM delta line. Display only — the tiles are not links. */
+.statgrid--hero {
+  margin-top: 10px;
+}
+.statgrid--hero .statcard {
+  border-radius: 18px;
+  padding: 15px 16px 14px;
+}
+.statgrid--hero .statcard__v {
+  margin-top: 6px;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+.statcard__delta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.statcard__delta .ic {
+  width: 13px;
+  height: 13px;
+  color: var(--text-3);
+}
+
+/* --- Action strip (6.2) ---------------------------------------------- */
+
+.actionstrip {
+  margin: 12px var(--pad) 0;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 15px 18px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.action-row + .action-row {
+  border-top: 1px solid var(--hairline);
+}
+.action-row__mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text);
+}
+/* second type distinguished by ring vs fill, not colour */
+.action-row__mark--warn {
+  background: var(--bg);
+  border: 2px solid var(--text);
+}
+.action-row__label {
+  flex: 1;
+  font-weight: 600;
+}
+.badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.action-row .ic {
+  color: var(--text-3);
+}
+
+/* --- Sections ------------------------------------------------------- */
+
+.section {
+  margin-top: 26px;
+}
+.section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 var(--pad) 10px;
+}
+.section__title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.section__link {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+/* --- Transaction card (design-references/1.png + 3.png) --------------- */
+
+/* Each row sits on its own rounded surface with a gap between (card layout). */
+.txncard {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 0 var(--pad) 9px;
+  padding: 13px 15px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.txn {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 11px var(--pad);
+}
+
+/* Rounded-square icon tile carrying the CATEGORY icon (or payment-method icon
+   in the Review Queue). Icon set is a placeholder — see SPEC-UI-UX §3. */
+.txn__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text);
+  position: relative;
+}
+.txn__icon .ic {
+  width: 22px;
+  height: 22px;
+}
+/* income tile inverts (light tile, dark glyph) — direction without colour */
+.txn__icon--in {
+  background: var(--text);
+  color: var(--bg);
+}
+/* low-confidence marker — a ring, not a coloured dot */
+.txn__flag {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--text);
+}
+.txn__body {
+  flex: 1;
+  min-width: 0;
+}
+.txn__name {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.txn__name--empty {
+  color: var(--text-3);
+  font-weight: 500;
+  font-style: italic;
+}
+/* card label fell back to the Account (no user note yet) */
+.txn__name--account {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.txn__meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.txn__meta .sep {
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+/* Uncategorized is called out by a dashed underline on the word (V-4) */
+.txn__meta .uncat {
+  border-bottom: 1px dashed currentColor;
+  padding-bottom: 1px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface-3);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+.chip--uncat {
+  color: var(--text-3);
+  background: transparent;
+  border: 1px dashed var(--text-3);
+}
+.txn__amt {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  flex: none;
+}
+
+/* --- Day groups (6.7) ------------------------------------------------- */
+
+.daygroup__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 18px var(--pad) 6px;
+  position: sticky;
+  top: calc(var(--safe-top) + 88px);
+  background: linear-gradient(var(--bg) 72%, rgba(13, 14, 20, 0));
+}
+.daygroup__date {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-2);
+}
+.daygroup__sub {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.daygroup__list {
+  border-top: 1px solid var(--hairline);
+}
+.daygroup__list .txn + .txn {
+  border-top: 1px solid var(--hairline);
+}
+
+/* --- Search + filter bar (6.7) -------------------------------------- */
+
+.searchrow {
+  display: flex;
+  gap: 10px;
+  padding: 4px var(--pad) 6px;
+}
+.searchbar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 42px;
+  padding: 0 13px;
+  border-radius: var(--r-ctl);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 14.5px;
+}
+.searchbar .ic {
+  color: var(--text-3);
+}
+.filterbtn {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-ctl);
+  border: 0;
+  background: var(--surface-2);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.dot-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 11px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--bg);
+}
+
+.filterchips {
+  display: flex;
+  gap: 8px;
+  padding: 6px var(--pad) 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filterchips::-webkit-scrollbar {
+  display: none;
+}
+.chip--removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-3);
+  padding: 7px 8px 7px 12px;
+  border-radius: var(--r-pill);
+  border: 0;
+  cursor: pointer;
+}
+.chip--removable .ic {
+  color: var(--text-2);
+}
+
+/* --- Bottom nav ------------------------------------------------------ */
+
+.navbar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 6px);
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(26, 28, 38, 0.84);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: var(--shadow-pop);
+}
+.navbar__tab {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-pill);
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.navbar__tab--active {
+  color: var(--text);
+}
+.navbar__add {
+  width: 54px;
+  height: 54px;
+  margin: 0 2px;
+  border-radius: var(--r-pill);
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.navbar__add .ic {
+  stroke-width: 2.1;
+}
+
+/* --- Bottom sheet (V-6) -------------------------------------------- */
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  max-height: 94%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+}
+.sheet__grab {
+  width: 38px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  margin: 9px auto 4px;
+  flex: none;
+}
+.sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 20px 12px;
+}
+.sheet__title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.sheet__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 20px 8px;
+  scrollbar-width: none;
+}
+.sheet__body::-webkit-scrollbar {
+  display: none;
+}
+.sheet__footer {
+  display: flex;
+  gap: 10px;
+  padding: 12px 20px calc(var(--safe-bottom) + 12px);
+  border-top: 1px solid var(--hairline);
+  background: var(--surface);
+}
+
+/* --- Amount input (V-10) ----------------------------------------------- */
+
+.amount {
+  text-align: center;
+  padding: 18px 0 20px;
+}
+.amount__value {
+  font-size: 52px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.amount__cur {
+  color: var(--text-3);
+  font-weight: 600;
+}
+.amount__caret {
+  display: inline-block;
+  width: 2px;
+  height: 44px;
+  background: var(--primary);
+  vertical-align: -8px;
+  margin-left: 2px;
+}
+.amount__hint {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.amount__hint--err {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* --- Segmented control ---------------------------------------------- */
+
+.segment {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--r-ctl);
+  background: var(--surface-2);
+}
+.segment__opt {
+  flex: 1;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 0;
+  border-radius: 11px;
+  cursor: pointer;
+}
+.segment__opt--on {
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* --- Form rows ---------------------------------------------------------- */
+
+.fieldgroup {
+  margin-top: 16px;
+  border-radius: var(--r-ctl);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.selectrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 14px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.selectrow + .selectrow {
+  border-top: 1px solid var(--hairline);
+}
+.selectrow__ic {
+  color: var(--text-3);
+}
+.selectrow__label {
+  flex: 1;
+  font-weight: 600;
+}
+.selectrow__value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.selectrow__value .ic {
+  color: var(--text-3);
+}
+
+.field-label {
+  display: block;
+  margin: 18px 0 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.textfield {
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: var(--r-ctl);
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  color: var(--text);
+  font: inherit;
+}
+.textfield--filled {
+  border-color: var(--hairline);
+}
+.textfield--empty {
+  color: var(--text-3);
+}
+.textfield:focus,
+.textfield--focus {
+  outline: none;
+  border-color: var(--primary);
+}
+textarea.textfield {
+  min-height: 76px;
+  resize: none;
+  line-height: 1.45;
+}
+
+/* past-account autocomplete (Add / Confirmation) */
+.autocomplete {
+  margin-top: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-ctl);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.autocomplete__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  font-size: 14px;
+  color: var(--text);
+}
+.autocomplete__item + .autocomplete__item {
+  border-top: 1px solid var(--hairline);
+}
+.autocomplete__item .ic {
+  color: var(--text-3);
+}
+.autocomplete__item b {
+  font-weight: 600;
+}
+.autocomplete__match {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+/* --- Filter sheet blocks ------------------------------------------- */
+
+.filterblock {
+  margin-top: 20px;
+}
+.filterblock__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+.chipset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chipset__chip {
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 13px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chipset__chip--on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+
+/* --- Buttons --------------------------------------------------------- */
+
+.btn {
+  flex: 1;
+  border: 0;
+  border-radius: var(--r-ctl);
+  padding: 14px 18px;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+}
+.btn--primary {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.btn--ghost {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.btn--disabled {
+  background: var(--surface-2);
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+.btn--grow0 {
+  flex: 0 0 auto;
+}
+
+/* --- Review queue --------------------------------------------------- */
+
+.queue {
+  margin-top: 12px;
+}
+/* each pending row is its own lifted card, matching .txncard */
+.queue__row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 0 var(--pad) 9px;
+  padding: 13px 15px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  border: var(--card-edge);
+}
+.queue__amt {
+  font-size: 16px;
+  font-weight: 700;
+  min-width: 82px;
+}
+.queue__body {
+  flex: 1;
+  min-width: 0;
+}
+.queue__name {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.queue__name--unknown {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.queue__time {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+/* inline one-tap Save on a known-account queue card (F2 / F8) */
+.queue__save {
+  flex: none;
+  border: 1px solid var(--text-3);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.queue__dismiss-wrap {
+  position: sticky;
+  bottom: calc(var(--safe-bottom) + var(--nav-h) + 12px);
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+  margin-top: 4px;
+}
+.queue__dismiss {
+  border: 1px solid var(--hairline);
+  background: rgba(20, 21, 27, 0.9);
+  backdrop-filter: blur(12px);
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 20px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+/* --- Empty state -------------------------------------------------------- */
+
+.empty {
+  text-align: center;
+  padding: 48px 32px;
+}
+.empty__ic {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.empty__line {
+  font-size: 14.5px;
+  color: var(--text-2);
+  margin-bottom: 16px;
+}
+
+/* ==========================================================================
+   ANALYTICS (§6.10)
+   B&W everywhere except the "Where it went" category breakdown, which uses the
+   --cat-* colours (V-11 carve-out).
+   ========================================================================== */
+
+.an-app {
+  padding-bottom: calc(var(--safe-bottom) + var(--nav-h) + 20px);
+}
+
+/* period control */
+.periodbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px var(--pad) 4px;
+}
+.periodbar .segment {
+  flex: 0 0 148px;
+}
+.periodbar .segment__opt {
+  padding: 7px 0;
+  font-size: 13px;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.stepper button {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  border: 0;
+  background: var(--surface-2);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.stepper button:first-child .ic {
+  transform: rotate(180deg);
+}
+
+/* generic analytics card */
+.an-card {
+  margin: 12px var(--pad) 0;
+  padding: 18px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.an-card__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  margin-bottom: 14px;
+}
+.an-card__title--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* "This month" summary card — a continuous circular (semicircle) progress arc */
+.summary {
+  text-align: center;
+}
+.summary__gauge {
+  position: relative;
+  width: 210px;
+  height: 116px;
+  margin: 8px auto 0;
+}
+.summary__gauge svg {
+  display: block;
+  width: 210px;
+  height: 124px;
+}
+.ring-track {
+  fill: none;
+  stroke: var(--surface-3);
+  stroke-width: 13;
+  stroke-linecap: round;
+}
+.ring-fill {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 13;
+  stroke-linecap: round;
+}
+.summary__center {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 49px;
+}
+.summary__net {
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.summary__saved {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.summary__split {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+.summary__split div {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.summary__split b {
+  display: block;
+  margin-top: 3px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+/* two small stat tiles */
+.statgrid {
+  display: flex;
+  gap: 10px;
+  margin: 10px var(--pad) 0;
+}
+.statcard {
+  flex: 1;
+  padding: 14px 16px;
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.statcard__k {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.statcard__v {
+  margin-top: 5px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.statcard__prev {
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Where it went" — the coloured category breakdown */
+.cat__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 9px 0;
+}
+.cat__row + .cat__row {
+  border-top: 1px solid var(--hairline);
+}
+.cat__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--c, var(--text-3));
+}
+.cat__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.cat__fig {
+  text-align: right;
+}
+.cat__pct {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cat__amt {
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.cat__bar {
+  grid-column: 2 / span 2;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  margin-top: 7px;
+  overflow: hidden;
+}
+.cat__barfill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--c, var(--text-3));
+}
+.cat__row--uncat .cat__dot {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--text-3) 0 2px,
+    transparent 2px 4px
+  );
+  border: 1px dashed var(--text-3);
+  border-radius: 3px;
+}
+.cat__fix {
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  padding: 0;
+}
+.donut {
+  display: block;
+  width: 148px;
+  height: 148px;
+  margin: 16px auto 4px;
+}
+.donut__center {
+  position: relative;
+  text-align: center;
+  margin-top: -92px;
+  margin-bottom: 56px;
+  pointer-events: none;
+}
+.donut__center span {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  display: block;
+}
+.donut__center b {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* "Day by day" line chart */
+.trend__toggle {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+}
+.trend__toggle button {
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.trend__toggle button[aria-pressed="true"] {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.trend__chart {
+  display: block;
+  width: 100%;
+  height: 128px;
+  margin-top: 12px;
+  overflow: visible;
+}
+.trend__grid {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+.trend__area {
+  fill: rgba(245, 245, 246, 0.08);
+}
+.trend__line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.trend__peak {
+  fill: var(--text);
+}
+.trend__mean {
+  stroke: var(--text-2);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.trend__meanlabel {
+  fill: var(--text-2);
+  font-size: 8px;
+  font-weight: 600;
+}
+.trend__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ranked rows inside an analytics card (biggest expenses / top accounts) */
+.an-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+}
+.an-row + .an-row {
+  border-top: 1px solid var(--hairline);
+}
+.an-row__rank {
+  width: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.an-row__body {
+  flex: 1;
+  min-width: 0;
+}
+.an-row__name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.an-row__sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.an-row__amt {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+/* ==========================================================================
+   TRANSACTION NOTIFICATION (§6.15) — system surface, shown on the lock screen.
+   "The main point": SMS detected -> notification -> Add / Discard in one tap.
+   Rendered monochrome to match the app; a real build uses the OS channel style.
+   ========================================================================== */
+
+.lock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--safe-top) + 44px) 16px calc(var(--safe-bottom) + 20px);
+  background: radial-gradient(125% 72% at 50% -2%, var(--bg-top) 0%, var(--bg) 60%);
+}
+.lock__time {
+  font-size: 66px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.lock__date {
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.lock__stack {
+  width: 100%;
+  margin-top: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notif {
+  background: #1e1f27;
+  border-radius: 26px;
+  padding: 14px 16px 4px;
+  color: var(--text);
+}
+.notif__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.notif__app {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex: none;
+}
+.notif__app .ic {
+  width: 13px;
+  height: 13px;
+}
+.notif__app-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.notif__title {
+  margin-top: 7px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.notif__body {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.notif__actions {
+  display: flex;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.notif__action {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 4px;
+  cursor: pointer;
+}
+.notif__action + .notif__action {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+/* the one-tap "Save" gets the emphasis */
+.notif__action--primary {
+  font-weight: 700;
+}
+.notif__action--muted {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.notif--collapsed {
+  padding: 12px 16px;
+  opacity: 0.5;
+}
+.notif--collapsed .notif__app {
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.notif--collapsed .notif__title {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+/* ==========================================================================
+   P0 CORE SCREENS — Confirmation, Details, Edit, Category picker
+   (§6.4 / 6.8 / 6.6 + the category-picker sheet)
+   ========================================================================== */
+
+/* a taller sheet whose body scrolls, with the numeric keypad docked near the
+   bottom and the primary action button pinned BELOW the keypad (§6.4/6.5/6.6). */
+.sheet--kp {
+  top: 0;
+  max-height: none;
+}
+/* The amount is the hero of the sheet — it gets a big, generous block at the top
+   and everything else scrolls under the keypad. It only gives up height when the
+   sheet body is scrolled down to the fields — see .sheet--kp--typing below. */
+.sheet--kp .amount {
+  padding: 30px 0 28px;
+}
+.sheet--kp .amount__value {
+  font-size: 52px;
+}
+.sheet--kp .amount__caret {
+  height: 46px;
+}
+.sheet--kp .amount__hint {
+  margin-top: 14px;
+}
+.sheet--kp .segment {
+  margin-top: 4px;
+}
+.sheet--kp .segment__opt {
+  padding: 9px 0;
+}
+.sheet--kp .field-label {
+  margin: 16px 0 6px;
+}
+.sheet--kp .fieldgroup {
+  margin-top: 16px;
+}
+.sheet--kp textarea.textfield {
+  min-height: 60px;
+}
+/* footer keeps the shared bottom padding — it is the last element in the sheet
+   while the keypad is up (primary button sits BELOW the keypad, §6.5). */
+
+/* --- Text-field entry: Account / Note / Description use the OS keyboard --------
+   When focus moves to a text field, the in-app keypad is dismissed and replaced
+   by the system keyboard (.syskb), and the amount collapses to a slim sticky
+   summary bar at the top of the scroll area — the only time it loses height. */
+.sheet--kp--typing .amount {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px 2px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface);
+  text-align: left;
+}
+.sheet--kp--typing .amount::before {
+  content: "Amount";
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.sheet--kp--typing .amount__value {
+  font-size: 22px;
+}
+.sheet--kp--typing .amount__caret {
+  display: none;
+}
+/* with the OS keyboard up, the primary button rides just above it (like an iOS
+   input accessory) rather than below the — now hidden — keypad */
+.sheet--kp--typing .sheet__footer {
+  border-top: 1px solid var(--hairline);
+}
+
+/* custom in-app numeric keypad (§8 resolved) — full-bleed, docked above the
+   action button, flush to the window edges (not a floating block).
+   gap:1px over a hairline ground draws the key grid. */
+.keypad {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--hairline);
+  border-top: 1px solid var(--hairline);
+}
+.keypad button {
+  height: 62px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 25px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.keypad button:active {
+  background: var(--surface-3);
+}
+.keypad button .ic {
+  width: 26px;
+  height: 26px;
+}
+
+/* --- System (OS) keyboard ---------------------------------------------------
+   Representational only — the real app shows the native keyboard. Used for the
+   Account / Note / Description fields; it replaces the in-app .keypad entirely,
+   which is amount-only. iOS dark layout. */
+.syskb {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px 3px calc(var(--safe-bottom) + 4px);
+  background: #1b1c22;
+  border-top: 1px solid var(--hairline);
+}
+.syskb__row {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 2px;
+}
+.syskb__key {
+  flex: 1 1 0;
+  max-width: 32px;
+  height: 42px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  background: #3a3b43;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+.syskb__key .ic {
+  width: 20px;
+  height: 20px;
+}
+.syskb__key--fn {
+  background: #2b2c33;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.syskb__key--wide {
+  max-width: none;
+  flex: 1.7 1 0;
+}
+.syskb__key--space {
+  max-width: none;
+  flex: 5 1 0;
+}
+
+/* --- Transaction Details (pushed page) ---------------------------------- */
+
+.detail {
+  padding: 0 var(--pad) calc(var(--safe-bottom) + 84px);
+}
+.detail__amount {
+  text-align: center;
+  padding: 22px 0 6px;
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding: 4px 0 18px;
+}
+.detail__meta .chip {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.detail__note {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--hairline);
+}
+.detail__field {
+  padding: 13px 0;
+  border-top: 1px solid var(--hairline);
+}
+.detail__k {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.detail__v {
+  margin-top: 3px;
+  font-size: 15px;
+}
+/* quiet provenance line for a detected transaction — no SMS text is stored */
+.detail__prov {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.detail__prov .ic {
+  width: 15px;
+  height: 15px;
+  color: var(--text-3);
+}
+.detail__set {
+  margin-top: 6px;
+  border: 1px solid var(--text-3);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.detail__edit {
+  position: absolute;
+  left: var(--pad);
+  right: var(--pad);
+  bottom: calc(var(--safe-bottom) + 14px);
+  z-index: 5;
+}
+
+/* --- Category picker (sheet) ------------------------------------------ */
+
+.picker__row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 9px 4px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.picker__row + .picker__row {
+  border-top: 1px solid var(--hairline);
+}
+.picker__row .txn__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+}
+.picker__row .txn__icon .ic {
+  width: 20px;
+  height: 20px;
+}
+.picker__name {
+  flex: 1;
+  font-weight: 500;
+}
+.picker__row--on .picker__name {
+  font-weight: 600;
+}
+.picker__row .ic {
+  color: var(--text-3);
+}
+.picker__row--on .ic {
+  color: var(--text);
+}
+.picker__foot {
+  display: flex;
+  padding: 14px 4px 4px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 4px;
+}
+.picker__foot button {
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* ==========================================================================
+   P1 SCREENS — Onboarding · Categories · Create/Edit Category · Settings +
+   subpages · Account rules · global states (skeleton / empty / error /
+   confirm dialog / undo snackbar). Same monochrome system; no new colour.
+   ========================================================================== */
+
+/* --- Onboarding (full-screen, outside the tab shell, §6.1) --------------- */
+.ob {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: calc(var(--safe-top) + 20px) var(--pad) calc(var(--safe-bottom) + 16px);
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  color: var(--text);
+  background: radial-gradient(120% 46% at 50% 0%, var(--bg-top) 0%, #0c0d15 52%, #090a0d 100%);
+}
+.ob__progress {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex: none;
+}
+.ob__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  transition: none;
+}
+.ob__dot--on {
+  width: 22px;
+  background: var(--text);
+}
+.ob__art {
+  flex: 1;
+  min-height: 140px;
+  display: grid;
+  place-items: center;
+  margin: 10px 0 4px;
+}
+.ob__art svg {
+  width: 224px;
+  height: 224px;
+  color: var(--text);
+}
+.ob__mark {
+  width: 58px;
+  height: 58px;
+  border-radius: 17px;
+  background: var(--text);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 32px;
+  font-weight: 800;
+  margin: 0 auto 20px;
+}
+.ob__heading {
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.22;
+}
+.ob__sub {
+  margin-top: 10px;
+  font-size: 14.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.ob__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  margin: 14px 0 4px;
+}
+.ob__scroll::-webkit-scrollbar {
+  display: none;
+}
+.ob__foot {
+  flex: none;
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ob__skip {
+  align-self: center;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.ob__back {
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 -4px;
+}
+
+/* permission cards — onboarding step 2 + SMS/notifications settings page */
+.permcard {
+  display: flex;
+  gap: 13px;
+  padding: 15px;
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  border: var(--card-edge);
+  box-shadow: var(--shadow-card);
+}
+.permcard + .permcard {
+  margin-top: 10px;
+}
+.permcard__ic {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text);
+}
+.permcard--done .permcard__ic {
+  background: var(--text);
+  color: var(--bg);
+}
+.permcard__body {
+  flex: 1;
+  min-width: 0;
+}
+.permcard__title {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.permcard__why {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+.permcard__opt {
+  margin-left: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  border: 1px solid var(--hairline);
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  vertical-align: 1px;
+}
+.permcard__cta {
+  flex: none;
+  align-self: center;
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.permcard__pill {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  border: 1px solid var(--hairline);
+  padding: 6px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.permcard__pill .ic {
+  width: 13px;
+  height: 13px;
+}
+
+/* checkbox list row — onboarding category review */
+.checkrow {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 2px;
+}
+.checkrow + .checkrow {
+  border-top: 1px solid var(--hairline);
+}
+.checkrow .txn__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+.checkrow .txn__icon .ic {
+  width: 19px;
+  height: 19px;
+}
+.checkrow__name {
+  flex: 1;
+  font-weight: 500;
+}
+.checkrow__drag {
+  color: var(--text-3);
+}
+.check {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1.5px solid var(--text-3);
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: transparent;
+}
+.check--on {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+.check .ic {
+  width: 15px;
+  height: 15px;
+}
+
+/* --- Settings: grouped inset list (§6.13) ------------------------------- */
+.setlabel {
+  margin: 22px var(--pad) 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.setgroup {
+  margin: 0 var(--pad);
+  border-radius: var(--r-ctl);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.selectrow__sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.selectrow__label--danger {
+  color: var(--text);
+  font-weight: 700;
+}
+.selectrow .warn {
+  color: var(--text);
+}
+.settings__ver {
+  text-align: center;
+  margin: 24px 0 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.setnote {
+  margin: 12px var(--pad) 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.setexplain {
+  margin: 16px var(--pad) 0;
+  padding: 13px 14px;
+  border-radius: var(--r-ctl);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.setexplain b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* status block — SMS & notifications page */
+.statusblock {
+  margin: 12px var(--pad) 0;
+  padding: 15px 16px;
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  border: var(--card-edge);
+  box-shadow: var(--shadow-card);
+}
+.statusblock__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.statusblock__title {
+  flex: 1;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.statusblock__pill {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+}
+.statusblock__pill--on {
+  background: var(--text);
+  color: var(--bg);
+}
+.statusblock__pill--off {
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+}
+.statusblock__body {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.statusblock__btn {
+  margin-top: 12px;
+  border: 1px solid var(--text-3);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 15px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+/* --- Account rules (§6.14) -------------------------------------------------- */
+.rulerow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 var(--pad) 9px;
+  padding: 13px 15px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  border: var(--card-edge);
+}
+.rulerow__body {
+  flex: 1;
+  min-width: 0;
+}
+.rulerow__acc {
+  font-size: 14.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rulerow__note {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rulerow__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.rulerow__count {
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Icon picker — Create / Edit Category (§6.12) --------------------------- */
+.iconpick {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+.iconpick__cell {
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-2);
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.iconpick__cell .ic {
+  width: 22px;
+  height: 22px;
+}
+.iconpick__cell--on {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+
+/* --- Confirm dialog (V-7 / §6.16) ----------------------------------------- */
+.dialog-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 26px;
+  background: rgba(0, 0, 0, 0.66);
+}
+.dialog {
+  width: 100%;
+  max-width: 322px;
+  border-radius: 24px;
+  background: var(--surface);
+  border: var(--card-edge);
+  box-shadow: var(--shadow-pop);
+  padding: 24px 22px 16px;
+  text-align: center;
+  /* the dialog renders outside .app, so set the base ink explicitly */
+  color: var(--text);
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+/* a non-colour destructive cue — a quiet glyph in a surface circle */
+.dialog__ic {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+  background: var(--surface-3);
+  color: var(--text);
+}
+.dialog__ic .ic {
+  width: 22px;
+  height: 22px;
+}
+.dialog__title {
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.dialog__body {
+  margin: 8px auto 0;
+  max-width: 30ch;
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.dialog__body b {
+  color: var(--text);
+  font-weight: 600;
+}
+.dialog__type {
+  margin-top: 16px;
+  text-align: left;
+}
+.dialog__type .textfield {
+  background: var(--surface-2);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2em;
+  font-weight: 700;
+}
+/* stacked, full-width — the filled confirm on top, a plain-text Cancel below */
+.dialog__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 20px;
+}
+.dialog__btn {
+  width: 100%;
+  border: 0;
+  border-radius: var(--r-ctl);
+  padding: 13px 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.dialog__btn--text {
+  background: none;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.dialog__btn--text:active {
+  background: var(--surface-2);
+}
+
+/* --- Undo snackbar / toast (V-7 / §6.16) -------------------------------- */
+.snackbar {
+  position: absolute;
+  left: var(--pad);
+  right: var(--pad);
+  bottom: calc(var(--safe-bottom) + var(--nav-h) + 16px);
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px 13px 16px;
+  border-radius: var(--r-ctl);
+  background: rgba(36, 38, 47, 0.6);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+}
+.snackbar__text {
+  flex: 1;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.snackbar__action {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+/* --- Loading skeleton (V-3 / §6.16) — static neutral blocks, no spinner --- */
+.sk-line {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--surface-3);
+}
+.sk-line--soft {
+  background: var(--surface-2);
+}
+.sk-card {
+  margin: 0 var(--pad) 12px;
+  padding: 18px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--card-edge);
+  box-shadow: var(--shadow-card);
+}
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 0 var(--pad) 14px;
+}
+.sk-tile {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: var(--surface-3);
+  flex: none;
+}
+.sk-row__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* error state reuses .empty; a retry button sits under the line */
+.empty__retry {
+  border: 1px solid var(--text-3);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}

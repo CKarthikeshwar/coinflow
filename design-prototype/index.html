@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CoinFlow · Design Prototype</title>
+    <link rel="stylesheet" href="shared/frame.css" />
+    <style>
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 60px 28px 40px; }
+      h1 { font-size: 34px; letter-spacing: -0.035em; margin: 0 0 8px; }
+      .lede { font-size: 15.5px; line-height: 1.65; color: #45464c; max-width: 74ch; margin: 0 0 14px; }
+      .note { font-size: 13.5px; line-height: 1.6; color: #45464c; max-width: 78ch; background: #fff; border: 1px solid #e4e5ea; border-left: 3px solid #111; border-radius: 10px; padding: 16px 18px; margin: 18px 0 34px; }
+      .note strong { color: #111; }
+      .note ul { margin: 8px 0 0; padding-left: 18px; }
+      .note li { margin: 4px 0; }
+      h3 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #6a6b71; margin: 34px 0 12px; }
+      table { border-collapse: collapse; width: 100%; font-size: 13px; background: #fff; border: 1px solid #e4e5ea; border-radius: 12px; overflow: hidden; }
+      th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid #edeef1; vertical-align: top; }
+      th { background: #f6f6f8; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #6a6b71; }
+      tr:last-child td { border-bottom: 0; }
+      .swatches { display: flex; gap: 6px; margin: 10px 0 0; }
+      .swatches i { width: 30px; height: 30px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.15); display: block; }
+      .files { display: flex; flex-wrap: wrap; gap: 14px; margin: 6px 0 10px; }
+      .files a { display: block; padding: 16px 18px; border: 1px solid #e4e5ea; border-radius: 14px; background: #fff; text-decoration: none; color: #1c1c1e; max-width: 360px; }
+      .files a b { display: block; font-size: 14px; letter-spacing: -0.01em; }
+      .files a span { display: block; font-size: 12.5px; color: #6a6b71; margin-top: 4px; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>CoinFlow — design prototype</h1>
+      <p class="lede">
+        One direction: <strong>Midnight</strong> — a dark, calm, <strong>black-and-white</strong>
+        app that disappears, faithful to the reference screens in
+        <code>design-references/</code>. Static HTML/CSS, no JS. Read at
+        <code>390&nbsp;×&nbsp;844</code>. Everything lives in <strong>two files</strong>:
+        <code>screens.html</code> (the tab / flow screens) and
+        <code>p0-screens.html</code> (the P0 detail screens).
+      </p>
+      <div class="swatches" title="The entire palette (ground carries a faint cool wash — V-11 exception)">
+        <i style="background:#1b2238"></i>
+        <i style="background:#0d0e14"></i>
+        <i style="background:#16171d"></i>
+        <i style="background:#262832"></i>
+        <i style="background:#85858c"></i>
+        <i style="background:#9a9aa1"></i>
+        <i style="background:#f5f5f6"></i>
+        <i style="background:#ffffff"></i>
+      </div>
+
+      <div class="note">
+        <strong>Spec changes folded into this build</strong> (and written into
+        <code>SPEC-UI-UX.md</code>):
+        <ul>
+          <li><strong>No colour on any foreground element.</strong> Black / white / grey.
+            Direction and state are carried by the always-present <code>+</code>/<code>−</code>
+            sign, by weight and size, and by fill vs hairline — never hue. Two ambient
+            exceptions (V-11): the Analytics “Where it went” breakdown, and a faint
+            <strong>cool blue-grey wash on the app ground</strong> (a glow behind the top of
+            each screen).</li>
+          <li><strong>Hero = Balance.</strong> The big figure is the month's
+            <strong>Balance = Income − Spent</strong> (a computed net for the period, not an
+            account balance from SMS — SPEC D2 revised); Income and Spent show as its components.
+            The “so far” tag is gone.</li>
+          <li><strong>The Note is the card label</strong> (a short one-line label); a
+            <strong>Description (optional)</strong> field holds longer detail (Details screen).
+            When there's no note the label falls back to the <strong>Account</strong>, then “No note”.</li>
+          <li><strong>“Account” reintroduced</strong> (the old “merchant / person”, renamed). The
+            payee / payer — a name or a UPI address. Not on the card; on Details + the Add/Edit
+            sheets. It <strong>drives auto-categorisation memory</strong>: <code>account → category</code>
+            rules (F8 un-parked), surfaced in the Add sheet's account autocomplete and in
+            Settings › Account rules.</li>
+          <li><strong>Card layout</strong> (per <code>design-references/1.png</code>, <code>3.png</code>):
+            each transaction is its own rounded card with a <strong>category icon tile</strong> on the
+            left (income tiles invert). Day headers are plain labels between card groups. The Review
+            Queue stays a flat list with payment-method icon tiles (<code>4.png</code>).</li>
+          <li><strong>No time of day on the Transactions list</strong> (the day header carries the
+            date). Home “Recent” keeps a relative time (“2h ago”).</li>
+          <li><strong>One colour carve-out.</strong> The Analytics <em>“Where it went”</em>
+            category breakdown (dot / bar / donut) uses a ~9-hue category palette — a greyscale
+            split of 8+ categories is unreadable. Colour appears there and nowhere else (V-11).
+            Renamed cards: <em>“Financial Health” → “This month”</em>, <em>“Spending Distribution”
+            → “Where it went”</em>, <em>“Expenses” → “Day by day”</em>.</li>
+          <li><strong>Icon library is a deferred decision.</strong> With no colour, the icon carries
+            category identity, so a proper set (Lucide / Phosphor / SF Symbols / custom) is needed —
+            the prototype uses rough placeholders. Blocking before <code>SPEC-UI-UX.md</code> §3.</li>
+          <li><strong>Transactions tab icon</strong> is a clock / history glyph, not a receipt.</li>
+          <li><strong>Amount keypad below, button below that.</strong> In the Add / Confirmation /
+            Edit sheets the custom numeric keypad is <em>amount-only</em>, docked at the bottom with
+            the primary action button pinned <em>below</em> it. Account / Note / Description raise
+            the system keyboard instead, and the amount holds full height until the body is
+            scrolled down to the fields, then collapses to a slim summary bar.</li>
+          <li><strong>Type: Manrope + Geist.</strong> Manrope on headings and every figure
+            (amounts, balance, counts); Geist on all other UI text.</li>
+          <li><strong>The raw SMS is never shown or stored.</strong> The parser reads the message
+            in memory to pre-fill fields, then discards it (impl. P-9); a detected transaction's
+            Details carries only a quiet “Detected automatically” provenance line.</li>
+          <li>Kept: <code>₹</code> + Indian grouping + leading sign; permission banner on Home +
+            Review Queue (a neutral hairline banner, no tint).</li>
+        </ul>
+      </div>
+
+      <h3>Files — one per phase, no per-screen duplicates</h3>
+      <div class="files">
+        <a href="01-midnight/screens.html"><b>01-midnight/screens.html &rarr;</b><span>The tab / flow screens: Home, Transactions, Review Queue, Add (sheet — amount + system-keyboard states), Filter (sheet), Analytics, Detection notification.</span></a>
+        <a href="01-midnight/p0-screens.html"><b>01-midnight/p0-screens.html &rarr;</b><span>The P0 detail screens: Transaction Confirmation, Transaction Details, Edit Transaction, Category picker.</span></a>
+        <a href="01-midnight/p1-screens.html"><b>01-midnight/p1-screens.html &rarr;</b><span>Onboarding &times;3, Categories + Create/Edit Category, Settings + its 5 subpages, and the global states: loading skeleton, empty, error, confirm dialog, undo snackbar.</span></a>
+        <a href="01-midnight/motion.html"><b>01-midnight/motion.html &rarr;</b><span>§3.5 motion preview &mdash; sheet slide, dialog, snackbar, tab cross-fade, list row insert/remove, segment thumb. The only page with JavaScript.</span></a>
+      </div>
+
+      <h3>UI spec finalized</h3>
+      <p class="lede" style="font-size: 13.5px">
+        <code>SPEC-UI-UX.md</code> is <strong>frozen</strong> — colour, type (Manrope + Geist),
+        spacing / elevation, icons (<strong>Lucide</strong>), motion (§3.5), the component catalog,
+        and the <code>theme.ts</code> reconciliation. Light theme is Future. Next stop is
+        implementation (<code>SPEC-implementation.md</code>); this prototype is the visual
+        reference — static screens plus <a href="01-midnight/motion.html">motion.html</a>, a JS
+        preview of the §3.5 transitions.
+      </p>
+    </div>
+  </body>
+</html>

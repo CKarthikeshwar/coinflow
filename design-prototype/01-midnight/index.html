@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CoinFlow · Midnight</title>
+    <link rel="stylesheet" href="../shared/frame.css" />
+    <style>
+      .wrap { max-width: 1200px; margin: 0 auto; padding: 56px 28px 40px; }
+      .wrap h1 { font-size: 30px; letter-spacing: -0.03em; margin: 0 0 6px; }
+      .wrap .lede { font-size: 15px; color: #4b4c52; max-width: 62ch; line-height: 1.6; margin: 0 0 28px; }
+      .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px 28px; margin: 0 0 20px; padding: 22px; background: #fff; border: 1px solid #e4e5ea; border-radius: 16px; }
+      .meta h2 { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #7a7b82; margin: 0 0 6px; }
+      .meta p { margin: 0; font-size: 13.5px; line-height: 1.5; color: #303137; }
+      .swatches { display: flex; gap: 6px; margin-top: 8px; }
+      .swatches i { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.12); display: block; }
+      a.back { font-size: 13px; color: #55565b; text-decoration: none; font-weight: 600; }
+      .files { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 20px; }
+      .files a { display: block; padding: 16px 18px; border: 1px solid #e4e5ea; border-radius: 14px; background: #fff; text-decoration: none; color: #1c1c1e; min-width: 240px; }
+      .files a b { display: block; font-size: 14px; letter-spacing: -0.01em; }
+      .files a span { display: block; font-size: 12.5px; color: #6a6b71; margin-top: 4px; line-height: 1.45; }
+    </style>
+  </head>
+  <body>
+    <!--
+      MIDNIGHT — CoinFlow prototype (web, static, the only direction)
+      THESIS: a calm dark app that disappears. No dashboard, no chrome. NO colour
+        on any foreground element — black / white / grey. Direction and state ride
+        on the +/- sign, on weight and size, and on fill vs hairline. Faithful to
+        design-references/screen1.png + screen2.png.
+      OWN-WORLD: the GROUND carries a faint cool (blue-grey) ambient wash — a soft
+        radial glow behind the top of each screen (--bg-top #1b2238) settling to
+        near-black (#0d0e14 -> #090a0d). V-11 exception #2. Surfaces (#16171d ...)
+        are shifted the same hair cool. 24px cards on a drop shadow + hairline
+        edge, 46px hero numerals, system SF stack, floating blurred pill nav.
+      STORY: glance -> month spend -> what needs action -> scan recent (each row
+        led by its Note) -> act via the centre Add.
+      SPEC DELTAS (written into SPEC-UI-UX.md): no colour (V-1/V-7/V-9/§2/§3);
+        HERO = Balance (Income - Spent), no "so far" (§6.2, D2 revised);
+        Note is the card label, falls back to the Account, then "No note";
+        ACCOUNT reintroduced (old "merchant", renamed) -> drives account->category
+        memory (F8 un-parked, §6.4/6.5/6.8/6.14); CARD LAYOUT per 1.png/3.png ->
+        each transaction its own card + category icon tile (income tile inverts);
+        NO time on the Transactions list; Transactions tab = clock icon (§4.1);
+        ICONS = Lucide (§3.4 — the sprite here is hand-traced Lucide, 1:1 with lucide-react-native);
+        TYPE = Manrope (headings + figures) + Geist (UI text);
+        the in-app keypad is AMOUNT-ONLY (primary button pinned below it), Account/Note/
+        Description use the system keyboard, and the amount collapses to a slim bar once
+        the sheet body scrolls to the fields; the raw SMS is never shown or stored (P-9).
+      FILES: screens.html (tab/flow screens incl. the two Add states) +
+        p0-screens.html (P0 detail screens, incl. the two Edit states) +
+        p1-screens.html (onboarding ×3, Categories + Create/Edit Category, Settings +
+        5 subpages, and the global states: skeleton / empty / error / confirm / snackbar) +
+        motion.html (§3.5 transition preview — the only page with JS).
+        One file per phase — no per-screen files.
+      FORM: reference-faithful. SPEC §6.2 / 6.3 / 6.4 / 6.5 / 6.6 / 6.7 / 6.8 / 6.9 / 6.10 / 6.15.
+        NOTIFICATION (§6.15) = the core loop. NO confidence scoring. A known account (saved
+        rule) -> [Save] [Add] [Discard]; a new account -> [Add] [Discard].
+        Save writes straight from the account's remembered note+category. Same inline Save
+        on known-account Review Queue cards.
+        ANALYTICS (analytics.png ref): renamed cards ("This month" / "Where it went" /
+        "Day by day"). "This month" = a continuous circular arc (fill = share of income
+        REMAINING) + Balance + "N% of income left" + Income/Spent split.
+        "Where it went" is the ONE place colour appears (--cat-* palette, V-11).
+        Mean/Median day tiles also show last month's value; "Day by day" has a
+        dashed mean line. Top-accounts / worth-noting / run-rate deferred to Future.
+    -->
+    <div class="wrap">
+      <p><a class="back" href="../index.html">← Overview</a></p>
+      <h1>Midnight</h1>
+      <p class="lede">
+        The reference look, black and white. Dark, no accent, no semantic colour —
+        the interface reads as a native iOS finance app and gets out of the way.
+      </p>
+
+      <div class="meta">
+        <div><h2>Mode</h2><p>Operate — task completion, scanability, native affordances first.</p></div>
+        <div>
+          <h2>Palette</h2>
+          <p>Black / white / grey. That is the whole palette.</p>
+          <div class="swatches">
+            <i style="background:#1b2238"></i><i style="background:#0d0e14"></i><i style="background:#16171d"></i><i style="background:#262832"></i><i style="background:#85858c"></i><i style="background:#9a9aa1"></i><i style="background:#f5f5f6"></i><i style="background:#ffffff"></i>
+          </div>
+        </div>
+        <div><h2>Type</h2><p>Manrope on headings + figures, Geist on UI text. Tabular-nums for every amount.</p></div>
+        <div><h2>Direction cue</h2><p>The <code>+</code>/<code>−</code> sign, always present, plus weight — never colour.</p></div>
+        <div><h2>Hero</h2><p>Balance = Income − Spent for the month; Income + Spent shown as components. No “so far”.</p></div>
+        <div><h2>Card label</h2><p>The Note → falls back to the <strong>Account</strong> → “No note”. The Account also drives <code>account → category</code> memory (F8).</p></div>
+        <div><h2>Layout</h2><p>Card-based (<code>1.png</code>/<code>3.png</code>): each transaction is its own card with a category icon tile. Icons = <strong>Lucide</strong> (the sprite here is hand-traced Lucide).</p></div>
+        <div><h2>Screens</h2><p>One file per phase. <a href="screens.html">screens.html</a> — the tab / flow screens (Add has two states: amount, and text-field with the system keyboard). <a href="p0-screens.html">p0-screens.html</a> — the P0 detail screens. <a href="p1-screens.html">p1-screens.html</a> — onboarding, Categories, Settings + subpages, and the global states.</p></div>
+        <div><h2>The notification</h2><p>The core loop. Known account → <strong>Save / Add / Discard</strong>; new account → <strong>Add / Discard</strong>. No confidence score — the user just discards or adds.</p></div>
+        <div><h2>Colour</h2><p>The Analytics <em>“Where it went”</em> breakdown uses a ~9-hue category palette (dot / bar / donut) — nowhere else. V-11 carve-out.</p></div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="files">
+        <a href="screens.html"><b>screens.html →</b><span>Home · Transactions · Review Queue · Add (sheet) · Filter (sheet) · Analytics · Detection notification</span></a>
+        <a href="p0-screens.html"><b>p0-screens.html →</b><span>Transaction Confirmation · Details · Edit · Category picker</span></a>
+        <a href="p1-screens.html"><b>p1-screens.html →</b><span>Onboarding ×3 · Categories · Create/Edit Category · Settings + 5 subpages · states (skeleton / empty / error / confirm / snackbar)</span></a>
+        <a href="motion.html"><b>motion.html →</b><span>§3.5 motion preview — sheet, dialog, snackbar, tab cross-fade, list rows, segment thumb (the one page with JS)</span></a>
+      </div>
+    </div>
+  </body>
+</html>

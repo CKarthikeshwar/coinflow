@@ -1,0 +1,21 @@
+{
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-08-31T17:02:07.300Z",
+        "reason": "user confirmed: Google Fonts URL for the requested Manrope+Inter pairing in font-demo.html"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-08-31T17:02:07.499Z",
+        "reason": "user confirmed: requested Satoshi+Geist and Manrope+Geist pairings to compare in font-demo.html (decision aid)"
+      }
+    ]
+  }
+}

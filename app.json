@@ -37,6 +37,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0e6d47a3-fd84-4e49-b09b-0c911040a284"
+      }
+    },
+    "owner": "ck-workforce"
   }
 }

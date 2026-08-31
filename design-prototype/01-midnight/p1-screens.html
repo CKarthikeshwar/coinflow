@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Midnight · P1 screens</title>
+    <link rel="stylesheet" href="../shared/frame.css" />
+    <link rel="stylesheet" href="app.css" />
+    <style>
+      .wrap { max-width: 1200px; margin: 0 auto; padding: 56px 28px 8px; }
+      .wrap h1 { font-size: 28px; letter-spacing: -0.03em; margin: 0 0 6px; }
+      .wrap p { font-size: 14px; color: #4b4c52; line-height: 1.6; max-width: 68ch; margin: 0 0 4px; }
+      .wrap a { color: #55565b; font-weight: 600; text-decoration: none; font-size: 13px; }
+      .contact-sheet figcaption b { display: block; font-size: 13px; letter-spacing: -0.01em; text-transform: none; }
+      .contact-sheet figcaption span { display: block; text-transform: none; letter-spacing: 0; color: #7a7b82; font-weight: 500; max-width: 34ch; margin: 2px auto 0; }
+      .p0-cancel { border: 0; background: none; color: var(--text-2); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; padding: 0; }
+      .group-label { width: 100%; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a8b91; margin: 26px 0 -22px; }
+    </style>
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true" width="0" height="0">
+      <defs>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.6 12 3l9 7.6" /><path d="M5.2 9.3V21h13.6V9.3" /></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4" /><path d="M12 7.4V12l3.2 2" /></symbol>
+        <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3.5 20.5h17" /><path d="M6.5 20v-7M12 20V5.5M17.5 20v-4.5" /></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17.5 7H20M4 17h3M11.5 17H20" /><circle cx="15" cy="7" r="2.5" /><circle cx="9" cy="17" r="2.5" /></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+        <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 6.5" /></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.3 20.5h19.4Z" /><path d="M12 10v4.6M12 17.4h.01" /></symbol>
+        <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7M8 12h12" /></symbol>
+        <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="18.5" r="1.5" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-tag" viewBox="0 0 24 24"><path d="M4 4h8l8 8-8 8-8-8Z" /><circle cx="8.5" cy="8.5" r="1.6" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3" /><path d="M3 10.5h18" /></symbol>
+        <symbol id="i-sms" viewBox="0 0 24 24"><path d="M4.5 5h15v11h-11l-4 4Z" /><path d="M8.5 10h7M8.5 13h4" /></symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24"><path d="M12 4a5 5 0 0 0-5 5v3.4L5.5 16h13L17 12.4V9a5 5 0 0 0-5-5Z" /><path d="M9.8 19a2.3 2.3 0 0 0 4.4 0" /></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.2c0 4.4 2.9 7.9 7 9.8 4.1-1.9 7-5.4 7-9.8V6l-7-3Z" /><path d="m8.8 12 2.2 2.2 4.2-4.6" /></symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.4" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></symbol>
+        <symbol id="i-drag" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none" /><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none" /><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none" /><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none" /><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none" /><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v13" /><path d="m8 7 4-4 4 4" /><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" /></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /><path d="m6 7 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /><path d="M10 11v6M14 11v6" /></symbol>
+        <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5" /><path d="M12 8h.01" /></symbol>
+        <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7Z" /><path d="M14 3v4h4" /><path d="M9.5 13h5M9.5 16h5" /></symbol>
+        <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l2.5-2.5a4 4 0 0 0-5.66-5.66L11 7.3" /><path d="M14 10a4 4 0 0 0-5.66 0l-2.5 2.5a4 4 0 0 0 5.66 5.66L13 16.7" /></symbol>
+        <symbol id="i-rules" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13l-4-2.4L11 20l-3-2.4L5 20Z" /><path d="M8.5 9h7M8.5 12.5h5" /></symbol>
+        <symbol id="cat-income" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="2.2" /><circle cx="12" cy="12" r="2.6" /><path d="M6 12h.01M18 12h.01" /></symbol>
+        <symbol id="cat-groceries" viewBox="0 0 24 24"><path d="M3 6h2l2.2 9.6A2 2 0 0 0 9.15 17h7.9a2 2 0 0 0 1.96-1.6L21 8H6" /><circle cx="10" cy="20" r="1.4" fill="currentColor" stroke="none" /><circle cx="17" cy="20" r="1.4" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="cat-transport" viewBox="0 0 24 24"><path d="M5 13l1.4-4.1A2 2 0 0 1 8.3 7.5h7.4a2 2 0 0 1 1.9 1.4L19 13v4.5h-2.2v-2H7.2v2H5Z" /><circle cx="8" cy="15" r="1.1" fill="currentColor" stroke="none" /><circle cx="16" cy="15" r="1.1" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="cat-food" viewBox="0 0 24 24"><path d="M7 3v7M5 3v4a2 2 0 0 0 4 0V3M7 10v11" /><path d="M16 3c-1.6 0-2.8 2.2-2.8 5s1.2 3.8 2.8 3.8V21" /></symbol>
+        <symbol id="cat-shopping" viewBox="0 0 24 24"><path d="M6.5 8h11l-1 12.5h-9L6.5 8Z" /><path d="M9.5 8V6.5a2.5 2.5 0 0 1 5 0V8" /></symbol>
+        <symbol id="cat-bills" viewBox="0 0 24 24"><path d="M6.5 3h11v18l-2.4-1.4-2.1 1.4-2-1.4-2 1.4L6.5 21Z" /><path d="M9.5 8h5M9.5 12h5" /></symbol>
+        <symbol id="cat-entertainment" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5" /><path d="M3.5 9.5h17M8 5v14M16 5v14" /></symbol>
+        <symbol id="cat-health" viewBox="0 0 24 24"><path d="M12 21S3.5 14.5 3.5 8.8A4.3 4.3 0 0 1 12 6a4.3 4.3 0 0 1 8.5 2.8C20.5 14.5 12 21 12 21Z" /><path d="M12 9v4M10 11h4" /></symbol>
+        <symbol id="cat-education" viewBox="0 0 24 24"><path d="M12 4 2 9l10 5 10-5-10-5Z" /><path d="M6 11.5V16c0 1.6 2.7 3 6 3s6-1.4 6-3v-4.5" /></symbol>
+        <symbol id="cat-other" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="18" cy="12" r="1.6" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="cat-uncat" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M9.6 9.4a2.5 2.5 0 0 1 4.7 1.2c0 1.7-2 2.1-2.3 3.6M12 17.3h.01" /></symbol>
+        <symbol id="pm-upi" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="2.2" /><circle cx="12" cy="12" r="2.6" /><path d="M6 12h.01M18 12h.01" /></symbol>
+        <symbol id="pm-card" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2.6" /><path d="M3 10.5h18" /></symbol>
+        <symbol id="pm-bank" viewBox="0 0 24 24"><path d="M12 3.5 4 9.5h16L12 3.5ZM6 10.5v6.5M10 10.5v6.5M14 10.5v6.5M18 10.5v6.5M4 20h16" /></symbol>
+        <symbol id="pm-cash" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="9" rx="1.8" /><path d="M6 8V6.5h15V15.5h-1.5" /><circle cx="12" cy="12.5" r="2.1" /></symbol>
+        <symbol id="pm-wallet" viewBox="0 0 24 24"><path d="M4 8A2.5 2.5 0 0 1 6.5 5.5H18V9" /><rect x="4" y="8" width="16" height="11.5" rx="2.5" /><path d="M16 12.6h4v3.4h-4a1.7 1.7 0 0 1 0-3.4Z" /></symbol>
+      </defs>
+    </svg>
+
+    <div class="wrap">
+      <p><a href="index.html">&larr; Midnight</a></p>
+      <h1>P1 screens</h1>
+      <p>
+        Everything left to draw after the P0 loop and the design system, bar the one still-open
+        design-system call (motion, &sect;3.5): the three onboarding steps, Categories + Create /
+        Edit Category, Settings + its five subpages (Payment methods, SMS &amp; notifications,
+        Account rules, Data, About), and the global states &mdash; loading skeleton, empty, error,
+        the confirm dialog, and the undo snackbar. One file, same monochrome system. Icons are
+        Lucide (&sect;3.4). SPEC &sect;6.1 / 6.11&ndash;6.14 / 6.16 &middot; V-3 / V-7.
+      </p>
+    </div>
+
+    <div class="contact-sheet">
+      <div class="group-label">Onboarding &mdash; &sect;6.1</div>
+
+      <!-- ============ ONBOARDING · WELCOME ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="ob">
+              <div class="ob__progress"><span class="ob__dot ob__dot--on"></span><span class="ob__dot"></span><span class="ob__dot"></span></div>
+
+              <div class="ob__art">
+                <svg viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="100" cy="100" r="72" stroke-opacity="0.2" />
+                  <circle cx="100" cy="100" r="50" stroke-opacity="0.4" />
+                  <path d="M100 28a72 72 0 0 1 0 144" stroke-width="3" stroke-linecap="round" />
+                  <path d="M58 122 82 92l18 16 34-46" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                  <circle cx="134" cy="62" r="4.5" fill="currentColor" />
+                </svg>
+              </div>
+
+              <div>
+                <div class="ob__mark">₹</div>
+                <h1 class="ob__heading">Your spending, filled in for you.</h1>
+                <p class="ob__sub">CoinFlow reads your bank &amp; UPI messages on-device and turns them into a clean ledger. No manual logging, nothing leaves your phone.</p>
+              </div>
+
+              <div class="ob__foot">
+                <button class="btn btn--primary">Get started</button>
+              </div>
+            </div>
+          </main>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Onboarding &middot; Welcome</b><span>App mark, value proposition, one primary button. Static.</span></figcaption>
+      </figure>
+
+      <!-- ============ ONBOARDING · PERMISSIONS ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="ob">
+              <div class="ob__progress"><span class="ob__dot"></span><span class="ob__dot ob__dot--on"></span><span class="ob__dot"></span></div>
+              <button class="ob__back"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-arrow-left" /></svg>Back</button>
+
+              <div class="ob__scroll">
+              <div class="ob__art" style="min-height: 92px">
+                <svg viewBox="0 0 200 150" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="width: 150px; height: 112px">
+                  <rect x="34" y="24" width="118" height="58" rx="12" stroke-opacity="0.3" />
+                  <rect x="52" y="62" width="118" height="58" rx="12" stroke-width="3" />
+                  <path d="m70 92 12 12 26-30" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </div>
+
+              <div>
+                <h1 class="ob__heading">One permission, one option.</h1>
+                <p class="ob__sub">SMS access is what makes auto-detection work. Notifications are optional. Change either any time in Settings.</p>
+              </div>
+
+              <div style="margin-top: 18px">
+                <div class="permcard permcard--done">
+                  <span class="permcard__ic"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-sms" /></svg></span>
+                  <div class="permcard__body">
+                    <div class="permcard__title">Read transaction SMS</div>
+                    <div class="permcard__why">Reads bank &amp; UPI messages on this device to detect payments. Nothing is uploaded.</div>
+                  </div>
+                  <span class="permcard__pill"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg>Granted</span>
+                </div>
+                <div class="permcard">
+                  <span class="permcard__ic"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-bell" /></svg></span>
+                  <div class="permcard__body">
+                    <div class="permcard__title">Notifications <span class="permcard__opt">Optional</span></div>
+                    <div class="permcard__why">Act on a detection from the lock screen. Without it, detections just wait in the Review Queue.</div>
+                  </div>
+                  <button class="permcard__cta">Allow</button>
+                </div>
+              </div>
+              </div>
+
+              <div class="ob__foot">
+                <button class="btn btn--primary">Continue</button>
+                <button class="ob__skip">Skip for now</button>
+              </div>
+            </div>
+          </main>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Onboarding &middot; Permissions</b><span>SMS is the load-bearing one; Notifications is marked Optional. Continue always enabled.</span></figcaption>
+      </figure>
+
+      <!-- ============ ONBOARDING · CATEGORY REVIEW ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="ob">
+              <div class="ob__progress"><span class="ob__dot"></span><span class="ob__dot"></span><span class="ob__dot ob__dot--on"></span></div>
+              <button class="ob__back"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-arrow-left" /></svg>Back</button>
+
+              <div style="margin-top: 12px">
+                <h1 class="ob__heading">Pick your categories.</h1>
+                <p class="ob__sub">Uncheck any you won't use. You can add your own later.</p>
+              </div>
+
+              <div class="ob__scroll">
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-food" /></svg></span><span class="checkrow__name">Food</span><span class="check check--on"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-groceries" /></svg></span><span class="checkrow__name">Groceries</span><span class="check check--on"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-transport" /></svg></span><span class="checkrow__name">Transport</span><span class="check check--on"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-shopping" /></svg></span><span class="checkrow__name">Shopping</span><span class="check check--on"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-bills" /></svg></span><span class="checkrow__name">Bills</span><span class="check check--on"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-entertainment" /></svg></span><span class="checkrow__name">Entertainment</span><span class="check"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-health" /></svg></span><span class="checkrow__name">Health</span><span class="check check--on"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-education" /></svg></span><span class="checkrow__name">Education</span><span class="check"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+                <div class="checkrow"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-other" /></svg></span><span class="checkrow__name">Other</span><span class="check check--on"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg></span><svg class="ic ic--sm checkrow__drag" aria-hidden="true"><use href="#i-drag" /></svg></div>
+              </div>
+
+              <div class="ob__foot">
+                <button class="btn btn--primary">Done</button>
+              </div>
+            </div>
+          </main>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Onboarding &middot; Category review</b><span>The 9 defaults, all checked; uncheck / reorder. Ends onboarding.</span></figcaption>
+      </figure>
+
+      <div class="group-label">Categories &mdash; &sect;6.11 / 6.12</div>
+
+      <!-- ============ SETTINGS · CATEGORIES ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <button class="iconbtn iconbtn--bare" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button>
+                <span class="topbar__title">Categories</span>
+                <button class="iconbtn" aria-label="Add category"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-plus" /></svg></button>
+              </header>
+
+              <div class="setlabel">Default</div>
+              <div class="setgroup">
+                <button class="selectrow"><span class="txn__icon" style="width:32px;height:32px;border-radius:9px"><svg class="ic ic--sm" aria-hidden="true"><use href="#cat-food" /></svg></span><span class="selectrow__label">Food</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+                <button class="selectrow"><span class="txn__icon" style="width:32px;height:32px;border-radius:9px"><svg class="ic ic--sm" aria-hidden="true"><use href="#cat-groceries" /></svg></span><span class="selectrow__label">Groceries</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+                <button class="selectrow"><span class="txn__icon" style="width:32px;height:32px;border-radius:9px"><svg class="ic ic--sm" aria-hidden="true"><use href="#cat-transport" /></svg></span><span class="selectrow__label">Transport</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+                <button class="selectrow"><span class="txn__icon" style="width:32px;height:32px;border-radius:9px"><svg class="ic ic--sm" aria-hidden="true"><use href="#cat-bills" /></svg></span><span class="selectrow__label">Bills</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+                <button class="selectrow"><span class="txn__icon" style="width:32px;height:32px;border-radius:9px"><svg class="ic ic--sm" aria-hidden="true"><use href="#cat-other" /></svg></span><span class="selectrow__label">Other</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+                <button class="selectrow"><span class="txn__icon" style="width:32px;height:32px;border-radius:9px"><svg class="ic ic--sm" aria-hidden="true"><use href="#cat-uncat" /></svg></span><span class="selectrow__label">Uncategorized</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+              </div>
+
+              <div class="setlabel">Custom</div>
+              <div class="setgroup">
+                <button class="selectrow"><span class="txn__icon" style="width:32px;height:32px;border-radius:9px"><svg class="ic ic--sm" aria-hidden="true"><use href="#cat-entertainment" /></svg></span><span class="selectrow__label">Subscriptions</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+              </div>
+              <div class="setnote">Swipe any category to delete it. Deleting one moves its transactions to Uncategorized. (Other and Uncategorized can be renamed but not removed.)</div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Settings" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Categories</b><span>9 defaults + a Custom section &mdash; every row editable, no locks.</span></figcaption>
+      </figure>
+
+      <!-- ============ CREATE / EDIT CATEGORY (sheet) ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen" aria-hidden="true">
+            <div class="app">
+              <header class="topbar">
+                <button class="iconbtn iconbtn--bare"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button>
+                <span class="topbar__title">Categories</span>
+                <span style="width: 40px"></span>
+              </header>
+              <div class="setlabel">Custom</div>
+              <div class="setgroup">
+                <button class="selectrow"><span class="txn__icon" style="width:32px;height:32px;border-radius:9px"><svg class="ic ic--sm" aria-hidden="true"><use href="#cat-entertainment" /></svg></span><span class="selectrow__label">Subscriptions</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+              </div>
+            </div>
+          </main>
+
+          <div class="scrim"></div>
+
+          <section class="sheet" role="dialog" aria-label="Edit category">
+            <div class="sheet__grab"></div>
+            <div class="sheet__head">
+              <button class="p0-cancel">Cancel</button>
+              <h1 class="sheet__title">Edit category</h1>
+              <span style="width: 44px"></span>
+            </div>
+
+            <div class="sheet__body">
+              <label class="field-label" for="cat-name">Name</label>
+              <input class="textfield textfield--filled" id="cat-name" value="Subscriptions" maxlength="24" />
+
+              <label class="field-label">Icon</label>
+              <div class="iconpick" role="radiogroup" aria-label="Category icon">
+                <button class="iconpick__cell" aria-label="Food"><svg class="ic" aria-hidden="true"><use href="#cat-food" /></svg></button>
+                <button class="iconpick__cell" aria-label="Groceries"><svg class="ic" aria-hidden="true"><use href="#cat-groceries" /></svg></button>
+                <button class="iconpick__cell" aria-label="Transport"><svg class="ic" aria-hidden="true"><use href="#cat-transport" /></svg></button>
+                <button class="iconpick__cell" aria-label="Shopping"><svg class="ic" aria-hidden="true"><use href="#cat-shopping" /></svg></button>
+                <button class="iconpick__cell" aria-label="Bills"><svg class="ic" aria-hidden="true"><use href="#cat-bills" /></svg></button>
+                <button class="iconpick__cell iconpick__cell--on" aria-label="Entertainment" aria-checked="true"><svg class="ic" aria-hidden="true"><use href="#cat-entertainment" /></svg></button>
+                <button class="iconpick__cell" aria-label="Health"><svg class="ic" aria-hidden="true"><use href="#cat-health" /></svg></button>
+                <button class="iconpick__cell" aria-label="Education"><svg class="ic" aria-hidden="true"><use href="#cat-education" /></svg></button>
+                <button class="iconpick__cell" aria-label="Income"><svg class="ic" aria-hidden="true"><use href="#cat-income" /></svg></button>
+                <button class="iconpick__cell" aria-label="Other"><svg class="ic" aria-hidden="true"><use href="#cat-other" /></svg></button>
+                <button class="iconpick__cell" aria-label="Bank"><svg class="ic" aria-hidden="true"><use href="#pm-bank" /></svg></button>
+                <button class="iconpick__cell" aria-label="Card"><svg class="ic" aria-hidden="true"><use href="#pm-card" /></svg></button>
+              </div>
+            </div>
+
+            <div class="sheet__footer">
+              <button class="btn btn--ghost btn--grow0" style="flex: 0 0 96px">Delete</button>
+              <button class="btn btn--primary">Save</button>
+            </div>
+          </section>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Create / Edit Category (sheet)</b><span>Name (&le;24) + fixed icon grid. &ldquo;New category&rdquo; is the same without Delete.</span></figcaption>
+      </figure>
+
+      <div class="group-label">Settings &mdash; &sect;6.13 / 6.14</div>
+
+      <!-- ============ SETTINGS ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar"><span class="topbar__title">Settings</span></header>
+
+              <div class="setlabel">Categorization</div>
+              <div class="setgroup">
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-tag" /></svg><span class="selectrow__label">Categories</span><span class="selectrow__value">11 <svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-card" /></svg><span class="selectrow__label">Payment methods</span><span class="selectrow__value"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-rules" /></svg><span class="selectrow__label">Account rules</span><span class="selectrow__value">42 <svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+              </div>
+
+              <div class="setlabel">Detection</div>
+              <div class="setgroup">
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-sms" /></svg><span class="selectrow__label">SMS &amp; notifications<span class="selectrow__sub">Off</span></span><span class="selectrow__value"><svg class="ic ic--sm warn" aria-hidden="true"><use href="#i-alert" /></svg> <svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+              </div>
+
+              <div class="setlabel">General</div>
+              <div class="setgroup">
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-database" /></svg><span class="selectrow__label">Data</span><span class="selectrow__value"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-info" /></svg><span class="selectrow__label">About</span><span class="selectrow__value"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+              </div>
+
+              <div class="settings__ver">CoinFlow 1.0.0 (1)</div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Settings" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Settings</b><span>Grouped list; &ldquo;SMS &amp; notifications&rdquo; carries an On/Off subtitle + warning when off.</span></figcaption>
+      </figure>
+
+      <!-- ============ SETTINGS · PAYMENT METHODS ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <button class="iconbtn iconbtn--bare" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button>
+                <span class="topbar__title">Payment methods</span>
+                <span style="width: 40px"></span>
+              </header>
+
+              <div class="setlabel">Built in</div>
+              <div class="setgroup">
+                <div class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#pm-upi" /></svg><span class="selectrow__label">UPI</span></div>
+                <div class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#pm-card" /></svg><span class="selectrow__label">Card</span></div>
+                <div class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#pm-bank" /></svg><span class="selectrow__label">Bank transfer</span></div>
+                <div class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#pm-cash" /></svg><span class="selectrow__label">Cash</span></div>
+                <div class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#pm-wallet" /></svg><span class="selectrow__label">Wallet</span></div>
+              </div>
+              <div class="setnote">This list is fixed for now. Naming your own accounts is coming later.</div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Settings" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Settings &middot; Payment methods</b><span>Read-only reference list of the five methods.</span></figcaption>
+      </figure>
+
+      <!-- ============ SETTINGS · SMS & NOTIFICATIONS ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <button class="iconbtn iconbtn--bare" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button>
+                <span class="topbar__title">SMS &amp; notifications</span>
+                <span style="width: 40px"></span>
+              </header>
+
+              <div class="statusblock">
+                <div class="statusblock__row">
+                  <svg class="ic ic--sm" aria-hidden="true" style="color: var(--text-3)"><use href="#i-sms" /></svg>
+                  <span class="statusblock__title">Read transaction SMS</span>
+                  <span class="statusblock__pill statusblock__pill--off">Off</span>
+                </div>
+                <div class="statusblock__body">CoinFlow scans bank &amp; UPI messages on this device to detect transactions. Nothing is uploaded and personal messages are ignored.</div>
+                <button class="statusblock__btn">Enable</button>
+              </div>
+
+              <div class="statusblock">
+                <div class="statusblock__row">
+                  <svg class="ic ic--sm" aria-hidden="true" style="color: var(--text-3)"><use href="#i-bell" /></svg>
+                  <span class="statusblock__title">Notifications</span>
+                  <span class="statusblock__pill statusblock__pill--on">On</span>
+                </div>
+                <div class="statusblock__body">Each detected transaction shows on the lock screen with Save / Add / Discard.</div>
+                <button class="statusblock__btn">Open system settings</button>
+              </div>
+
+              <div class="setexplain"><b>Which messages CoinFlow reads</b> &mdash; only messages from bank &amp; wallet senders that match a transaction format (an amount plus a debit / credit). Everything else is skipped and never leaves your phone.</div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Settings" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Settings &middot; SMS &amp; notifications</b><span>Two status blocks with state pills + an explainer.</span></figcaption>
+      </figure>
+
+      <!-- ============ SETTINGS · ACCOUNT RULES ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <button class="iconbtn iconbtn--bare" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button>
+                <span class="topbar__title">Account rules</span>
+                <span style="width: 40px"></span>
+              </header>
+
+              <div class="setnote" style="margin-bottom: 6px">What CoinFlow remembers per account &mdash; the note and category it fills in, and the one-tap <b>Save</b> on the notification.</div>
+
+              <div class="queue">
+                <div class="rulerow">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-food" /></svg></span>
+                  <div class="rulerow__body">
+                    <div class="rulerow__acc">Swiggy</div>
+                    <div class="rulerow__note">&ldquo;Weekend dinner&rdquo;</div>
+                    <div class="rulerow__meta"><span class="chip">Food</span><span class="rulerow__count">42 uses</span></div>
+                  </div>
+                  <button class="iconbtn iconbtn--bare" aria-label="More"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-more" /></svg></button>
+                </div>
+
+                <div class="rulerow">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-groceries" /></svg></span>
+                  <div class="rulerow__body">
+                    <div class="rulerow__acc">swiggyinstamart@icici</div>
+                    <div class="rulerow__note">&ldquo;Groceries run&rdquo;</div>
+                    <div class="rulerow__meta"><span class="chip">Groceries</span><span class="rulerow__count">18 uses</span></div>
+                  </div>
+                  <button class="iconbtn iconbtn--bare" aria-label="More"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-more" /></svg></button>
+                </div>
+
+                <div class="rulerow">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-shopping" /></svg></span>
+                  <div class="rulerow__body">
+                    <div class="rulerow__acc">amzn@apl</div>
+                    <div class="rulerow__note" style="font-style: italic; color: var(--text-3)">No note yet</div>
+                    <div class="rulerow__meta"><span class="chip">Shopping</span><span class="rulerow__count">7 uses</span></div>
+                  </div>
+                  <button class="iconbtn iconbtn--bare" aria-label="More"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-more" /></svg></button>
+                </div>
+
+                <div class="rulerow">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-bills" /></svg></span>
+                  <div class="rulerow__body">
+                    <div class="rulerow__acc">BESCOM</div>
+                    <div class="rulerow__note">&ldquo;Electricity bill&rdquo;</div>
+                    <div class="rulerow__meta"><span class="chip">Bills</span><span class="rulerow__count">6 uses</span></div>
+                  </div>
+                  <button class="iconbtn iconbtn--bare" aria-label="More"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-more" /></svg></button>
+                </div>
+              </div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Settings" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Settings &middot; Account rules</b><span>Learned account &rarr; note + category + count. Empty until the first rule is learned. (P2 &mdash; ship-or-silent still open.)</span></figcaption>
+      </figure>
+
+      <!-- ============ SETTINGS · DATA ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <button class="iconbtn iconbtn--bare" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button>
+                <span class="topbar__title">Data</span>
+                <span style="width: 40px"></span>
+              </header>
+
+              <div class="setlabel">Export</div>
+              <div class="setgroup">
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-share" /></svg><span class="selectrow__label">Export data<span class="selectrow__sub">CSV &middot; opens the share sheet</span></span><span class="selectrow__value"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+              </div>
+
+              <div class="setlabel">Danger zone</div>
+              <div class="setgroup">
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-trash" /></svg><span class="selectrow__label selectrow__label--danger">Clear all data</span><span class="selectrow__value"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+              </div>
+              <div class="setnote">Clearing removes every transaction, category and learned rule from this device. It can&rsquo;t be undone &mdash; you&rsquo;ll be asked to type <b>CONFIRM</b>.</div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Settings" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Settings &middot; Data</b><span>Export + a destructive &ldquo;Clear all data&rdquo; row (bold weight, no red).</span></figcaption>
+      </figure>
+
+      <!-- ============ SETTINGS · ABOUT ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <button class="iconbtn iconbtn--bare" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button>
+                <span class="topbar__title">About</span>
+                <span style="width: 40px"></span>
+              </header>
+
+              <div style="text-align: center; padding: 26px 0 10px">
+                <div class="ob__mark" style="margin-bottom: 14px">₹</div>
+                <div style="font-family: 'Manrope', system-ui, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: -0.01em">CoinFlow</div>
+                <div style="margin-top: 3px; font-size: 12.5px; color: var(--text-3)" class="num">Version 1.0.0 (1)</div>
+              </div>
+
+              <div class="setexplain" style="text-align: center">All your data stays on this device. CoinFlow has no account and no server.</div>
+
+              <div class="setlabel">More</div>
+              <div class="setgroup">
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-doc" /></svg><span class="selectrow__label">Open-source licenses</span><span class="selectrow__value"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-link" /></svg><span class="selectrow__label">Source code</span><span class="selectrow__value"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+                <button class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-info" /></svg><span class="selectrow__label">Help &amp; feedback</span><span class="selectrow__value"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span></button>
+              </div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Settings" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Settings &middot; About</b><span>Version, the on-device privacy line, licenses / source / help.</span></figcaption>
+      </figure>
+
+      <div class="group-label">Global states &mdash; &sect;6.16 / V-3 / V-7</div>
+
+      <!-- ============ STATE · LOADING SKELETON ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar"><span class="topbar__brand">CoinFlow</span><span class="topbar__meta">August 2026</span></header>
+
+              <div class="sk-card">
+                <div class="sk-line" style="width: 38%"></div>
+                <div class="sk-line" style="width: 62%; height: 30px; margin-top: 14px; border-radius: 8px"></div>
+              </div>
+              <div style="display: flex; gap: 10px; margin: 0 var(--pad) 18px">
+                <div class="sk-card" style="flex: 1; margin: 0"><div class="sk-line" style="width: 50%"></div><div class="sk-line" style="width: 80%; margin-top: 10px"></div></div>
+                <div class="sk-card" style="flex: 1; margin: 0"><div class="sk-line" style="width: 50%"></div><div class="sk-line" style="width: 80%; margin-top: 10px"></div></div>
+              </div>
+              <div class="sk-line" style="width: 30%; margin: 0 var(--pad) 14px"></div>
+              <div class="sk-row"><span class="sk-tile"></span><div class="sk-row__body"><div class="sk-line" style="width: 62%"></div><div class="sk-line sk-line--soft" style="width: 40%"></div></div><div class="sk-line" style="width: 54px"></div></div>
+              <div class="sk-row"><span class="sk-tile"></span><div class="sk-row__body"><div class="sk-line" style="width: 52%"></div><div class="sk-line sk-line--soft" style="width: 34%"></div></div><div class="sk-line" style="width: 44px"></div></div>
+              <div class="sk-row"><span class="sk-tile"></span><div class="sk-row__body"><div class="sk-line" style="width: 70%"></div><div class="sk-line sk-line--soft" style="width: 44%"></div></div><div class="sk-line" style="width: 60px"></div></div>
+              <div class="sk-row"><span class="sk-tile"></span><div class="sk-row__body"><div class="sk-line" style="width: 46%"></div><div class="sk-line sk-line--soft" style="width: 38%"></div></div><div class="sk-line" style="width: 50px"></div></div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab navbar__tab--active" aria-label="Home" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>State &middot; Loading skeleton</b><span>Neutral blocks matching the target layout &mdash; never a lone full-screen spinner.</span></figcaption>
+      </figure>
+
+      <!-- ============ STATE · EMPTY ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar"><span class="topbar__title">Transactions</span></header>
+              <div class="searchrow">
+                <div class="searchbar"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-clock" /></svg><span>Search notes &amp; accounts</span></div>
+              </div>
+              <div class="empty" style="padding-top: 120px">
+                <div class="empty__ic"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></div>
+                <div class="empty__line">No transactions yet.<br />Add one by hand, or turn on SMS detection to fill this in automatically.</div>
+                <button class="btn btn--primary" style="flex: 0 0 auto; padding: 12px 22px">Add transaction</button>
+              </div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Transactions" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>State &middot; Empty</b><span>Short line + the one primary action (V-3 baseline).</span></figcaption>
+      </figure>
+
+      <!-- ============ STATE · ERROR ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar"><span class="topbar__title">Analytics</span></header>
+              <div class="empty" style="padding-top: 150px">
+                <div class="empty__ic"><svg class="ic" aria-hidden="true"><use href="#i-alert" /></svg></div>
+                <div class="empty__line">Couldn&rsquo;t build this month&rsquo;s analytics.</div>
+                <button class="empty__retry">Try again</button>
+              </div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Analytics" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>State &middot; Error</b><span>Short message + a retry affordance (V-3 baseline).</span></figcaption>
+      </figure>
+
+      <!-- ============ STATE · CONFIRM DIALOG (delete) ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen" aria-hidden="true">
+            <div class="app">
+              <header class="topbar"><span class="topbar__title">Transactions</span></header>
+              <section class="daygroup">
+                <div class="daygroup__head"><span class="daygroup__date">Yesterday</span><span class="daygroup__sub num">&minus; &#8377;1,455</span></div>
+                <div class="txncard"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-food" /></svg></span><div class="txn__body"><div class="txn__name">Dinner with Sana</div><div class="txn__meta"><span>Food</span></div></div><span class="txn__amt num neg">&minus; &#8377;613</span></div>
+                <div class="txncard"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-transport" /></svg></span><div class="txn__body"><div class="txn__name">Cab home</div><div class="txn__meta"><span>Transport</span></div></div><span class="txn__amt num neg">&minus; &#8377;247</span></div>
+              </section>
+            </div>
+          </main>
+
+          <div class="dialog-scrim">
+            <div class="dialog" role="alertdialog" aria-label="Delete transaction">
+              <div class="dialog__ic"><svg class="ic" aria-hidden="true"><use href="#i-trash" /></svg></div>
+              <div class="dialog__title">Delete this transaction?</div>
+              <div class="dialog__body">Removes <b>&ldquo;Dinner with Sana&rdquo;</b> (&minus; &#8377;613). You can undo straight after.</div>
+              <div class="dialog__actions">
+                <button class="dialog__btn">Delete</button>
+                <button class="dialog__btn dialog__btn--text">Cancel</button>
+              </div>
+            </div>
+          </div>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>State &middot; Confirm dialog</b><span>Destructive = filled, bold confirm on top; Cancel is quiet text. No red &mdash; weight carries it (V-7).</span></figcaption>
+      </figure>
+
+      <!-- ============ STATE · TWO-STEP CONFIRM (clear all data) ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen" aria-hidden="true">
+            <div class="app">
+              <header class="topbar"><button class="iconbtn iconbtn--bare"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button><span class="topbar__title">Data</span><span style="width: 40px"></span></header>
+              <div class="setlabel">Danger zone</div>
+              <div class="setgroup"><div class="selectrow"><svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-trash" /></svg><span class="selectrow__label selectrow__label--danger">Clear all data</span></div></div>
+            </div>
+          </main>
+
+          <div class="dialog-scrim">
+            <div class="dialog" role="alertdialog" aria-label="Clear all data">
+              <div class="dialog__ic"><svg class="ic" aria-hidden="true"><use href="#i-trash" /></svg></div>
+              <div class="dialog__title">Clear everything?</div>
+              <div class="dialog__body">This permanently deletes every transaction, category and learned rule on this device. Type <b>CONFIRM</b> to continue.</div>
+              <div class="dialog__type">
+                <input class="textfield textfield--focus" value="CONFIRM" aria-label="Type CONFIRM" />
+              </div>
+              <div class="dialog__actions">
+                <button class="dialog__btn">Clear data</button>
+                <button class="dialog__btn dialog__btn--text">Cancel</button>
+              </div>
+            </div>
+          </div>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>State &middot; Two-step confirm</b><span>Clear all data &mdash; step two needs the word <b>CONFIRM</b> typed (V-7 / UI-065).</span></figcaption>
+      </figure>
+
+      <!-- ============ STATE · UNDO SNACKBAR ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar"><span class="topbar__title">Transactions</span></header>
+              <section class="daygroup">
+                <div class="daygroup__head"><span class="daygroup__date">Yesterday</span><span class="daygroup__sub num">&minus; &#8377;842</span></div>
+                <div class="txncard"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-transport" /></svg></span><div class="txn__body"><div class="txn__name">Cab home</div><div class="txn__meta"><span>Transport</span></div></div><span class="txn__amt num neg">&minus; &#8377;247</span></div>
+                <div class="txncard"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-groceries" /></svg></span><div class="txn__body"><div class="txn__name">Weekly groceries</div><div class="txn__meta"><span>Groceries</span></div></div><span class="txn__amt num neg">&minus; &#8377;595</span></div>
+              </section>
+              <section class="daygroup">
+                <div class="daygroup__head"><span class="daygroup__date">Wed, 28 Aug</span><span class="daygroup__sub num">&minus; &#8377;18,500</span></div>
+                <div class="txncard"><span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-bills" /></svg></span><div class="txn__body"><div class="txn__name">August rent</div><div class="txn__meta"><span>Bills</span></div></div><span class="txn__amt num neg">&minus; &#8377;18,500</span></div>
+              </section>
+            </div>
+          </main>
+
+          <div class="snackbar" role="status">
+            <span class="snackbar__text">Transaction deleted</span>
+            <button class="snackbar__action">Undo</button>
+          </div>
+
+          <nav class="navbar" aria-label="Primary"><button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button><button class="navbar__tab navbar__tab--active" aria-label="Transactions" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button><button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button><button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button><button class="navbar__tab" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button></nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>State &middot; Undo snackbar</b><span>Bottom, above the nav; auto-dismiss ~5 s; single &ldquo;Undo&rdquo; action.</span></figcaption>
+      </figure>
+    </div>
+  </body>
+</html>

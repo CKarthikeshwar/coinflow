@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Midnight · Screens</title>
+    <link rel="stylesheet" href="../shared/frame.css" />
+    <link rel="stylesheet" href="app.css" />
+    <style>
+      .wrap { max-width: 1200px; margin: 0 auto; padding: 56px 28px 8px; }
+      .wrap h1 { font-size: 28px; letter-spacing: -0.03em; margin: 0 0 6px; }
+      .wrap p { font-size: 14px; color: #4b4c52; line-height: 1.6; max-width: 66ch; margin: 0 0 4px; }
+      .wrap a { color: #55565b; font-weight: 600; text-decoration: none; font-size: 13px; }
+      .p0-cancel { border: 0; background: none; color: var(--text-2); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; padding: 0; }
+    </style>
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true" width="0" height="0">
+      <defs>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.6 12 3l9 7.6" /><path d="M5.2 9.3V21h13.6V9.3" /></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4" /><path d="M12 7.4V12l3.2 2" /></symbol>
+        <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3.5 20.5h17" /><path d="M6.5 20v-7M12 20V5.5M17.5 20v-4.5" /></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17.5 7H20M4 17h3M11.5 17H20" /><circle cx="15" cy="7" r="2.5" /><circle cx="9" cy="17" r="2.5" /></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+        <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 6.5" /></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.3 20.5h19.4Z" /><path d="M12 10v4.6M12 17.4h.01" /></symbol>
+        <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7M8 12h12" /></symbol>
+        <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="18.5" r="1.5" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></symbol>
+        <symbol id="i-funnel" viewBox="0 0 24 24"><path d="M4 5h16l-6.2 8.2V19l-3.6 2v-7.8Z" /></symbol>
+        <symbol id="i-tag" viewBox="0 0 24 24"><path d="M4 4h8l8 8-8 8-8-8Z" /><circle cx="8.5" cy="8.5" r="1.6" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3" /><path d="M3 10.5h18" /></symbol>
+        <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="3" /><path d="M4 10h16M9 3v4M15 3v4" /></symbol>
+        <symbol id="i-bksp" viewBox="0 0 24 24"><path d="M21 5H8.5L2.5 12l6 7H21Z" /><path d="M11 9.5 16 14.5M16 9.5 11 14.5" /></symbol>
+        <symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" /></symbol>
+        <symbol id="i-sms" viewBox="0 0 24 24"><path d="M4.5 5h15v11h-11l-4 4Z" /><path d="M8.5 10h7M8.5 13h4" /></symbol>
+        <symbol id="i-trend-up" viewBox="0 0 24 24"><path d="M4 17 10.5 10.5 14 14 20 8" /><path d="M15 8h5v5" /></symbol>
+        <!-- icon set: hand-traced Lucide (the chosen library — SPEC-UI-UX §3.4); RN build swaps in lucide-react-native 1:1 -->
+        <symbol id="cat-income" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="2.2" /><circle cx="12" cy="12" r="2.6" /><path d="M6 12h.01M18 12h.01" /></symbol>
+        <symbol id="cat-groceries" viewBox="0 0 24 24"><path d="M3 6h2l2.2 9.6A2 2 0 0 0 9.15 17h7.9a2 2 0 0 0 1.96-1.6L21 8H6" /><circle cx="10" cy="20" r="1.4" fill="currentColor" stroke="none" /><circle cx="17" cy="20" r="1.4" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="cat-transport" viewBox="0 0 24 24"><path d="M5 13l1.4-4.1A2 2 0 0 1 8.3 7.5h7.4a2 2 0 0 1 1.9 1.4L19 13v4.5h-2.2v-2H7.2v2H5Z" /><circle cx="8" cy="15" r="1.1" fill="currentColor" stroke="none" /><circle cx="16" cy="15" r="1.1" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="cat-food" viewBox="0 0 24 24"><path d="M7 3v7M5 3v4a2 2 0 0 0 4 0V3M7 10v11" /><path d="M16 3c-1.6 0-2.8 2.2-2.8 5s1.2 3.8 2.8 3.8V21" /></symbol>
+        <symbol id="cat-shopping" viewBox="0 0 24 24"><path d="M6.5 8h11l-1 12.5h-9L6.5 8Z" /><path d="M9.5 8V6.5a2.5 2.5 0 0 1 5 0V8" /></symbol>
+        <symbol id="cat-bills" viewBox="0 0 24 24"><path d="M6.5 3h11v18l-2.4-1.4-2.1 1.4-2-1.4-2 1.4L6.5 21Z" /><path d="M9.5 8h5M9.5 12h5" /></symbol>
+        <symbol id="cat-entertainment" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5" /><path d="M3.5 9.5h17M8 5v14M16 5v14" /></symbol>
+        <symbol id="cat-uncat" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M9.6 9.4a2.5 2.5 0 0 1 4.7 1.2c0 1.7-2 2.1-2.3 3.6M12 17.3h.01" /></symbol>
+        <symbol id="pm-upi" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="2.2" /><circle cx="12" cy="12" r="2.6" /><path d="M6 12h.01M18 12h.01" /></symbol>
+        <symbol id="pm-card" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2.6" /><path d="M3 10.5h18" /></symbol>
+        <symbol id="pm-bank" viewBox="0 0 24 24"><path d="M12 3.5 4 9.5h16L12 3.5ZM6 10.5v6.5M10 10.5v6.5M14 10.5v6.5M18 10.5v6.5M4 20h16" /></symbol>
+      </defs>
+    </svg>
+
+    <div class="wrap">
+      <p><a href="index.html">&larr; Midnight</a></p>
+      <h1>Screens</h1>
+      <p>
+        The seven tab / flow screens in one file: Home, Transactions, Review Queue, Add transaction
+        (sheet), Filter (sheet), Analytics, and the detection Notification (lock screen). Dark only,
+        black &amp; white; card surfaces lift on a soft drop shadow + a hairline edge. P0 detail
+        screens (Confirmation, Details, Edit, Category picker) live in
+        <a href="p0-screens.html">p0-screens.html</a>.
+      </p>
+    </div>
+
+    <div class="contact-sheet">
+      <!-- ============ HOME ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar">
+            <span class="statusbar__time">9:41</span>
+            <span class="statusbar__right">
+              <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Zm0 3.3c1.3 0 2.5.5 3.4 1.35l1.3-1.35C11.6 4.5 9.9 3.8 8 3.8s-3.6.7-4.7 2L4.6 7.05C5.5 6.2 6.7 5.7 8 5.7Zm0 3.2 2-2.05c-.5-.5-1.2-.8-2-.8s-1.5.3-2 .8L8 8.9Z" /></svg>
+              <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg>
+            </span>
+          </div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <span class="topbar__brand">CoinFlow</span>
+                <span class="topbar__meta">August 2026</span>
+              </header>
+
+              <div class="banner" role="status">
+                <svg class="ic ic--sm" aria-hidden="true"><use href="#i-alert" /></svg>
+                <span class="banner__text">Turn on SMS &amp; notifications to catch transactions automatically.</span>
+                <button class="banner__cta">Enable</button>
+                <button class="banner__x" aria-label="Dismiss"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></button>
+              </div>
+
+              <section class="hero" aria-label="Total balance">
+                <div class="hero__label">Total balance</div>
+                <div class="hero__amountline">
+                  <span class="hero__amount num"><span class="hero__cur">₹</span>1,44,280</span>
+                </div>
+              </section>
+
+              <div class="statgrid statgrid--hero">
+                <div class="statcard">
+                  <div class="statcard__k">Income</div>
+                  <div class="statcard__v num">+ ₹1,15,000</div>
+                  <div class="statcard__delta"><svg class="ic" aria-hidden="true"><use href="#i-trend-up" /></svg>4% vs last month</div>
+                </div>
+                <div class="statcard">
+                  <div class="statcard__k">Spending</div>
+                  <div class="statcard__v num">− ₹92,480</div>
+                  <div class="statcard__delta"><svg class="ic" aria-hidden="true"><use href="#i-trend-up" /></svg>12% vs last month</div>
+                </div>
+              </div>
+
+              <div class="actionstrip">
+                <button class="action-row">
+                  <span class="action-row__mark"></span>
+                  <span class="action-row__label">Transactions to review</span>
+                  <span class="badge num">3</span>
+                  <svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg>
+                </button>
+                <button class="action-row">
+                  <span class="action-row__mark action-row__mark--warn"></span>
+                  <span class="action-row__label">Uncategorized</span>
+                  <span class="badge num">5</span>
+                  <svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg>
+                </button>
+              </div>
+
+              <section class="section">
+                <div class="section__head">
+                  <h2 class="section__title">Recent</h2>
+                  <span class="section__link">See all</span>
+                </div>
+
+                <div class="txncard">
+                  <span class="txn__icon txn__icon--in"><svg class="ic" aria-hidden="true"><use href="#cat-income" /></svg></span>
+                  <div class="txn__body">
+                    <div class="txn__name">Salary — August</div>
+                    <div class="txn__meta"><span>Income</span><span class="sep"></span><span>Today</span></div>
+                  </div>
+                  <span class="txn__amt num pos">+ ₹1,15,000</span>
+                </div>
+
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-groceries" /></svg></span>
+                  <div class="txn__body">
+                    <div class="txn__name">Weekly groceries</div>
+                    <div class="txn__meta"><span>Groceries</span><span class="sep"></span><span>2h ago</span></div>
+                  </div>
+                  <span class="txn__amt num neg">− ₹842</span>
+                </div>
+
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-transport" /></svg></span>
+                  <div class="txn__body">
+                    <div class="txn__name">Cab to office</div>
+                    <div class="txn__meta"><span>Transport</span><span class="sep"></span><span>5h ago</span></div>
+                  </div>
+                  <span class="txn__amt num neg">− ₹247</span>
+                </div>
+
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-food" /></svg></span>
+                  <div class="txn__body">
+                    <div class="txn__name">Dinner with Sana</div>
+                    <div class="txn__meta"><span>Food</span><span class="sep"></span><span>Yesterday</span></div>
+                  </div>
+                  <span class="txn__amt num neg">− ₹613</span>
+                </div>
+
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-shopping" /></svg></span>
+                  <div class="txn__body">
+                    <div class="txn__name">Phone case + cable</div>
+                    <div class="txn__meta"><span>Shopping</span><span class="sep"></span><span>Yesterday</span></div>
+                  </div>
+                  <span class="txn__amt num neg">− ₹1,299</span>
+                </div>
+
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-uncat" /></svg></span>
+                  <div class="txn__body">
+                    <div class="txn__name txn__name--account">Local Kirana</div>
+                    <div class="txn__meta"><span class="uncat">Uncategorized</span><span class="sep"></span><span>Yesterday</span></div>
+                  </div>
+                  <span class="txn__amt num neg">− ₹500</span>
+                </div>
+
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-bills" /></svg></span>
+                  <div class="txn__body">
+                    <div class="txn__name">August rent</div>
+                    <div class="txn__meta"><span>Bills</span><span class="sep"></span><span>28 Aug</span></div>
+                  </div>
+                  <span class="txn__amt num neg">− ₹18,500</span>
+                </div>
+              </section>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary">
+            <button class="navbar__tab navbar__tab--active" aria-label="Home" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button>
+            <button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button>
+            <button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button>
+            <button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button>
+            <button class="navbar__tab" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption>Home (&sect;6.2)</figcaption>
+      </figure>
+
+      <!-- ============ TRANSACTIONS ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar">
+            <span class="statusbar__time">9:41</span>
+            <span class="statusbar__right">
+              <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Zm0 3.3c1.3 0 2.5.5 3.4 1.35l1.3-1.35C11.6 4.5 9.9 3.8 8 3.8s-3.6.7-4.7 2L4.6 7.05C5.5 6.2 6.7 5.7 8 5.7Zm0 3.2 2-2.05c-.5-.5-1.2-.8-2-.8s-1.5.3-2 .8L8 8.9Z" /></svg>
+              <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg>
+            </span>
+          </div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <span class="topbar__title">Transactions</span>
+              </header>
+
+              <div class="searchrow">
+                <div class="searchbar">
+                  <svg class="ic ic--sm" aria-hidden="true"><use href="#i-search" /></svg>
+                  <span>Search notes &amp; accounts</span>
+                </div>
+                <button class="filterbtn" aria-label="Filter (2 active)">
+                  <svg class="ic" aria-hidden="true"><use href="#i-funnel" /></svg>
+                  <span class="dot-badge num">2</span>
+                </button>
+              </div>
+
+              <div class="filterchips" aria-label="Active filters">
+                <button class="chip--removable">Food <svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></button>
+                <button class="chip--removable">Transport <svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></button>
+                <button class="chip--removable">This month <svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></button>
+              </div>
+
+              <section class="daygroup">
+                <div class="daygroup__head">
+                  <span class="daygroup__date">Today</span>
+                  <span class="daygroup__sub num">− ₹1,089</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-groceries" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Weekly groceries</div><div class="txn__meta"><span>Groceries</span></div></div>
+                  <span class="txn__amt num neg">− ₹842</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-transport" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Cab to office</div><div class="txn__meta"><span>Transport</span></div></div>
+                  <span class="txn__amt num neg">− ₹247</span>
+                </div>
+              </section>
+
+              <section class="daygroup">
+                <div class="daygroup__head">
+                  <span class="daygroup__date">Yesterday</span>
+                  <span class="daygroup__sub num">− ₹2,412</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-shopping" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Phone case + cable</div><div class="txn__meta"><span>Shopping</span></div></div>
+                  <span class="txn__amt num neg">− ₹1,299</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-food" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Dinner with Sana</div><div class="txn__meta"><span>Food</span></div></div>
+                  <span class="txn__amt num neg">− ₹613</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-uncat" /></svg></span>
+                  <div class="txn__body"><div class="txn__name txn__name--account">Zomato</div><div class="txn__meta"><span class="uncat">Uncategorized</span></div></div>
+                  <span class="txn__amt num neg">− ₹500</span>
+                </div>
+              </section>
+
+              <section class="daygroup">
+                <div class="daygroup__head">
+                  <span class="daygroup__date">Wed, 28 Aug</span>
+                  <span class="daygroup__sub num">− ₹18,739</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-bills" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">August rent</div><div class="txn__meta"><span>Bills</span></div></div>
+                  <span class="txn__amt num neg">− ₹18,500</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-bills" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Jio recharge</div><div class="txn__meta"><span>Bills</span></div></div>
+                  <span class="txn__amt num neg">− ₹239</span>
+                </div>
+              </section>
+
+              <section class="daygroup">
+                <div class="daygroup__head">
+                  <span class="daygroup__date">Tue, 27 Aug</span>
+                  <span class="daygroup__sub num">− ₹2,970</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-transport" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Petrol</div><div class="txn__meta"><span>Transport</span></div></div>
+                  <span class="txn__amt num neg">− ₹2,000</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-food" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Morning coffee</div><div class="txn__meta"><span>Food</span></div></div>
+                  <span class="txn__amt num neg">− ₹485</span>
+                </div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-entertainment" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Movie — Dune 3</div><div class="txn__meta"><span>Entertainment</span></div></div>
+                  <span class="txn__amt num neg">− ₹485</span>
+                </div>
+              </section>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary">
+            <button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button>
+            <button class="navbar__tab navbar__tab--active" aria-label="Transactions" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button>
+            <button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button>
+            <button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button>
+            <button class="navbar__tab" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption>Transactions (&sect;6.7)</figcaption>
+      </figure>
+
+      <!-- ============ REVIEW QUEUE ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar">
+            <span class="statusbar__time">9:41</span>
+            <span class="statusbar__right">
+              <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Zm0 3.3c1.3 0 2.5.5 3.4 1.35l1.3-1.35C11.6 4.5 9.9 3.8 8 3.8s-3.6.7-4.7 2L4.6 7.05C5.5 6.2 6.7 5.7 8 5.7Zm0 3.2 2-2.05c-.5-.5-1.2-.8-2-.8s-1.5.3-2 .8L8 8.9Z" /></svg>
+              <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg>
+            </span>
+          </div>
+
+          <main class="screen">
+            <div class="app">
+              <header class="topbar">
+                <button class="iconbtn iconbtn--bare" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left" /></svg></button>
+                <span class="topbar__title">To review <span class="topbar__count num">5</span></span>
+                <span style="width: 40px"></span>
+              </header>
+
+              <div class="banner" role="status">
+                <svg class="ic ic--sm" aria-hidden="true"><use href="#i-alert" /></svg>
+                <span class="banner__text">Notifications are off — you may miss new transactions.</span>
+                <button class="banner__cta">Enable</button>
+                <button class="banner__x" aria-label="Dismiss"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></button>
+              </div>
+
+              <div class="queue">
+                <div class="queue__row">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#pm-upi" /></svg></span>
+                  <span class="queue__amt num neg">− ₹450</span>
+                  <div class="queue__body">
+                    <div class="queue__name queue__name--unknown">UPI payment</div>
+                    <div class="queue__time">2h ago</div>
+                  </div>
+                  <button class="iconbtn iconbtn--bare" aria-label="More"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-more" /></svg></button>
+                </div>
+
+                <div class="queue__row">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#pm-card" /></svg></span>
+                  <span class="queue__amt num neg">− ₹1,200</span>
+                  <div class="queue__body">
+                    <div class="queue__name queue__name--unknown">Card payment</div>
+                    <div class="queue__time">5h ago</div>
+                  </div>
+                  <button class="iconbtn iconbtn--bare" aria-label="More"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-more" /></svg></button>
+                </div>
+
+                <div class="queue__row">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#pm-upi" /></svg></span>
+                  <span class="queue__amt num neg">− ₹85</span>
+                  <div class="queue__body">
+                    <div class="queue__name queue__name--unknown">UPI payment</div>
+                    <div class="queue__time">Yesterday</div>
+                  </div>
+                  <button class="iconbtn iconbtn--bare" aria-label="More"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-more" /></svg></button>
+                </div>
+
+                <div class="queue__row">
+                  <span class="txn__icon txn__icon--in"><svg class="ic" aria-hidden="true"><use href="#pm-bank" /></svg></span>
+                  <span class="queue__amt num pos">+ ₹5,000</span>
+                  <div class="queue__body">
+                    <div class="queue__name queue__name--unknown">Bank credit</div>
+                    <div class="queue__time">Yesterday</div>
+                  </div>
+                  <button class="iconbtn iconbtn--bare" aria-label="More"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-more" /></svg></button>
+                </div>
+
+                <!-- known account: inline one-tap Save from the remembered rule -->
+                <div class="queue__row">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#pm-upi" /></svg></span>
+                  <span class="queue__amt num neg">− ₹613</span>
+                  <div class="queue__body">
+                    <div class="queue__name">Swiggy</div>
+                    <div class="queue__time">28 Aug</div>
+                  </div>
+                  <button class="queue__save">Save</button>
+                </div>
+              </div>
+
+              <div class="queue__dismiss-wrap">
+                <button class="queue__dismiss">Dismiss all</button>
+              </div>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary">
+            <button class="navbar__tab navbar__tab--active" aria-label="Home" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button>
+            <button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button>
+            <button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button>
+            <button class="navbar__tab" aria-label="Analytics"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button>
+            <button class="navbar__tab" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption>Review Queue (&sect;6.3)</figcaption>
+      </figure>
+
+      <!-- ============ ADD TRANSACTION (sheet) ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar">
+            <span class="statusbar__time">9:41</span>
+            <span class="statusbar__right">
+              <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Zm0 3.3c1.3 0 2.5.5 3.4 1.35l1.3-1.35C11.6 4.5 9.9 3.8 8 3.8s-3.6.7-4.7 2L4.6 7.05C5.5 6.2 6.7 5.7 8 5.7Zm0 3.2 2-2.05c-.5-.5-1.2-.8-2-.8s-1.5.3-2 .8L8 8.9Z" /></svg>
+              <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg>
+            </span>
+          </div>
+
+          <main class="screen" aria-hidden="true">
+            <div class="app">
+              <header class="topbar">
+                <span class="topbar__brand">CoinFlow</span>
+                <span class="topbar__meta">August 2026</span>
+              </header>
+              <section class="hero">
+                <div class="hero__label">Total balance</div>
+                <div class="hero__amountline"><span class="hero__amount num"><span class="hero__cur">₹</span>1,44,280</span></div>
+              </section>
+              <div class="actionstrip">
+                <button class="action-row"><span class="action-row__mark"></span><span class="action-row__label">Transactions to review</span><span class="badge num">3</span><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+              </div>
+            </div>
+          </main>
+
+          <div class="scrim"></div>
+
+          <section class="sheet sheet--kp" role="dialog" aria-label="Add transaction">
+            <div class="sheet__grab"></div>
+            <div class="sheet__head">
+              <button class="p0-cancel">Cancel</button>
+              <h1 class="sheet__title">Add transaction</h1>
+              <span style="width: 44px"></span>
+            </div>
+
+            <div class="sheet__body">
+              <div class="amount">
+                <div class="amount__value num"><span class="amount__cur">₹</span>1,200<span class="amount__caret"></span></div>
+              </div>
+
+              <div class="segment" role="tablist" aria-label="Direction">
+                <button class="segment__opt segment__opt--on" role="tab" aria-selected="true">Expense</button>
+                <button class="segment__opt" role="tab" aria-selected="false">Income</button>
+              </div>
+
+              <div class="fieldgroup">
+                <button class="selectrow">
+                  <svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-card" /></svg>
+                  <span class="selectrow__label">Payment method</span>
+                  <span class="selectrow__value">UPI <svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span>
+                </button>
+                <button class="selectrow">
+                  <svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-tag" /></svg>
+                  <span class="selectrow__label">Category</span>
+                  <span class="selectrow__value"><span class="chip chip--uncat">Uncategorized</span> <svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span>
+                </button>
+                <button class="selectrow">
+                  <svg class="ic ic--sm selectrow__ic" aria-hidden="true"><use href="#i-calendar" /></svg>
+                  <span class="selectrow__label">Date &amp; time</span>
+                  <span class="selectrow__value">Today · 2:14 PM <svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></span>
+                </button>
+              </div>
+
+              <label class="field-label" for="f-acc">Account</label>
+              <input class="textfield textfield--empty" id="f-acc" placeholder="Who was paid, or who paid you" />
+
+              <label class="field-label" for="f-note">Note</label>
+              <input class="textfield textfield--empty" id="f-note" placeholder="What was this for? (optional)" />
+
+              <label class="field-label" for="f-desc">Description (optional)</label>
+              <textarea class="textfield textfield--empty" id="f-desc" placeholder="Add more detail — who was there, why, split…"></textarea>
+            </div>
+
+            <div class="keypad" role="group" aria-label="Number pad">
+              <button>1</button><button>2</button><button>3</button>
+              <button>4</button><button>5</button><button>6</button>
+              <button>7</button><button>8</button><button>9</button>
+              <button>.</button><button>0</button>
+              <button aria-label="Backspace"><svg class="ic" aria-hidden="true"><use href="#i-bksp" /></svg></button>
+            </div>
+
+            <div class="sheet__footer">
+              <button class="btn btn--primary">Add transaction</button>
+            </div>
+          </section>
+
+          <div class="homebar"></div>
+        </div>
+        <figcaption>Add transaction — amount (sheet &middot; &sect;6.5)</figcaption>
+      </figure>
+
+      <!-- ============ ADD TRANSACTION — text field (system keyboard) ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar">
+            <span class="statusbar__time">9:41</span>
+            <span class="statusbar__right">
+              <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Zm0 3.3c1.3 0 2.5.5 3.4 1.35l1.3-1.35C11.6 4.5 9.9 3.8 8 3.8s-3.6.7-4.7 2L4.6 7.05C5.5 6.2 6.7 5.7 8 5.7Zm0 3.2 2-2.05c-.5-.5-1.2-.8-2-.8s-1.5.3-2 .8L8 8.9Z" /></svg>
+              <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg>
+            </span>
+          </div>
+
+          <main class="screen" aria-hidden="true">
+            <div class="app">
+              <header class="topbar">
+                <span class="topbar__brand">CoinFlow</span>
+                <span class="topbar__meta">August 2026</span>
+              </header>
+              <section class="hero">
+                <div class="hero__label">Total balance</div>
+                <div class="hero__amountline"><span class="hero__amount num"><span class="hero__cur">₹</span>1,44,280</span></div>
+              </section>
+            </div>
+          </main>
+
+          <div class="scrim"></div>
+
+          <section class="sheet sheet--kp sheet--kp--typing" role="dialog" aria-label="Add transaction">
+            <div class="sheet__grab"></div>
+            <div class="sheet__head">
+              <button class="p0-cancel">Cancel</button>
+              <h1 class="sheet__title">Add transaction</h1>
+              <span style="width: 44px"></span>
+            </div>
+
+            <div class="sheet__body">
+              <div class="amount">
+                <div class="amount__value num"><span class="amount__cur">₹</span>1,200</div>
+              </div>
+
+              <label class="field-label" for="t-acc">Account</label>
+              <input class="textfield textfield--filled textfield--focus" id="t-acc" value="Swi" placeholder="Who was paid, or who paid you" />
+              <div class="autocomplete" role="listbox" aria-label="Known accounts">
+                <div class="autocomplete__item" role="option"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-clock" /></svg><span><b>Swi</b>ggy<span class="autocomplete__match"> · categorises as Food</span></span></div>
+                <div class="autocomplete__item" role="option"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-clock" /></svg><span><b>Swi</b>ggy Instamart<span class="autocomplete__match"> · categorises as Groceries</span></span></div>
+                <div class="autocomplete__item" role="option"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-at" /></svg><span><b>swi</b>ftpay@okhdfcbank<span class="autocomplete__match"> · new</span></span></div>
+              </div>
+
+              <label class="field-label" for="t-note">Note</label>
+              <input class="textfield textfield--empty" id="t-note" placeholder="What was this for? (optional)" />
+
+              <label class="field-label" for="t-desc">Description (optional)</label>
+              <textarea class="textfield textfield--empty" id="t-desc" placeholder="Add more detail — who was there, why, split…"></textarea>
+            </div>
+
+            <div class="sheet__footer">
+              <button class="btn btn--primary">Add transaction</button>
+            </div>
+
+            <div class="syskb" role="group" aria-label="System keyboard">
+              <div class="syskb__row">
+                <span class="syskb__key">q</span><span class="syskb__key">w</span><span class="syskb__key">e</span><span class="syskb__key">r</span><span class="syskb__key">t</span><span class="syskb__key">y</span><span class="syskb__key">u</span><span class="syskb__key">i</span><span class="syskb__key">o</span><span class="syskb__key">p</span>
+              </div>
+              <div class="syskb__row">
+                <span class="syskb__key">a</span><span class="syskb__key">s</span><span class="syskb__key">d</span><span class="syskb__key">f</span><span class="syskb__key">g</span><span class="syskb__key">h</span><span class="syskb__key">j</span><span class="syskb__key">k</span><span class="syskb__key">l</span>
+              </div>
+              <div class="syskb__row">
+                <span class="syskb__key syskb__key--fn syskb__key--wide">&#8679;</span>
+                <span class="syskb__key">z</span><span class="syskb__key">x</span><span class="syskb__key">c</span><span class="syskb__key">v</span><span class="syskb__key">b</span><span class="syskb__key">n</span><span class="syskb__key">m</span>
+                <span class="syskb__key syskb__key--fn syskb__key--wide" aria-label="Backspace"><svg class="ic" aria-hidden="true"><use href="#i-bksp" /></svg></span>
+              </div>
+              <div class="syskb__row">
+                <span class="syskb__key syskb__key--fn syskb__key--wide">123</span>
+                <span class="syskb__key syskb__key--space">space</span>
+                <span class="syskb__key syskb__key--fn syskb__key--wide">return</span>
+              </div>
+            </div>
+          </section>
+
+          <div class="homebar"></div>
+        </div>
+        <figcaption>Add transaction — Account / Note / Description use the system keyboard (&sect;6.5)</figcaption>
+      </figure>
+
+      <!-- ============ FILTER (sheet) ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar">
+            <span class="statusbar__time">9:41</span>
+            <span class="statusbar__right">
+              <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Zm0 3.3c1.3 0 2.5.5 3.4 1.35l1.3-1.35C11.6 4.5 9.9 3.8 8 3.8s-3.6.7-4.7 2L4.6 7.05C5.5 6.2 6.7 5.7 8 5.7Zm0 3.2 2-2.05c-.5-.5-1.2-.8-2-.8s-1.5.3-2 .8L8 8.9Z" /></svg>
+              <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg>
+            </span>
+          </div>
+
+          <main class="screen" aria-hidden="true">
+            <div class="app">
+              <header class="topbar"><span class="topbar__title">Transactions</span></header>
+              <div class="searchrow">
+                <div class="searchbar"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-search" /></svg><span>Search notes &amp; accounts</span></div>
+                <button class="filterbtn" aria-label="Filter"><svg class="ic" aria-hidden="true"><use href="#i-funnel" /></svg><span class="dot-badge num">2</span></button>
+              </div>
+              <div class="filterchips">
+                <span class="chip--removable">Food <svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></span>
+                <span class="chip--removable">Transport <svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></span>
+                <span class="chip--removable">This month <svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></span>
+              </div>
+              <section class="daygroup">
+                <div class="daygroup__head"><span class="daygroup__date">Today</span><span class="daygroup__sub num">− ₹247</span></div>
+                <div class="txncard">
+                  <span class="txn__icon"><svg class="ic" aria-hidden="true"><use href="#cat-transport" /></svg></span>
+                  <div class="txn__body"><div class="txn__name">Cab to office</div><div class="txn__meta"><span>Transport</span></div></div>
+                  <span class="txn__amt num neg">− ₹247</span>
+                </div>
+              </section>
+            </div>
+          </main>
+
+          <div class="scrim"></div>
+
+          <section class="sheet" role="dialog" aria-label="Filter">
+            <div class="sheet__grab"></div>
+            <div class="sheet__head">
+              <h1 class="sheet__title">Filter</h1>
+              <button class="iconbtn" aria-label="Close"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-x" /></svg></button>
+            </div>
+
+            <div class="sheet__body">
+              <div class="filterblock">
+                <div class="filterblock__title">Category</div>
+                <div class="chipset">
+                  <button class="chipset__chip chipset__chip--on"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-check" /></svg>Food</button>
+                  <button class="chipset__chip chipset__chip--on"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-check" /></svg>Transport</button>
+                  <button class="chipset__chip">Groceries</button>
+                  <button class="chipset__chip">Shopping</button>
+                  <button class="chipset__chip">Bills</button>
+                  <button class="chipset__chip">Entertainment</button>
+                  <button class="chipset__chip">Health</button>
+                  <button class="chipset__chip">Education</button>
+                  <button class="chipset__chip">Other</button>
+                </div>
+              </div>
+
+              <div class="filterblock">
+                <div class="filterblock__title">Type</div>
+                <div class="segment">
+                  <button class="segment__opt">All</button>
+                  <button class="segment__opt segment__opt--on">Expense</button>
+                  <button class="segment__opt">Income</button>
+                </div>
+              </div>
+
+              <div class="filterblock">
+                <div class="filterblock__title">Payment method</div>
+                <div class="chipset">
+                  <button class="chipset__chip">UPI</button>
+                  <button class="chipset__chip">Card</button>
+                  <button class="chipset__chip">Cash</button>
+                  <button class="chipset__chip">Bank transfer</button>
+                  <button class="chipset__chip">Wallet</button>
+                </div>
+              </div>
+
+              <div class="filterblock">
+                <div class="filterblock__title">Date range</div>
+                <div class="chipset">
+                  <button class="chipset__chip chipset__chip--on"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-check" /></svg>This month</button>
+                  <button class="chipset__chip">Last 30 days</button>
+                  <button class="chipset__chip">Last 3 months</button>
+                  <button class="chipset__chip">Custom…</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="sheet__footer">
+              <button class="btn btn--ghost btn--grow0" style="flex: 0 0 96px">Reset</button>
+              <button class="btn btn--primary">Show 34 results</button>
+            </div>
+          </section>
+
+          <div class="homebar"></div>
+        </div>
+        <figcaption>Filter (sheet &middot; &sect;6.9)</figcaption>
+      </figure>
+
+      <!-- ============ ANALYTICS ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar">
+            <span class="statusbar__time">9:41</span>
+            <span class="statusbar__right">
+              <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Zm0 3.3c1.3 0 2.5.5 3.4 1.35l1.3-1.35C11.6 4.5 9.9 3.8 8 3.8s-3.6.7-4.7 2L4.6 7.05C5.5 6.2 6.7 5.7 8 5.7Zm0 3.2 2-2.05c-.5-.5-1.2-.8-2-.8s-1.5.3-2 .8L8 8.9Z" /></svg>
+              <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg>
+            </span>
+          </div>
+
+          <main class="screen">
+            <div class="app an-app">
+              <header class="topbar">
+                <span class="topbar__title">Analytics</span>
+              </header>
+
+              <div class="periodbar">
+                <div class="segment" role="tablist" aria-label="Period">
+                  <button class="segment__opt segment__opt--on" role="tab" aria-selected="true">Month</button>
+                  <button class="segment__opt" role="tab" aria-selected="false">Week</button>
+                </div>
+                <div class="stepper">
+                  <button aria-label="Previous month"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+                  <span>August 2026</span>
+                  <button aria-label="Next month" disabled style="opacity: 0.35"><svg class="ic ic--sm" aria-hidden="true"><use href="#i-chev" /></svg></button>
+                </div>
+              </div>
+
+              <section class="an-card summary" aria-label="This month">
+                <div class="an-card__title">This month</div>
+                <div class="summary__gauge">
+                  <svg viewBox="0 0 200 116" aria-hidden="true">
+                    <path class="ring-track" d="M18 100 A82 82 0 0 1 182 100" pathLength="100" />
+                    <path class="ring-fill" d="M18 100 A82 82 0 0 1 182 100" pathLength="100" stroke-dasharray="20 100" />
+                  </svg>
+                  <div class="summary__center">
+                    <div class="summary__net num">₹22,520</div>
+                    <div class="summary__saved">20% of income left</div>
+                  </div>
+                </div>
+                <div class="summary__split">
+                  <div>Income<b class="num">+ ₹1,15,000</b></div>
+                  <div>Spent<b class="num">− ₹92,480</b></div>
+                </div>
+              </section>
+
+              <div class="statgrid">
+                <div class="statcard">
+                  <div class="statcard__k">Mean</div>
+                  <div class="statcard__v num">₹1,240</div>
+                  <div class="statcard__prev">Last month ₹1,410</div>
+                </div>
+                <div class="statcard">
+                  <div class="statcard__k">Median</div>
+                  <div class="statcard__v num">₹980</div>
+                  <div class="statcard__prev">Last month ₹1,050</div>
+                </div>
+              </div>
+
+              <section class="an-card" aria-label="Where it went">
+                <div class="an-card__title">Where it went</div>
+
+                <div class="cat__row" style="--c: var(--cat-bills)">
+                  <span class="cat__dot"></span>
+                  <span class="cat__name">Bills</span>
+                  <span class="cat__fig"><span class="cat__pct">37%</span> · <span class="cat__amt">₹34,200</span></span>
+                  <span class="cat__bar"><span class="cat__barfill" style="width: 37%"></span></span>
+                </div>
+                <div class="cat__row" style="--c: var(--cat-food)">
+                  <span class="cat__dot"></span>
+                  <span class="cat__name">Food</span>
+                  <span class="cat__fig"><span class="cat__pct">20%</span> · <span class="cat__amt">₹18,500</span></span>
+                  <span class="cat__bar"><span class="cat__barfill" style="width: 20%"></span></span>
+                </div>
+                <div class="cat__row" style="--c: var(--cat-groceries)">
+                  <span class="cat__dot"></span>
+                  <span class="cat__name">Groceries</span>
+                  <span class="cat__fig"><span class="cat__pct">14%</span> · <span class="cat__amt">₹12,800</span></span>
+                  <span class="cat__bar"><span class="cat__barfill" style="width: 14%"></span></span>
+                </div>
+                <div class="cat__row" style="--c: var(--cat-transport)">
+                  <span class="cat__dot"></span>
+                  <span class="cat__name">Transport</span>
+                  <span class="cat__fig"><span class="cat__pct">10%</span> · <span class="cat__amt">₹9,400</span></span>
+                  <span class="cat__bar"><span class="cat__barfill" style="width: 10%"></span></span>
+                </div>
+                <div class="cat__row" style="--c: var(--cat-shopping)">
+                  <span class="cat__dot"></span>
+                  <span class="cat__name">Shopping</span>
+                  <span class="cat__fig"><span class="cat__pct">10%</span> · <span class="cat__amt">₹8,900</span></span>
+                  <span class="cat__bar"><span class="cat__barfill" style="width: 10%"></span></span>
+                </div>
+                <div class="cat__row" style="--c: var(--cat-entertainment)">
+                  <span class="cat__dot"></span>
+                  <span class="cat__name">Entertainment</span>
+                  <span class="cat__fig"><span class="cat__pct">5%</span> · <span class="cat__amt">₹4,200</span></span>
+                  <span class="cat__bar"><span class="cat__barfill" style="width: 5%"></span></span>
+                </div>
+                <div class="cat__row" style="--c: var(--cat-health)">
+                  <span class="cat__dot"></span>
+                  <span class="cat__name">Health</span>
+                  <span class="cat__fig"><span class="cat__pct">2%</span> · <span class="cat__amt">₹2,100</span></span>
+                  <span class="cat__bar"><span class="cat__barfill" style="width: 2%"></span></span>
+                </div>
+                <div class="cat__row cat__row--uncat">
+                  <span class="cat__dot"></span>
+                  <span class="cat__name">Uncategorized</span>
+                  <span class="cat__fig"><button class="cat__fix">Fix 8</button></span>
+                  <span class="cat__bar"><span class="cat__barfill" style="width: 3%; background: var(--text-3)"></span></span>
+                </div>
+
+                <svg class="donut" viewBox="0 0 128 128" aria-hidden="true">
+                  <circle cx="64" cy="64" r="52" fill="none" stroke-width="20" stroke="var(--cat-bills)" stroke-dasharray="120.9 326.7" stroke-dashoffset="0" transform="rotate(-90 64 64)" />
+                  <circle cx="64" cy="64" r="52" fill="none" stroke-width="20" stroke="var(--cat-food)" stroke-dasharray="65.3 326.7" stroke-dashoffset="-120.9" transform="rotate(-90 64 64)" />
+                  <circle cx="64" cy="64" r="52" fill="none" stroke-width="20" stroke="var(--cat-groceries)" stroke-dasharray="45.1 326.7" stroke-dashoffset="-186.2" transform="rotate(-90 64 64)" />
+                  <circle cx="64" cy="64" r="52" fill="none" stroke-width="20" stroke="var(--cat-transport)" stroke-dasharray="33.3 326.7" stroke-dashoffset="-231.3" transform="rotate(-90 64 64)" />
+                  <circle cx="64" cy="64" r="52" fill="none" stroke-width="20" stroke="var(--cat-shopping)" stroke-dasharray="31.4 326.7" stroke-dashoffset="-264.6" transform="rotate(-90 64 64)" />
+                  <circle cx="64" cy="64" r="52" fill="none" stroke-width="20" stroke="var(--cat-entertainment)" stroke-dasharray="14.7 326.7" stroke-dashoffset="-296.0" transform="rotate(-90 64 64)" />
+                  <circle cx="64" cy="64" r="52" fill="none" stroke-width="20" stroke="var(--cat-health)" stroke-dasharray="7.5 326.7" stroke-dashoffset="-310.7" transform="rotate(-90 64 64)" />
+                  <circle cx="64" cy="64" r="52" fill="none" stroke-width="20" stroke="var(--text-3)" stroke-dasharray="8.5 326.7" stroke-dashoffset="-318.2" transform="rotate(-90 64 64)" />
+                </svg>
+                <div class="donut__center">
+                  <span>Spent</span>
+                  <b class="num">₹92,480</b>
+                </div>
+              </section>
+
+              <section class="an-card" aria-label="Day by day">
+                <div class="an-card__title an-card__title--row">
+                  <span>Day by day</span>
+                  <span class="trend__toggle">
+                    <button aria-pressed="true">Month</button>
+                    <button aria-pressed="false">Week</button>
+                  </span>
+                </div>
+                <svg class="trend__chart" viewBox="0 0 320 120" preserveAspectRatio="none">
+                  <line class="trend__grid" x1="0" y1="108" x2="320" y2="108" />
+                  <path class="trend__area" d="M10,92.6 L30,12 L50,85 L80,62 L110,90.7 L140,48.5 L170,81 L200,58 L230,87 L260,27.4 L290,73.4 L310,83 L310,108 L10,108 Z" />
+                  <path class="trend__line" d="M10,92.6 L30,12 L50,85 L80,62 L110,90.7 L140,48.5 L170,81 L200,58 L230,87 L260,27.4 L290,73.4 L310,83" />
+                  <line class="trend__mean" x1="0" y1="84.2" x2="320" y2="84.2" />
+                  <text class="trend__meanlabel" x="4" y="80">mean ₹1,240</text>
+                  <circle class="trend__peak" cx="30" cy="12" r="2.6" />
+                  <text x="37" y="15" font-size="8" fill="#85858c">rent · ₹18,500</text>
+                </svg>
+                <div class="trend__axis">
+                  <span>Aug 1</span><span>8</span><span>15</span><span>22</span><span>31</span>
+                </div>
+              </section>
+
+              <section class="an-card" aria-label="Biggest expenses">
+                <div class="an-card__title">Biggest expenses</div>
+                <div class="an-row">
+                  <span class="an-row__rank num">1</span>
+                  <div class="an-row__body"><div class="an-row__name">August rent</div><div class="an-row__sub">Bills · 28 Aug</div></div>
+                  <span class="an-row__amt neg">− ₹18,500</span>
+                </div>
+                <div class="an-row">
+                  <span class="an-row__rank num">2</span>
+                  <div class="an-row__body"><div class="an-row__name">Flight to Delhi</div><div class="an-row__sub">Transport · 12 Aug</div></div>
+                  <span class="an-row__amt neg">− ₹6,240</span>
+                </div>
+                <div class="an-row">
+                  <span class="an-row__rank num">3</span>
+                  <div class="an-row__body"><div class="an-row__name">Monthly big order</div><div class="an-row__sub">Shopping · Amazon · 9 Aug</div></div>
+                  <span class="an-row__amt neg">− ₹4,199</span>
+                </div>
+                <div class="an-row">
+                  <span class="an-row__rank num">4</span>
+                  <div class="an-row__body"><div class="an-row__name">Health checkup</div><div class="an-row__sub">Health · 6 Aug</div></div>
+                  <span class="an-row__amt neg">− ₹2,100</span>
+                </div>
+                <div class="an-row">
+                  <span class="an-row__rank num">5</span>
+                  <div class="an-row__body"><div class="an-row__name">Petrol</div><div class="an-row__sub">Transport · 27 Aug</div></div>
+                  <span class="an-row__amt neg">− ₹2,000</span>
+                </div>
+              </section>
+            </div>
+          </main>
+
+          <nav class="navbar" aria-label="Primary">
+            <button class="navbar__tab" aria-label="Home"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></button>
+            <button class="navbar__tab" aria-label="Transactions"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg></button>
+            <button class="navbar__add" aria-label="Add transaction"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg></button>
+            <button class="navbar__tab navbar__tab--active" aria-label="Analytics" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></button>
+            <button class="navbar__tab" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg></button>
+          </nav>
+          <div class="homebar"></div>
+        </div>
+        <figcaption>Analytics (&sect;6.10)</figcaption>
+      </figure>
+
+      <!-- ============ DETECTION NOTIFICATION (lock screen) ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar">
+            <span class="statusbar__time">9:41</span>
+            <span class="statusbar__right">
+              <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Zm0 3.3c1.3 0 2.5.5 3.4 1.35l1.3-1.35C11.6 4.5 9.9 3.8 8 3.8s-3.6.7-4.7 2L4.6 7.05C5.5 6.2 6.7 5.7 8 5.7Zm0 3.2 2-2.05c-.5-.5-1.2-.8-2-.8s-1.5.3-2 .8L8 8.9Z" /></svg>
+              <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg>
+            </span>
+          </div>
+
+          <div class="lock">
+            <div class="lock__time num">9:41</div>
+            <div class="lock__date">Thursday, 21 August</div>
+
+            <div class="lock__stack">
+              <!-- KNOWN account (a saved rule) → one-tap Save + Add + Discard -->
+              <div class="notif" role="group" aria-label="CoinFlow: ₹450 debited, Swiggy">
+                <div class="notif__head">
+                  <span class="notif__app" aria-hidden="true">₹</span>
+                  <span class="notif__app-name">CoinFlow</span>
+                  <span>· now</span>
+                </div>
+                <div class="notif__title num">₹450 debited</div>
+                <div class="notif__body">Swiggy · UPI</div>
+                <div class="notif__actions">
+                  <button class="notif__action notif__action--primary">Save</button>
+                  <button class="notif__action">Add</button>
+                  <button class="notif__action notif__action--muted">Discard</button>
+                </div>
+              </div>
+
+              <!-- NEW account (no rule yet) → Add + Discard only -->
+              <div class="notif" role="group" aria-label="CoinFlow: ₹1,299 debited, new account">
+                <div class="notif__head">
+                  <span class="notif__app" aria-hidden="true">₹</span>
+                  <span class="notif__app-name">CoinFlow</span>
+                  <span>· 6m</span>
+                </div>
+                <div class="notif__title num">₹1,299 debited</div>
+                <div class="notif__body">amzn@apl · Card</div>
+                <div class="notif__actions">
+                  <button class="notif__action">Add</button>
+                  <button class="notif__action notif__action--muted">Discard</button>
+                </div>
+              </div>
+
+              <div class="notif notif--collapsed">
+                <div class="notif__head">
+                  <span class="notif__app" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#i-sms" /></svg></span>
+                  <span class="notif__app-name">Messages</span>
+                  <span>· 8m</span>
+                </div>
+                <div class="notif__title">HDFC Bank: Rs.450.00 debited via UPI…</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="homebar"></div>
+        </div>
+        <figcaption>Detection notification — known + new account (&sect;6.15)</figcaption>
+      </figure>
+    </div>
+  </body>
+</html>
