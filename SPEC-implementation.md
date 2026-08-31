@@ -16,6 +16,25 @@
 
 ---
 
+## Contents
+
+**Product / behavior (§1–§15 — groundwork, frozen enough to build on):**
+§1 Decisions log · §2 Product definition · §3 Feature specification · §4 User journeys ·
+§5 Product & behavior rules · §6 Data model (sketch) · §7 SMS detection & parsing ·
+§8 Account memory & categorization · §9 Analytics computation · §10 Notifications behavior ·
+§11 Permissions & platform · §12 Persistence & data management · §13 Behavioral acceptance
+criteria (IMP-0xx) · §14 Future scope · §15 Open questions
+
+**Technical (§16+ — written across `SPEC/IMPLEMENTATION-PLAN.md` Phases 1–5):**
+§16 Technology stack · §17 System architecture · §18 Project structure *(Phase 1 — done)* ·
+§19 Data models (final) · §20 Persistence & migrations · §21 Data-access layer · §22 Application
+state *(Phase 2)* · §23 SMS parsing · §24 Account normalization · §25 Categorization ·
+§26 Analytics computation · §27 Formatting / time / undo / running balance *(Phase 3)* ·
+§28 Navigation · §29 Component architecture · §30 Screen specs *(Phase 4)* · §31 Notifications ·
+§32 Error handling · §33 Security & privacy · §34 Testing strategy · §35 Build & release *(Phase 5)*
+
+---
+
 ## 1. Decisions log
 
 | # | Decision | Rationale |
@@ -41,6 +60,10 @@
 | D19 | **Persistence: `expo-sqlite` + Drizzle ORM** (typed schema, generated migrations, live queries; raw SQL for analytics). On-device only (D10). | User decision. Rejected: hand-written SQL, WatermelonDB. |
 | D20 | **Distribution: direct install** — EAS-built APK, side-loaded or via EAS internal distribution. **Not** the Play Store, so `READ_SMS` / `RECEIVE_SMS` is not a policy problem. Play Store + an SMS-less fallback build = Future. | User decision. Matches `SPEC/idea.md`'s "creator's own everyday use case". |
 | D21 | **Security: baseline + crash reporting only.** Baseline (always on): app-private storage, `android:allowBackup=false`, no network. **Added:** crash reporting — stack traces only, no breadcrumbs from financial screens, no transaction / SMS content, no PII, with a Settings opt-out. **Not in V1** (Future): biometric / PIN app lock, SQLCipher DB encryption. | User decision. P-9 amended for the carve-out. |
+| D22 | **Source layout: feature-first.** `src/features/*` own their screens + hooks + local components, over shared `src/ui` (design-system primitives), `src/domain` (pure TS business logic — parser, analytics, formatters), `src/db` (Drizzle), `src/services` (notifications, SMS bridge, headless tasks), `src/stores` (Zustand). `ui` / `domain` / `db` never import from `features`. | Phase 1. Keeps the SMS pipeline cohesive; keeps business logic RN-free and unit-testable. See §18. |
+| D23 | **SMS-while-killed pipeline: native manifest receiver → headless JS.** A Kotlin `BroadcastReceiver` registered in `AndroidManifest.xml` (via the config plugin) fires on `SMS_RECEIVED` even when the app is terminated and starts a **headless JS task**; **all** parsing, the DB write and the notification post run in JS/TS. `expo-background-task` is **rejected** for this path — its WorkManager scheduling has a 15-minute floor and does not run when the app is killed. | Phase 1. Confirms D18. Contingency (native posts a provisional notification) documented in §17, not built. |
+| D24 | **Notification `Save` while killed: all-JS headless task.** The `expo-notifications` background response handler (a TaskManager task) spins up headless JS, reads the `AccountRule` via Drizzle, and writes the `Transaction` — no rule-matching or SQLite logic duplicated in Kotlin. The native module's surface stays "SMS receiver bridge only". | Phase 1. Preserves D18's "one testable codebase". If the rule was deleted between post and tap, the action deep-links into the Confirmation sheet instead of writing blind. |
+| D25 | **Sheets are a root-mounted `@gorhom/bottom-sheet` registry, not `expo-router` modal routes; the tab bar is custom, not `NativeTabs`.** Add / Edit / Confirmation / Filter / Category-picker / Create-Edit-Category are opened imperatively from a `SheetRegistry` mounted once in the root layout. | Phase 1. §6.4's docked keypad + collapse-on-scroll + dirty-discard + OS-keyboard swap need one controlled sheet host; the raised centre **Add** "FAB notch" (§8) isn't expressible with `unstable-native-tabs`, and iOS is Future. |
 
 Technical decisions (stack, architecture layers, project structure) and the phased plan for
 completing this document live in `SPEC/IMPLEMENTATION-PLAN.md`.
@@ -564,3 +587,433 @@ Notation: **⇢** step · **✔** success end · **✗** alternate / failure bra
 8. **Technical spec (`SPEC/PLAN.md` §8).** In progress — the phased plan, the chosen stack, and
    the architecture decisions (D18–D21) are in `SPEC/IMPLEMENTATION-PLAN.md`; the sections
    themselves (§16 Technology Stack onward) are written across Phases 1–5.
+
+---
+
+# Part II — Technical specification
+
+> Written phase by phase per `SPEC/IMPLEMENTATION-PLAN.md`. **Phase 1 (§16–§18) is complete.**
+> §19+ are placeholders until their phase runs. Nothing here may contradict §1–§15,
+> `SPEC-UI-UX.md`, or `SPEC/idea.md` — a conflict is a change-request (`SPEC/PLAN.md` §10).
+
+## 16. Technology stack
+
+Runtime is fixed by the repo and **not reopened here**: `expo ~57.0.18` · `react-native 0.86.3` ·
+`react` / `react-dom 19.2.3` · `expo-router ~57.0.17` · `typescript ~6.0.3` · TS `strict` ·
+`experiments.reactCompiler` + `typedRoutes` on. Every added library below was checked against the
+**Expo SDK 57** bundled-module set and the v57 docs (per `AGENTS.md`); versions are re-verified
+with `npx expo install` at the start of feature work.
+
+### 16.1 Already in the repo (kept, no CoinFlow-specific change in Phase 1)
+
+| Package | Version | Used for |
+|---|---|---|
+| `expo` | `~57.0.18` | framework |
+| `react-native` | `0.86.3` | runtime (new architecture only) |
+| `react`, `react-dom` | `19.2.3` | — |
+| `expo-router` | `~57.0.17` | routing (app entry `expo-router/entry`) |
+| `react-native-reanimated` | `4.5.1` | motion (§3.5) — sheet, snackbar, list rows |
+| `react-native-worklets` | `0.10.1` | reanimated 4 peer; `scheduleOnRN` |
+| `react-native-gesture-handler` | `~2.32.0` | sheet drag, swipe-to-delete; `@gorhom` peer |
+| `react-native-safe-area-context` | `~5.7.0` | insets (§3.3) |
+| `react-native-screens` | `~4.26.0` | native stack |
+| `expo-font` | `~57.0.2` | bundled Manrope + Geist (§3.2) |
+| `expo-splash-screen` | `~57.0.8` | `AnimatedSplashOverlay` (unchanged) |
+| `expo-constants`, `expo-linking`, `expo-status-bar`, `expo-system-ui` | `~57.x` | chrome, deep-link URL parsing |
+| `react-native-web` | `~0.21.0` | web static export only — **carries no CoinFlow feature** (D3) |
+
+`@expo/ui`, `expo-glass-effect`, `expo-symbols`, `expo-image`, `expo-web-browser`,
+`expo-device` are present from the template; keep only what a screen actually uses (audited in
+Phase 4). `expo-symbols` (SF Symbols) is iOS-only and superseded by Lucide (§3.4) — a candidate
+for removal.
+
+### 16.2 Added — data & state
+
+| Package | Version | Rationale | Rejected |
+|---|---|---|---|
+| `expo-sqlite` | `~57.0.2` | on-device store (D19); exposes a **sync** API usable from the headless task and an async/reactive API for the UI | AsyncStorage (not relational), `react-native-mmkv` (adds a second store for no gain — a SQLite KV table covers prefs) |
+| `drizzle-orm` | `0.45.2` | typed schema, generated migrations, `useLiveQuery` reactive reads over `expo-sqlite`; raw SQL still available for analytics (D19) | hand-written SQL (boilerplate, manual migrations); WatermelonDB (heavy sync engine, unused); Prisma (no RN target) |
+| `drizzle-kit` | `0.31.10` | **devDependency** — migration generation from the schema | — |
+| `zustand` | `5.0.15` | ephemeral UI state only — sheet drafts, keypad buffer, filter draft, onboarding step, the sheet registry | Redux / Redux Toolkit (ceremony), Jotai (atom sprawl for this size), React context (re-render cost on the keypad) |
+
+**Persisted preferences** (`onboardingDone`, `bannerDismissed`, category-order override,
+`crashReportingEnabled`) live in a SQLite `app_setting` key/value table, not a separate storage
+engine — the headless task can read them synchronously through `expo-sqlite`. Finalised in §22.
+
+### 16.3 Added — UI infrastructure
+
+| Package | Version | Rationale | Rejected |
+|---|---|---|---|
+| `@gorhom/bottom-sheet` | `5.2.14` | every sheet (§6.4–§6.12); only this can do the docked keypad + collapse-on-scroll + swipe-to-dismiss-with-discard-confirm + the keypad↔OS-keyboard swap (§3.5) | native modal / `expo-router` modal routes (can't coordinate the keypad/keyboard transition); `react-native-modalize` (less maintained on new arch) |
+| `@shopify/flash-list` | `2.0.2` | the Transactions ledger — 2,000+ rows (§6.7); v2 is new-arch native | `FlatList` (jank at scale), `@legendapp/list` (newer, less proven) |
+| `react-native-svg` | `15.15.4` | the bespoke greyscale arc gauge, donut, day-by-day line + dashed mean line, outlier clipping (§6.10) — Expo-pinned version | — |
+| `d3-shape` | `3.2.0` | arc / line / area path generators for the charts | — |
+| `d3-scale` | `4.0.2` | linear / band / time scales for the charts | full `d3` (drags in DOM modules); Victory / `react-native-skia` (too heavy for four static charts) |
+| `@types/d3-shape`, `@types/d3-scale` | `3.2.0`, `4.0.9` | **devDependencies** | — |
+
+Lucide (`lucide-react-native`, §3.4) is added in **Phase 4** with the `theme.ts` rewrite (it is a
+design-system concern, not foundations); noted here so §16 stays the single dependency list.
+
+### 16.4 Added — platform & detection
+
+| Package | Version | Rationale |
+|---|---|---|
+| `coinflow-sms` (local Expo module) | in-repo, `modules/coinflow-sms/` | the Kotlin `BroadcastReceiver` + config plugin (D18 / D23); Android-only, no npm publish. Surface detailed in §17.6 |
+| `expo-notifications` | `~57.0.15` | posting the transaction notification, notification **categories** (the Save / Add / Discard action buttons), and the **background response handler** (`TaskManager`) that writes from the rule while the app is killed (D24) |
+| `expo-task-manager` | `~57.0.14` | `defineTask` for `SMS_INGEST_TASK` and `NOTIFICATION_RESPONSE_TASK`; the headless-JS host |
+| `expo-dev-client` | `~57.0.16` | **devDependency** — `READ_SMS` / `RECEIVE_SMS` + a custom native module ⇒ **Expo Go cannot run this app**; `npm run android` needs a `development` build or `expo run:android` |
+| `expo-build-properties` | `~57.0.15` | config-plugin knobs — `android:allowBackup=false` (D21), min/target SDK, R8/ProGuard for release (finalised in §33 / §35) |
+
+**Not used:** `expo-background-task` / `expo-background-fetch` — WorkManager scheduling has a
+**15-minute minimum interval** and **does not execute when the app is killed** (v57 docs), so it
+cannot back the SMS core loop. The manifest-registered native receiver (§17.1) is the wake
+trigger instead.
+
+### 16.5 Added — utilities & observability
+
+| Package | Version | Rationale | Rejected |
+|---|---|---|---|
+| `date-fns` | `4.4.0` | period math, ISO-week boundaries (D14), relative-vs-absolute dates (V-2), local calendar-day helpers — tree-shakeable | Luxon (heavier), `Temporal` polyfill (premature), moment (legacy) |
+| `expo-crypto` | `~57.0.2` | `randomUUID()` for entity ids; the SMS dedupe-key hash (§17.4) | `uuid` + `react-native-get-random-values` (extra shim) |
+| `@sentry/react-native` | `8.24.0` + its Expo config plugin | crash reporting scrubbed per D21 — stack traces only. **Final SDK + the on-with-opt-out vs opt-in default are confirmed in Phase 5 (§33)**; listed here for completeness | GlitchTip / Bugsnag (revisited in Phase 5); no crash reporting (D21 chose to add it) |
+
+### 16.6 Added — testing & tooling (devDependencies)
+
+| Package | Version | Rationale |
+|---|---|---|
+| `jest-expo` | `57.0.5` | Jest preset for SDK 57 — the parser corpus, normalization table, analytics math, formatter, period math, undo (`SPEC/PLAN.md` §8) |
+| `@testing-library/react-native` | `14.0.1` | the V-3 state tests per screen (Phase 5 / §34) |
+| Maestro | external CLI (not npm) | one E2E flow — J2 core loop (§34); lighter than Detox |
+| `eslint-config-expo` (via `expo lint`) + `prettier` | — | keep the repo's organize-imports-on-save (`.vscode/settings.json`) |
+
+### 16.7 Dependency risks to re-verify at install time
+
+- `@gorhom/bottom-sheet@5` against `react-native-reanimated@4.5.1` + `react-native-worklets` on
+  the new architecture — v5 targets Reanimated 3; confirm no worklet-API breakage, else pin the
+  last known-good v5 patch.
+- `@shopify/flash-list@2.0.2` against React 19.2 — v2 is new-arch native; smoke-test recycling on
+  a 2,000-row fixture.
+- `drizzle-orm` live queries over `expo-sqlite` change notifications on SDK 57 (the
+  `useLiveQuery` hook depends on `expo-sqlite`'s `addDatabaseChangeListener`).
+- FTS5 availability in the `expo-sqlite` build (search, §6.7) — fallback is a normalized column +
+  `LIKE`; **decided in Phase 2 (§20)**.
+
+---
+
+## 17. System architecture
+
+### 17.0 Layer overview
+
+```
+                         ┌─────────────────────────────────────────────┐
+   Android OS  ──SMS──▶   │  coinflow-sms  (Kotlin, manifest receiver)  │   runs even when
+                         │  onReceive: sender + body + ts → headless    │   the app is KILLED
+                         └───────────────────────┬─────────────────────┘
+                                                 │ starts
+                                                 ▼
+   ┌──────────────────────────────────────────────────────────────────────────────┐
+   │  Headless-JS task layer  (expo-task-manager, defined at module scope)         │
+   │    SMS_INGEST_TASK            parse → gate → dedupe → Suggestion → notify     │
+   │    NOTIFICATION_RESPONSE_TASK Save / Add / Discard while app killed (D24)     │
+   └───────────────┬───────────────────────────────────────────┬──────────────────┘
+                   │ uses                                      │ uses
+                   ▼                                           ▼
+   ┌───────────────────────────────┐          ┌──────────────────────────────────┐
+   │  Domain layer  (pure TS,      │          │  Services                        │
+   │  no react-native imports)     │          │   notifications.ts  (channels,   │
+   │   parser/                     │◀────────▶│    categories, post, route)      │
+   │   normalize · categorize      │          │   sms.ts  (native-module wrapper)│
+   │   analytics/ · format/        │          │   sentry.ts                      │
+   │   period · running-balance    │          └──────────────────────────────────┘
+   │   dedupe                      │
+   └───────────────┬───────────────┘
+                   │ used by both the tasks and the UI
+                   ▼
+   ┌──────────────────────────────────────────────────────────────────────────────┐
+   │  Data layer   Drizzle schema · one shared expo-sqlite handle ·               │
+   │               repository modules per entity · bundled migrations             │
+   └───────────────┬───────────────────────────────────────────┬──────────────────┘
+        sync API   │ (headless tasks)         async + live query│ (UI)
+                   ▼                                           ▼
+   ┌──────────────────────────────┐          ┌──────────────────────────────────┐
+   │        SQLite (on device)    │          │  UI layer  expo-router routes    │
+   └──────────────────────────────┘          │   → repository live queries      │
+                                             │   → Zustand (sheet/keypad/filter │
+                                             │      drafts) → SheetRegistry     │
+                                             └──────────────────────────────────┘
+```
+
+**Rules.** (1) The domain layer imports nothing from `react-native`, `expo-*`, or `features/` —
+it is the unit-test surface. (2) Every write path reachable from a headless task
+(`insertTransaction`, `upsertAccountRule`, `insertSuggestion`, `setSuggestionStatus`) is a plain
+function in the data layer, called identically from the UI — no logic forks between "acted on
+while killed" and "acted on in-app". (3) The native module does **no** parsing, DB access, or
+notification work in the default design (§17.5 is the contingency).
+
+### 17.1 The native wake trigger
+
+`coinflow-sms` registers a `<receiver>` in `AndroidManifest.xml` (injected by its config plugin)
+for `android.provider.Telephony.SMS_RECEIVED`, `android:exported="true"`,
+`android:permission="android.permission.BROADCAST_SMS"`. Android delivers this broadcast to a
+manifest-declared receiver **even when the app process is not running**, which is why the core
+loop does not depend on `expo-background-task` (§16.4).
+
+`SmsReceiver.onReceive` has a short window (~10 s) and does only: pull the PDUs, coalesce a
+multipart message into one body, read `sender` / `body` / `timestampMs`, then start a bounded
+**headless JS task** (`HeadlessJsTaskService` / the `expo-task-manager` task host) with that
+payload as data. It never touches SQLite or `expo-notifications`. The body string is handed to JS
+in memory and is **never written to disk by the native side** (P-9).
+
+### 17.2 The headless-JS task layer
+
+Both tasks are registered with `TaskManager.defineTask(...)` at **module scope** in
+`src/services/tasks/index.ts`, which is imported at the very top of the app entry (before
+`expo-router` mounts) so the definitions exist whether the JS context was started by the UI or by
+a background trigger (v57 requirement).
+
+- **`SMS_INGEST_TASK`** — input `{ sender, body, receivedAt }`. Steps: §17.3.
+- **`NOTIFICATION_RESPONSE_TASK`** — registered as the `expo-notifications` background response
+  handler. Fires for the `Save` / `Add` / `Discard` action buttons and body taps that arrive
+  while the app is killed. Steps: §17.4 walkthrough (b).
+
+Time budget: aim < 5 s wall time per run (cold-start JS parse + `expo-sqlite` open is the bulk).
+No network, no image work, no analytics recompute in a task. If a task throws, it is caught at
+the top level, logged **without** the SMS body / amount / account / any PII, and returns cleanly
+— **the receiver and the task must never crash the app** (§32 will formalise the matrix).
+
+### 17.3 `SMS_INGEST_TASK` steps
+
+1. **Sender gate.** Match `sender` against the curated bank / UPI sender seed
+   (`src/constants/sms-senders.ts`, finalised in §20/§23). No match → return, nothing created.
+2. **Parse.** The domain parser returns a `ParseResult` (fields + which parsed). No confidence
+   score (§7).
+3. **Transaction gate.** Apply the explicit ignore rules — OTP, promotional, balance-only,
+   collect / request-money, foreign-currency (§7). Fail → return.
+4. **Idempotency / retry guard.** Compute `dedupeKey = sha256(sender + '|' + amountMinor + '|' +
+   floor(occurredAt / 60000) + '|' + direction)`. If a `Suggestion` **or** `Transaction` already
+   carries that key, return. This guards against the OS re-delivering the broadcast or the task
+   being retried after a mid-run kill — it is **not** cross-message de-duplication: a bank SMS and
+   a UPI-app SMS for the same payment have different senders / bodies and intentionally produce
+   two Suggestions (D8).
+5. **Write the Suggestion.** Insert `Suggestion(status = pending, smsRef = { sender, receivedAt },
+   dedupeKey, parsed fields)`. Discard `body`. One DB transaction.
+6. **Rule match.** Look up `AccountRule` by `normalizedKey` of the parsed account (may be absent).
+7. **Notify.** Post via `expo-notifications`: the **known-account** category (`Save` · `Add` ·
+   `Discard`) when a rule with a category exists, else the **new-account** category (`Add` ·
+   `Discard`). If ≥ 2 Suggestions are now `pending`, post / update the **group summary**
+   (`N transactions to review` → Review Queue) instead of individual notifications (§10).
+8. **Self-heal.** Before returning, if any older `pending` Suggestion has no live notification
+   (a previous run inserted the row but was killed before step 7), re-post for it. The durable
+   Review Queue (F11) is the ultimate fallback if notifications are off or this never runs.
+
+### 17.4 Data-flow walkthroughs
+
+**(a) An SMS arrives while the app is killed.**
+OS broadcasts `SMS_RECEIVED` → `SmsReceiver.onReceive` (process spun up for the receiver) →
+starts the headless task with `{ sender, body, receivedAt }` → JS context boots (no UI) →
+`SMS_INGEST_TASK` runs §17.3 → Suggestion is durably in SQLite and a notification (or group
+summary) is posted → JS context torn down. If the user never taps the notification, the
+Suggestion is waiting in the Review Queue at next app open (P-7).
+*Partial-run recovery:* the Suggestion write (step 5) is one transaction; if the task dies before
+step 7, step 8 on the next SMS — or the Review Queue on next open — surfaces it. If it dies
+before step 5, that physical SMS is lost for detection (same category as "app not installed yet";
+acceptable — nothing was ever in the queue to lose).
+
+**(b) The user taps `Save` on the notification while the app is killed.**
+`expo-notifications` routes the action to `NOTIFICATION_RESPONSE_TASK` → headless JS boots, the
+app stays closed → load the `Suggestion` by id from the notification payload → **re-match**
+`AccountRule` by `normalizedKey` (the rule may have changed since the notification was posted) →
+in **one DB transaction**: insert `Transaction` (amount + `occurredAt` from the Suggestion; `note`
++ `categoryId` + `paymentMethod` from the rule; `source = sms`, `smsRef = { sender, receivedAt }`,
+`dedupeKey` copied), set `Suggestion.status = confirmed` + `confirmedTransactionId`, bump
+`AccountRule.hitCount` + `updatedAt` → cancel this notification; if others remain `pending`,
+refresh the group summary count.
+*Edges:* rule deleted between post and tap → do **not** write blind; deep-link into the
+Confirmation sheet (opens the app) pre-filled from the Suggestion. Suggestion already `confirmed`
+(double-tap / stale) → no-op, open that transaction's Details. Suggestion `dismissed` / deleted →
+open Home. (§10 / §31 formalise stale-tap routing.)
+
+**(c) The user opens the app with 5 pending.**
+Root layout mounts → **migrations run to completion before the first query** (§20) → Home's live
+queries resolve: running balance (Σ income − Σ expense over all `Transaction`), the month
+Income / Spending tiles + MoM deltas, `count(Suggestion where status = pending)` → action strip
+"5 to review", `count(uncategorized expense Transaction)` → "N uncategorized" →
+`getLastNotificationResponseAsync()` is checked: if the cold start came from a notification tap,
+route (single → Confirmation sheet for that Suggestion id; group → Review Queue) → the Review
+Queue screen runs a live query over `pending` Suggestions and renders each row new-vs-known via
+the same `AccountRule` lookup the task uses. Acting on a row calls the same domain + repository
+functions as the headless path.
+
+**(d) Manual add.**
+Centre **Add** → `SheetRegistry.open('add')` mounts the Add sheet (`@gorhom`); a Zustand
+`addSheetDraft` store holds the buffer, the numeric keypad writes `draft.amountMinor` → the
+account field queries `AccountRule` by prefix for the autocomplete; picking a row pre-fills
+`note` / `categoryId` / `paymentMethod` into the draft → **Add**: validate (`amountMinor > 0`,
+`direction` set), `repository.insertTransaction(...)`, and if `account` is non-empty
+`repository.upsertAccountRule(...)` → Drizzle live queries re-emit → Home / Transactions update →
+sheet closes → "Added …" toast with **View**.
+
+### 17.5 Background execution model (summary)
+
+| Concern | Decision |
+|---|---|
+| What runs headless | sender gate · parse · transaction gate · dedupe · **one** Suggestion insert · **one** AccountRule read · **one** notification post (or group update). Nothing else. |
+| Time budget | target < 5 s; no network / images / analytics. |
+| Killed mid-run | writes are single transactions; `dedupeKey` makes a full retry safe; step 8 + the Review Queue recover a partial run. |
+| Cold vs warm | cold = fresh JS bundle parse + DB open; warm (app backgrounded) = runs in the existing context. Same task code either way. |
+| Idempotency key | `sha256(sender | amountMinor | floor(occurredAt/60000) | direction)` — retry/redelivery guard, **not** D8 cross-message de-dup. |
+| Migration pending when a task fires | resolved in Phase 2 (§20): run it, or defer the write and let the next app open reconcile. |
+
+### 17.6 Native module + config plugin plan
+
+**Location & shape.** `modules/coinflow-sms/` — a standard Expo **local module**:
+`expo-module.config.json`, `android/` (Kotlin), `src/` (the TS interface), `index.ts`, and
+`plugin/` (the config plugin). Added to `app.json` → `plugins`. **Android-only (D3):** the iOS
+target is a stub whose methods throw `UnavailabilityError`; the TS API guards every call with
+`Platform.OS === 'android'`. Excluded from the web bundle automatically (native Android code + a
+platform-guarded JS API); a `.web.ts` stub throws.
+
+**Kotlin surface (kept minimal — D24).**
+- `CoinflowSmsModule` — `isSupported(): boolean`; `getPermissionsAsync()` /
+  `requestPermissionsAsync()` for `READ_SMS` + `RECEIVE_SMS` (the exact request mechanism —
+  native vs a JS `PermissionsAndroid` call — is settled in Phase 4/5; Phase 1 only reserves the
+  method names). No custom events are needed for the killed path.
+- `SmsReceiver : BroadcastReceiver` — manifest-registered (via the plugin) for
+  `SMS_RECEIVED`; `onReceive` coalesces multipart PDUs and starts
+  `CoinflowSmsHeadlessTaskService` (extends `HeadlessJsTaskService`) with an
+  `HeadlessJsTaskConfig` (timeout ~30 s, `allowedInForeground = true`) carrying
+  `{ sender, body, timestampMs }`.
+
+**Config plugin injects (Android only):** `RECEIVE_SMS` + `READ_SMS` `<uses-permission>`; the
+`<receiver>` and `<service>` entries; `android:allowBackup="false"` on `<application>` (D21 — or
+via `expo-build-properties`; finalised in §33). Nothing on iOS.
+
+**Dev-client requirement.** Because of the SMS permissions and the custom native module, **Expo
+Go will not run CoinFlow**. Local dev uses `expo run:android` or an EAS `development` build;
+`npm run android` against Expo Go is not a supported path. Recorded again in §16.4 and §35.
+
+### 17.7 Deferred to later phases
+
+Notification channel / category IDs and the exact action-button config (§31, Phase 5) ·
+migration-pending behaviour in a task (§20, Phase 2) · FTS5 vs `LIKE` for search (§20, Phase 2) ·
+the permission-request mechanism and the Reduce-Motion plumbing (§28–§30, Phase 4) · the final
+crash SDK + its default and the `beforeSend` scrub (§33, Phase 5) · the contingency hybrid
+(native posts a provisional notification, JS replaces it) — **documented, not built**; adopt only
+if a ~2-week field test on OEM battery-killer devices shows > ~5 % dropped events or > ~10 s
+median latency (D18 / D23).
+
+---
+
+## 18. Project structure
+
+### 18.1 `src/` layout (feature-first — D22)
+
+```
+src/
+  app/                       expo-router routes ONLY — thin; screens delegate to features/
+  features/
+    home/                    Home screen + hooks + local components
+    transactions/            list · details · filter · the Add / Edit / Confirmation sheet bodies
+    analytics/               screen · arc-gauge / donut / day-by-day chart components · period store
+    detection/               Review Queue · suggestion card · notification category defs · deep-link routing
+    categories/              Categories screen · Create/Edit Category sheet body · icon picker
+    settings/                Settings + the six subpages
+    onboarding/              the three onboarding steps
+    app-shell/               custom tab bar · SheetRegistry · PermissionBanner · root providers
+  ui/                        design-system primitives (§3.6): ThemedText, ThemedView, Button, Card,
+                             Sheet, KeypadSheet, NumericKeypad, AmountInput, SegmentedControl,
+                             SelectorRow, TextField, Chip, StatTile, TransactionCard, DayGroupHeader,
+                             ConfirmDialog, UndoSnackbar, EmptyState, Skeleton, ErrorState,
+                             Icon (Lucide wrapper), … — full contracts in Phase 4 (§29)
+  domain/                    PURE TS, no react-native / expo imports:
+                             parser/ · normalize.ts · categorize.ts · analytics/ · format/ (money, date)
+                             · period.ts · running-balance.ts · dedupe.ts
+  db/                        schema.ts (Drizzle) · client.ts (one shared handle) · migrations/ (generated)
+                             · seed.ts (9 categories + Uncategorized + sender seed)
+  services/                  notifications.ts · sms.ts (wrapper over modules/coinflow-sms) · sentry.ts
+                             · tasks/index.ts (SMS_INGEST_TASK, NOTIFICATION_RESPONSE_TASK — defineTask at module scope)
+  stores/                    zustand: addSheetDraft · keypad · filterDraft · onboardingStep · sheetRegistry
+  constants/                 theme.ts (rewritten in Phase 4 — §3.7) · category-icons.ts · sms-senders.ts
+  hooks/                     use-theme · use-color-scheme(+.web) · use-reduce-motion · live-query wrappers
+  lib/                       tiny cross-cutting helpers with no other home (id.ts → expo-crypto, result.ts)
+modules/
+  coinflow-sms/              the local Expo module (§17.6)
+```
+
+**Import rules.** `ui/`, `domain/`, `db/` never import from `features/`. Feature-to-feature
+imports go through a feature's `index.ts` barrel. `domain/` imports nothing from `react-native` /
+`expo-*` (enforced with an ESLint `no-restricted-imports` rule, added in Phase 4). Path aliases
+are unchanged: `@/*` → `src/*`, `@/assets/*` → `assets/*`; add `modules/*` to `tsconfig.json`
+`include` when the module ships TS types.
+
+### 18.2 Route tree (`src/app/`, `expo-router`, typed routes on)
+
+```
+src/app/
+  _layout.tsx                root: SafeAreaProvider · GestureHandlerRootView · Sentry wrapper ·
+                             <MigrationGate> (blocks first paint until migrations resolve — §20) ·
+                             SheetRegistryProvider · AnimatedSplashOverlay · <Stack>.
+                             Redirects to (onboarding) while !onboardingDone (a <Redirect>, not a
+                             route file — (tabs)/index.tsx owns "/").
+  (onboarding)/
+    _layout.tsx              full-screen stack, outside the tab shell
+    welcome.tsx
+    permissions.tsx
+    categories.tsx
+  (tabs)/
+    _layout.tsx              custom tab bar (§18.4) + the raised centre Add
+    index.tsx                Home                         · P0
+    transactions.tsx         Transactions (FlashList)     · P0
+    analytics.tsx            Analytics                     · P1
+    settings.tsx             Settings                      · P1
+  review-queue.tsx           pushed                        · P0
+  transaction/[id].tsx       Transaction Details (pushed)  · P0
+  categories/index.tsx       Manage categories (pushed)    · P1
+  settings/
+    payment-methods.tsx      · P1
+    sms-notifications.tsx    · P1
+    account-rules.tsx        · P2  (D16 — ships, lowest priority)
+    data.tsx                 · P1
+    about.tsx                · P1
+  +not-found.tsx
+```
+
+**Sheets are not routes (D25).** Add · Edit · Confirmation · Filter · Category-picker ·
+Create/Edit-Category are `@gorhom/bottom-sheet` instances driven by a `SheetRegistry` mounted
+once in the root layout and opened imperatively — `openSheet('confirm', { suggestionId })` — from
+a screen, a row action, or a deep-link handler. The registry API is specified in Phase 4 (§28).
+
+**Deep links (`coinflow://`).** notification single-suggestion tap → open the Confirmation sheet
+for that id (over the Review Queue, or over Home); group tap → Review Queue; stale/confirmed →
+`transaction/[id]`; dismissed/deleted → Home. Cold-start links are read via
+`getLastNotificationResponseAsync()` in the root layout after the `MigrationGate` clears. Exact
+URL shapes finalised in §28.
+
+### 18.3 Platform-file (`.web`) policy
+
+Web ships as **static output with no CoinFlow features** in V1 (Android-only — D3). The `src/app`
+web build renders a single "CoinFlow is an Android app" placeholder screen. `features/detection`,
+`services/sms`, `services/tasks`, `modules/coinflow-sms`, and `db` (native SQLite) are kept out
+of the web bundle via `Platform.OS` guards plus `.web.ts` stubs that throw. The template's
+existing splits stay and set the pattern: `app-tabs` (being replaced by the custom bar) ·
+`use-color-scheme.ts` / `.web.ts` · `animated-icon` native/web. New cross-platform code follows
+the `.web.tsx` / `.native.ts` split rather than scattering `Platform.OS` branches.
+
+### 18.4 Template code being replaced
+
+| Template file | Fate |
+|---|---|
+| `src/app/index.tsx` (Welcome to Expo) | replaced by the Home screen |
+| `src/app/explore.tsx` | deleted |
+| `src/app/_layout.tsx` | rewritten (providers above; `ThemeProvider` stays, dark-only per §2) |
+| `src/components/app-tabs.tsx` / `app-tabs.web.tsx` (`NativeTabs`) | replaced by `features/app-shell/tab-bar.tsx` — a custom bar via `Tabs` `tabBar={…}`, because `unstable-native-tabs` can't render the raised centre **Add** "FAB notch" (§8) or the greyscale pill (§3), and iOS (the native-tab beneficiary) is Future |
+| `src/components/themed-text.tsx` / `themed-view.tsx` | moved to `src/ui/`, extended with the §3.2 type roles / §3.1 surfaces (Phase 4) |
+| `src/components/hint-row.tsx`, `external-link.tsx`, `web-badge.tsx`, `ui/collapsible.tsx` | template-only; delete when the screen that would use them is built or confirmed unneeded |
+| `src/constants/theme.ts` | rewritten in Phase 4 (§3.7) — token ramp, radial ground, Manrope/Geist, Lucide wrapper |
+| `scripts/reset-project.js` / `npm run reset-project` | **destructive** — leave in place but do not run once feature work starts; the `package.json` script gets a guard comment in Phase 5 |
+
+### 18.5 Deferred to later phases
+
+Full component file list + prop contracts (§29, Phase 4) · per-screen data/state binding and the
+`UI-0xx → IMP-0xx` map per screen (§30, Phase 4) · the `SheetRegistry` API and deep-link URL
+shapes (§28, Phase 4) · the `theme.ts` rewrite (§3.7 / §29, Phase 4).

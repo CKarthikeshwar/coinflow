@@ -254,7 +254,7 @@ strategy · §35 Build & release. **Ends by freezing `SPEC-implementation.md`.**
 | Phase | Status |
 |---|---|
 | 0 — Planning & decisions | **Done** |
-| 1 — Foundations | Pending |
+| 1 — Foundations | **Done** — `SPEC-implementation.md` §16–§18; decisions D22–D25 added |
 | 2 — Data & persistence | Pending |
 | 3 — Business logic | Pending |
 | 4 — Navigation, components, wiring | Pending |
