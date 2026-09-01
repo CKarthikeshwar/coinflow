@@ -9,17 +9,25 @@ This is the single working plan for how CoinFlow gets designed and built. It rep
 ## 0. Where we are right now
 
 Read this section first — it's the actual state of the project, not aspiration.
+**As of 2026-09-01: all design and specification work is complete. Both specs are frozen.
+The next real work is feature implementation (§9).**
 
 | Artifact | Status |
 |---|---|
-| `SPEC/idea.md` | **Done.** Product scope, target users, V1 and V1.5 feature sets, and core product principles are already defined. Treat it as settled unless the user changes it. |
-| `SPEC-UI-UX.md` (repo root) | Empty. This is the formal UI/UX spec — written *after* mockups stabilize (see §7). |
-| `SPEC-implementation.md` (repo root) | Empty. Written *after* the UI/UX spec is frozen (see §8). |
-| `design-references/` | Empty. Visual reference collection hasn't started. |
-| `design-prototype/` | Empty. No web prototype screens built yet. |
-| Expo app (`src/app`, `src/components`) | Freshly scaffolded from the default `expo-router` template (`index.tsx`, `explore.tsx`, tab navigation). No CoinFlow-specific screens exist yet. |
+| `SPEC/idea.md` | **Done.** Product scope, target users, V1 / V1.5 feature sets, core principles. Settled unless the user changes it. |
+| `design-references/` | **Done.** 8 visual references collected (`1.png`–`5.png`, `analytics.png`, `screen1.png`, `screen2.png`). |
+| `design-prototype/` | **Done.** `01-midnight/` — the coded web prototype (dark, black-and-white; Manrope + Geist; Lucide): `screens.html`, `p0-screens.html`, `p1-screens.html`, `motion.html`. Critiqued with the Impeccable skill; the design system in `SPEC-UI-UX.md` §3 is extracted from it (§5–§6). |
+| `SPEC-UI-UX.md` (repo root) | **Frozen (v1).** Screen inventory + priority (§1), visual direction (§2), design system (§3, all subsections frozen), navigation (§4), global rules (§5), per-screen specs (§6), visual acceptance `UI-0xx` (§7), resolved decisions (§8), post-freeze change log (§9 — CR-1). |
+| `SPEC-implementation.md` (repo root) | **Frozen (v1).** Part I §1–§15 (product / behavior, `IMP-0xx`, decisions D1–D17). Part II §16–§37 (technical: stack §16, architecture §17, project structure §18, data models §19, persistence §20, data-access §21, app state §22, SMS parsing §23, normalization §24, categorization §25, analytics §26, formatting/undo §27, navigation §28, components + `theme.ts` §29, screen specs §30, notifications §31, error handling §32, security §33, testing §34, build & release §35, freeze §36, change log §37; decisions D18–D35). |
+| `SPEC/IMPLEMENTATION-PLAN.md` + `SPEC/IMPLEMENTATION-PROGRESS.md` | **Done.** The meta-plan that produced Part II of `SPEC-implementation.md`. Phases 0–5 all complete; progress log kept per phase. |
+| Expo app (`src/app`, `src/components`) | **Untouched `expo-router` template** — `index.tsx`, `explore.tsx`, template tabs + `themed-*` components. **No CoinFlow code exists yet.** |
 
-**Conclusion:** Product discovery is done. Nothing else is. The next real work is Information Architecture + the screen/state inventory (§2), then visual direction and a first coded prototype (§3–§4). Do not start writing React Native screens under `src/app` yet — prototype in `design-prototype/` first, per the design/implementation boundary in §1.2.
+**Conclusion:** Discovery, design, prototyping, and both specs are done and frozen. Nothing of the
+app itself is built. The next real work is **feature implementation (§9)** — one feature at a time
+against the frozen specs, starting with a scaffolding pass (dependencies, persistence, `theme.ts`,
+the native SMS module + a dev-client build). The design/implementation boundary in §1.2 is now
+**lifted**: work under `src/app` is expected from here. Post-freeze spec changes follow §10
+(`SPEC-UI-UX.md` §9 / `SPEC-implementation.md` §37 change logs).
 
 ---
 
@@ -282,8 +290,32 @@ Never let the implementation quietly diverge from `SPEC-UI-UX.md` or `SPEC-imple
 
 ## 12. Next actions (do these now, in order)
 
-1. Write the §2.2 screen/state inventory for the seven V1 screens listed above, in `SPEC/` (new file, e.g. `SPEC/screens.md`, or as a section appended here later once it stabilizes).
-2. Collect a handful of visual references into `design-references/` and settle §3's design brief (personality, typography direction, color direction).
-3. Build the Home → Transaction Confirmation flow as a coded prototype in `design-prototype/`, using the Impeccable skill for critique once a first pass exists.
-4. Only after that flow feels right: extract the design system, then work through the remaining screens in priority order.
-5. Do not touch `src/app` for real feature work until §6–§7 are done and `SPEC-UI-UX.md` is frozen.
+Steps 1–7 of this plan (discovery → design → prototype → freeze both specs) are **done** (§0).
+Implementation (§9) is the current track. Do these in order:
+
+1. **Scaffolding pass.** `npx expo install` every dependency pinned in `SPEC-implementation.md`
+   §16 and re-verify against SDK 57 (the §16.7 risk list). Configure the test runner —
+   `jest-expo` + `@testing-library/react-native` (none exists yet). Apply the `app.json` changes
+   in §35.1 (Android package name, plugin list, `allowBackup=false`, `userInterfaceStyle:"dark"`,
+   Sentry DSN placeholder).
+2. **Theme + template teardown.** Write the real `src/constants/theme.ts` (§29.1) + `<AppBackground>`
+   + `src/ui/icon.tsx`; move `ThemedText` / `ThemedView` to `src/ui/`; delete the template
+   `explore.tsx` and the "Welcome to Expo" home (§18.4).
+3. **Persistence.** Drizzle schema (§19), `drizzle-kit` migrations + `<MigrationGate>` + the
+   idempotent seed (§20); the repository layer (§21); the Zustand stores (§22).
+4. **Native SMS pipeline.** Build `modules/coinflow-sms` (Kotlin receiver + headless task host)
+   and its config plugin (§17.6); produce an EAS `development` (dev-client) build. Expo Go no
+   longer runs the app from here.
+5. **Features, one at a time, in priority order** (§9): P0 first — F1 detection → F2 notification
+   → F11 review queue → F3 confirmation → F4 manual add → F5 list; then P1 (F6–F9, F12). For each:
+   read the spec section → implement → run tests → run the app → compare against
+   `design-prototype/01-midnight/` → verify its `IMP-0xx` + `UI-0xx` → mark done. Keep a
+   `SPEC/traceability.md` grid (`UI-0xx → IMP-0xx → component → test`, per §34.4) current as you go.
+6. **Pre-release.** The §11 final quality review; the D18 ~2-week field test on real OEM
+   battery-killer devices (dropped-event rate + cold-start latency — decides whether the §17.7
+   native-notification contingency gets built); the `SPEC-implementation.md` §35.7 checklist.
+7. **Ship.** Signed `production` APK via EAS internal distribution / direct install (D20) — no
+   Play Store.
+
+Any product/UX/architecture change that surfaces mid-build is a change-request (§10): update the
+relevant frozen spec (+ its change log) first, then the code.

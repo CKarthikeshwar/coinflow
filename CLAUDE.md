@@ -26,12 +26,6 @@ npm run reset-project  # DESTRUCTIVE: moves src/ and scripts/ into example/ and 
 No test runner is configured yet. `SPEC/PLAN.md` §8 calls for Jest unit tests on business logic
 once implementation starts — add the tooling when that work begins.
 
-### EAS builds
-
-Profiles live in `eas.json`: `development` (dev client, internal), `preview` (internal),
-`production` (`autoIncrement`). `appVersionSource` is `remote`, so version is managed by EAS, not
-`app.json`. Project id and owner (`ck-workforce`) are in `app.json` → `extra.eas`.
-
 ## Architecture
 
 ### This repo is mid-transition: template → "CoinFlow"
@@ -40,15 +34,9 @@ Profiles live in `eas.json`: `development` (dev client, internal), `preview` (in
 template** (a "Welcome to Expo" home screen + an "Explore" tab). The actual product is CoinFlow,
 a personal-finance / expense tracker whose scope is frozen in `SPEC/idea.md`.
 
-`SPEC/PLAN.md` is the authoritative process and describes a strict design→implementation boundary:
-
-1. Information architecture + screen/state inventory
-2. Visual direction + references in `design-references/`
-3. Coded **web** prototypes in `design-prototype/` (not React Native), critiqued with the
-   `impeccable` skill
-4. Extract the design system, then write `SPEC-UI-UX.md`
-5. Then `SPEC-implementation.md`
-6. Only then implement CoinFlow screens in `src/app`
+`SPEC/PLAN.md` is the authoritative process and describes a strict design→implementation boundary
+(IA → visual direction → web prototypes in `design-prototype/` → `SPEC-UI-UX.md` →
+`SPEC-implementation.md` → only then implement in `src/app`).
 
 **Do not build CoinFlow features in `src/app` until `SPEC-UI-UX.md` is frozen.** Prototype in
 `design-prototype/` first. `SPEC-UI-UX.md` and `SPEC-implementation.md` are currently empty
@@ -74,17 +62,9 @@ relevant SPEC doc and ask rather than guessing in code.
 
 ### Theming
 
-`src/constants/theme.ts` is the single source of design tokens:
-
-- `Colors.light` / `Colors.dark` — keys: `text`, `background`, `backgroundElement`,
-  `backgroundSelected`, `textSecondary`. `ThemeColor` is the union of those keys.
-- `Fonts` — `Platform.select`ed. Web maps to CSS custom properties defined in `src/global.css`
-  (`--font-display`, `--font-mono`, etc.); iOS maps to system design fonts.
-- `Spacing` — named scale `half`(2) `one`(4) `two`(8) `three`(16) `four`(24) `five`(32) `six`(64).
-  Also used for border radii. Prefer these over raw numbers.
-- `BottomTabInset` (ios 50 / android 80) and `MaxContentWidth` (800) for layout.
-
-`useTheme()` (`src/hooks/use-theme.ts`) resolves the current color scheme to a `Colors[...]` object.
+`src/constants/theme.ts` is the single source of design tokens (`Colors`, `Fonts`, `Spacing`,
+`BottomTabInset`, `MaxContentWidth`) — read it directly. Prefer the named `Spacing` scale over raw
+numbers. `useTheme()` (`src/hooks/use-theme.ts`) resolves the current color scheme to a `Colors[...]` object.
 `ThemedText` and `ThemedView` are the base primitives — pass `type` for the text/surface variant and
 `themeColor` for an explicit color key. Build new UI from these, not bare `<Text>` / `<View>`.
 

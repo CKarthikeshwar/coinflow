@@ -686,7 +686,7 @@ trigger instead.
 |---|---|---|---|
 | `date-fns` | `4.4.0` | period math, ISO-week boundaries (D14), relative-vs-absolute dates (V-2), local calendar-day helpers — tree-shakeable | Luxon (heavier), `Temporal` polyfill (premature), moment (legacy) |
 | `expo-crypto` | `~57.0.2` | `randomUUID()` for entity ids; the SMS dedupe-key hash (§17.4) | `uuid` + `react-native-get-random-values` (extra shim) |
-| `@sentry/react-native` | `~8.24.0` + its Expo config plugin (`@sentry/react-native/expo`) | crash reporting, scrubbed per D21 — stack traces only. **Confirmed in Phase 5 (D34 / §33.4): opt-in, default OFF — `Sentry.init()` runs only when `crashReportingEnabled` is true.** | GlitchTip (self-host burden), Bugsnag, minimal local crash log — all considered in Phase 5; no crash reporting at all (D21 chose to add it) |
+| `@sentry/react-native` | `~7.11.0` + its Expo config plugin (`@sentry/react-native/expo`) — **was `~8.24.0` at freeze; corrected at install time to the version `npx expo install` pins for SDK 57 (CR-2, §37)** | crash reporting, scrubbed per D21 — stack traces only. **Confirmed in Phase 5 (D34 / §33.4): opt-in, default OFF — `Sentry.init()` runs only when `crashReportingEnabled` is true.** | GlitchTip (self-host burden), Bugsnag, minimal local crash log — all considered in Phase 5; no crash reporting at all (D21 chose to add it) |
 
 ### 16.6 Added — testing & tooling (devDependencies)
 
@@ -2744,5 +2744,15 @@ Next track: feature implementation (`SPEC/PLAN.md` §9) — one feature at a tim
 
 ## 37. Change log (post-freeze)
 
-_None yet. Entries here follow `SPEC/PLAN.md` §10 — date, trigger, what changed in this doc, and
-any linked change in `SPEC-UI-UX.md` §9._
+Entries follow `SPEC/PLAN.md` §10 — date, trigger, what changed in this doc, and any linked
+change in `SPEC-UI-UX.md` §9.
+
+- **CR-2** (2026-09-01, `SPEC/PLAN.md` §12 step 1 — scaffolding pass) — **`@sentry/react-native`
+  version corrected `~8.24.0` → `~7.11.0`.** §16.5 pinned `~8.24.0` at freeze; `npx expo install
+  @sentry/react-native` on SDK 57 resolves `~7.11.0` (the Expo-vetted version, with the matching
+  `@sentry/react-native/expo` config plugin). `expo-doctor` flags `~8.24.0` as incompatible.
+  Compatibility wins over the frozen number (`AGENTS.md`: re-check every library against the v57
+  docs at install time). No behavioural change — D21 / D34 / §33.4 stand: opt-in, default OFF,
+  `Sentry.init()` only when `crashReportingEnabled === true`, `beforeSend` scrub unchanged. The
+  §16.7 risk list already anticipated install-time version corrections. No linked `SPEC-UI-UX.md`
+  change.
