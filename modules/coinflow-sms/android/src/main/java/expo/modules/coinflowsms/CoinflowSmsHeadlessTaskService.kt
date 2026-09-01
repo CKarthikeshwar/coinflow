@@ -12,8 +12,8 @@ import com.facebook.react.jstasks.HeadlessJsTaskConfig
  * the app is foregrounded too.
  */
 class CoinflowSmsHeadlessTaskService : HeadlessJsTaskService() {
-  override fun getTaskConfig(intent: Intent): HeadlessJsTaskConfig? {
-    val extras = intent.extras ?: return null
+  override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig? {
+    val extras = intent?.extras ?: return null
     return HeadlessJsTaskConfig(
       "CoinflowSmsIngest",
       Arguments.fromBundle(extras),
