@@ -2756,3 +2756,31 @@ change in `SPEC-UI-UX.md` §9.
   `Sentry.init()` only when `crashReportingEnabled === true`, `beforeSend` scrub unchanged. The
   §16.7 risk list already anticipated install-time version corrections. No linked `SPEC-UI-UX.md`
   change.
+
+- **CR-3** (2026-09-01, `SPEC/PLAN.md` §12 step 4 — native SMS pipeline) — three build-time
+  corrections, **no behavioural change**:
+  1. **`SMS_INGEST_TASK` is registered with `AppRegistry.registerHeadlessTask`, not
+     `TaskManager.defineTask`.** §16.4 / §17.2 described *both* background tasks as
+     `TaskManager.defineTask`, but §17.6 already mandates the native side be a
+     `HeadlessJsTaskService` — and `expo-task-manager` ships **no** SMS `TaskConsumer`, so
+     `defineTask` cannot receive that event. The RN headless-task API is the mechanism that
+     pairs with `HeadlessJsTaskService` (native task name `CoinflowSmsIngest`). The
+     **`NOTIFICATION_RESPONSE_TASK` is unchanged** — still `TaskManager.defineTask` +
+     `Notifications.registerTaskAsync` (§17.2 / §31). Both are still registered at module scope
+     in `src/services/tasks/index.ts`, imported first from the new `index.js` app entry
+     (`package.json` `"main"` changed `expo-router/entry` → `index.js`, which does
+     `import './src/services/tasks'; import 'expo-router/entry';`).
+  2. **`android.allowBackup: false` moved** from the `expo-build-properties` plugin config to the
+     first-class `expo.android.allowBackup` field. SDK 57's `expo-build-properties` no longer
+     reads `allowBackup`; the field is the supported path. D21 stands — verified
+     `android:allowBackup="false"` in the prebuilt `AndroidManifest.xml`.
+  3. **`package.json` `android` / `ios` scripts** rewritten by `expo prebuild` to `expo
+     run:android` / `expo run:ios` (from `expo start --android/-ios`). Consistent with §17.6 —
+     Expo Go no longer runs CoinFlow from this step on; local dev is a dev-client build.
+
+  Step 4 ships the module + plugin + task registration and a **skeleton** `SMS_INGEST_TASK`
+  (sender-present check → `ensureMigrated()` → one bare `pending` Suggestion via
+  `suggestionRepo.insertIfNew`, guarded by a `sha256(sender|minuteBucket)` key). The sender
+  seed (§17.3.1), domain parser (§23), transaction/ignore gate (§17.3.3), rule match
+  (§17.3.6), notification post (§17.3.7 / §31) and self-heal (§17.3.8) remain step 5. No linked
+  `SPEC-UI-UX.md` change.

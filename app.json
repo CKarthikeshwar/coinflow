@@ -13,6 +13,7 @@
     "android": {
       "package": "com.ckworkforce.coinflow",
       "userInterfaceStyle": "dark",
+      "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,11 +38,11 @@
       ],
       "expo-sqlite",
       "expo-notifications",
+      "./modules/coinflow-sms/app.plugin.js",
       [
         "expo-build-properties",
         {
           "android": {
-            "allowBackup": false,
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true
           }
