@@ -257,8 +257,10 @@ strategy · §35 Build & release. **Ends by freezing `SPEC-implementation.md`.**
 | 1 — Foundations | **Done** — `SPEC-implementation.md` §16–§18; decisions D22–D25 added |
 | 2 — Data & persistence | **Done** — `SPEC-implementation.md` §19–§22; decisions D26–D28 added |
 | 3 — Business logic | **Done** — `SPEC-implementation.md` §23–§27; decisions D29–D31; CR-1 on `SPEC-UI-UX.md` §6.10 |
-| 4 — Navigation, components, wiring | Pending |
-| 5 — Notifications, errors, security, testing, release | Pending |
+| 4 — Navigation, components, wiring | **Done** — `SPEC-implementation.md` §28–§30; decisions D32–D33 (done in one pass, not split 4a/4b) |
+| 5 — Notifications, errors, security, testing, release | **Done** — `SPEC-implementation.md` §31–§35; decisions D34–D35; §36 final-review pass. **`SPEC-implementation.md` FROZEN (v1, 2026-09-01).** |
+
+**All phases complete.** Next track: feature implementation (`SPEC/PLAN.md` §9) — separate from this plan.
 
 ## 4. How to run a phase
 

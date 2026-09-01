@@ -4,12 +4,11 @@
 > is **not** a screen or a visual element (those are in `SPEC-UI-UX.md`). Screen references below
 > use the names and section numbers from that document.
 >
-> **Status: DRAFT — not finalized.** Per `SPEC/PLAN.md`, `SPEC-UI-UX.md` is finalized first and
-> the design prototype is built from it; this document is finalized afterward, together with the
-> technical design called for in `SPEC/PLAN.md` §8 (technology stack, architecture, project
-> structure, application state, persistence choice, error handling, testing strategy, security).
-> The sections here are the product / behavior groundwork the technical spec will build on — they
-> are expected to change.
+> **Status: FROZEN (v1) — 2026-09-01.** Part I (§1–§15, product / behavior) and Part II
+> (§16–§35, technical design per `SPEC/PLAN.md` §8) are complete and consistent with
+> `SPEC-UI-UX.md` (v1 frozen) and `SPEC/idea.md`. `SPEC/IMPLEMENTATION-PLAN.md` Phases 0–5 are
+> done. From here, a change is a change-request (`SPEC/PLAN.md` §10) — update the spec first, then
+> the implementation — logged in §37. See §36 for the final-review pass.
 >
 > **Traceability target** (`SPEC/PLAN.md` §9): `UI-0xx` (visual, in `SPEC-UI-UX.md`) and `IMP-0xx`
 > (behavior, §13 here) → component / service → test.
@@ -25,13 +24,14 @@
 §11 Permissions & platform · §12 Persistence & data management · §13 Behavioral acceptance
 criteria (IMP-0xx) · §14 Future scope · §15 Open questions
 
-**Technical (§16+ — written across `SPEC/IMPLEMENTATION-PLAN.md` Phases 1–5):**
-§16 Technology stack · §17 System architecture · §18 Project structure *(Phase 1 — done)* ·
+**Technical (§16+ — written across `SPEC/IMPLEMENTATION-PLAN.md` Phases 1–5, all done):**
+§16 Technology stack · §17 System architecture · §18 Project structure *(Phase 1)* ·
 §19 Data models (final) · §20 Persistence & migrations · §21 Data-access layer · §22 Application
-state *(Phase 2 — done)* · §23 SMS parsing · §24 Account normalization · §25 Categorization ·
-§26 Analytics computation · §27 Formatting / time / undo / running balance *(Phase 3 — done)* ·
+state *(Phase 2)* · §23 SMS parsing · §24 Account normalization · §25 Categorization ·
+§26 Analytics computation · §27 Formatting / time / undo / running balance *(Phase 3)* ·
 §28 Navigation · §29 Component architecture · §30 Screen specs *(Phase 4)* · §31 Notifications ·
-§32 Error handling · §33 Security & privacy · §34 Testing strategy · §35 Build & release *(Phase 5)*
+§32 Error handling · §33 Security & privacy · §34 Testing strategy · §35 Build & release *(Phase 5)* ·
+§36 Specification status *(freeze)* · §37 Change log (post-freeze)
 
 ---
 
@@ -70,6 +70,10 @@ state *(Phase 2 — done)* · §23 SMS parsing · §24 Account normalization · 
 | D29 | **Parser = hybrid, no confidence score.** Data tables for the sender seed + keyword sets + VPA shapes; code for assembly. Output is a `ParseResult` discriminated union (`transaction` with `parsedFlags` + `warnings`, or `ignored` with a `reason`). `occurredAt` is the SMS timestamp — **no in-body date parsing** in V1. The sender seed is a curated, code-versioned constant (not a table, not user-editable); expansion is Future. | Phase 3. See §23. The corpus fixture file is the primary unit-test asset. |
 | D30 | **Account matching is exact `normalizedKey` equality only in V1.** The normalization algorithm (§24.1) lower-cases, strips punctuation / `*` / trailing ref-order digits / company suffixes, and preserves VPA structure. Residual near-misses create separate rules — accepted. No fuzzy / substring / ML. | Phase 3. See §24. |
 | D31 | **Analytics Week-mode comparison target = the previous ISO week**, tiles labelled "Last week" (Month mode unchanged: previous calendar month, "Last month"). Resolves D14. Recorded as **CR-1** against `SPEC-UI-UX.md` §6.10 / `UI-055` (wording only — no layout change). Money formatting: hand-rolled Indian grouping (not `Intl`), paise only when non-zero, thin-space sign. | Phase 3. See §26.7 / §27.1 and `SPEC-UI-UX.md` §9. |
+| D32 | **`SheetRegistry` API + custom tab bar + one Reduce-Motion hook.** Root-mounted `SheetRegistryProvider` inside `BottomSheetModalProvider`; imperative `open(name, params)` / `close()` / `requestClose()` (dirty-guarded via the draft stores, V-6); one `<SheetHost>` `BottomSheetModal` switches its child on `current`. `CoinFlowTabBar` is a custom `tabBar` (raised centre **Add** opens `sheets.open('add')`), not `NativeTabs`. `useReducedMotion()` + `resolveMotion()` feed the reanimated motion factories — not per-component checks. | Phase 4. Confirms D25. See §28.2 / §28.4 / §29.5. |
+| D33 | **`theme.ts` rewrite + `<AppBackground>` + Lucide wrapper.** `Colors.dark` = the §3.1 ramp (`Colors.light` mirrors it, V1 dark-only); `use-color-scheme` pins `'dark'`. `CategoryPalette` (9 hues) is scoped to the Analytics "Where it went" only (V-11). `<AppBackground>` draws the §3.1 radial ground with `react-native-svg` `<RadialGradient>` (`expo-linear-gradient` fallback). `Fonts.sans='Geist'` / `Fonts.display='Manrope'` (weights 400/500/600/700 + Manrope 300 for the clock). `src/ui/icon.tsx` wraps `lucide-react-native` at `strokeWidth 1.6`; default-category glyphs per §29.2. `ThemedText`/`ThemedView` move to `src/ui/` with the §3.2 roles / §3.1 surfaces. | Phase 4. See §29.1–§29.3. §16 addendum: `lucide-react-native`, `expo-linear-gradient`. |
+| D34 | **Crash reporting = Sentry, opt-in (default OFF).** `@sentry/react-native ~8.24.0` + the Expo config plugin; `Sentry.init()` runs **only** when `app_setting.crashReportingEnabled === true` (defaults `false`), so nothing transmits and the About-screen "data stays on this device" line stays literally true — no onboarding disclosure. `tracesSampleRate 0`, `sendDefaultPii false`; `beforeSend` + `beforeBreadcrumb` scrub via `scrubText()` and **fail closed** (drop the event if a currency / VPA / long-digit pattern survives); navigation breadcrumbs on financial routes are dropped. Allowed payload = exception name + scrubbed message/stack + OS/app version + op name + counts/enums, nothing else. Source maps + R8 mapping uploaded on the `production` profile only; DSN in `app.json → extra`. | Phase 5. P-9 amendment (D21). See §33.4 / §32.1. |
+| D35 | **Testing = Jest + RNTL + Maestro; release = direct-install, R8 + Hermes + console-strip.** `jest-expo` unit tests on `src/domain` (the SMS parser corpus fixture file is the centrepiece + acceptance bar for F1); RNTL per-screen tests for the V-3 skeleton/empty/error states; **Maestro** YAML flows for J2 (core loop) / J4 (manual add) / J9 (delete-undo) against an EAS `development` build — **not Detox**. CI = `tsc --noEmit` + `expo lint` + `jest` only (no native build / emulator / Maestro). Release: EAS `production` (autoIncrement, remote `appVersionSource`), R8/ProGuard + resource shrink via `expo-build-properties`, `console.*` stripped in prod, distributed as a signed APK via EAS internal distribution (no Play track, D20). `test-id` convention `screen:element`; traceability grid contract in §34.4. | Phase 5. See §34 / §35. |
 
 Technical decisions (stack, architecture layers, project structure) and the phased plan for
 completing this document live in `SPEC/IMPLEMENTATION-PLAN.md`.
@@ -590,9 +594,10 @@ Notation: **⇢** step · **✔** success end · **✗** alternate / failure bra
    uses days elapsed.)*
 7. **Duplicate handling (D8):** manual-only stands for V1 (D8); revisit only if Phase 3 parser
    work surfaces a reason. Low priority.
-8. **Technical spec (`SPEC/PLAN.md` §8).** In progress — the phased plan, the chosen stack, and
-   the architecture decisions (D18–D21) are in `SPEC/IMPLEMENTATION-PLAN.md`; the sections
-   themselves (§16 Technology Stack onward) are written across Phases 1–5.
+8. **Technical spec (`SPEC/PLAN.md` §8).** *Resolved — §16–§37 are written and **frozen (v1,
+   2026-09-01)**. `SPEC/IMPLEMENTATION-PLAN.md` Phases 0–5 are done; decisions D18–D35 cover the
+   stack, architecture, data, business logic, navigation, notifications, error handling, security
+   and testing/release. See §36 for the final-review pass.*
 
 ---
 
@@ -681,7 +686,7 @@ trigger instead.
 |---|---|---|---|
 | `date-fns` | `4.4.0` | period math, ISO-week boundaries (D14), relative-vs-absolute dates (V-2), local calendar-day helpers — tree-shakeable | Luxon (heavier), `Temporal` polyfill (premature), moment (legacy) |
 | `expo-crypto` | `~57.0.2` | `randomUUID()` for entity ids; the SMS dedupe-key hash (§17.4) | `uuid` + `react-native-get-random-values` (extra shim) |
-| `@sentry/react-native` | `8.24.0` + its Expo config plugin | crash reporting scrubbed per D21 — stack traces only. **Final SDK + the on-with-opt-out vs opt-in default are confirmed in Phase 5 (§33)**; listed here for completeness | GlitchTip / Bugsnag (revisited in Phase 5); no crash reporting (D21 chose to add it) |
+| `@sentry/react-native` | `~8.24.0` + its Expo config plugin (`@sentry/react-native/expo`) | crash reporting, scrubbed per D21 — stack traces only. **Confirmed in Phase 5 (D34 / §33.4): opt-in, default OFF — `Sentry.init()` runs only when `crashReportingEnabled` is true.** | GlitchTip (self-host burden), Bugsnag, minimal local crash log — all considered in Phase 5; no crash reporting at all (D21 chose to add it) |
 
 ### 16.6 Added — testing & tooling (devDependencies)
 
@@ -898,15 +903,15 @@ via `expo-build-properties`; finalised in §33). Nothing on iOS.
 Go will not run CoinFlow**. Local dev uses `expo run:android` or an EAS `development` build;
 `npm run android` against Expo Go is not a supported path. Recorded again in §16.4 and §35.
 
-### 17.7 Deferred to later phases
+### 17.7 Resolved in later phases (was: deferred)
 
-Notification channel / category IDs and the exact action-button config (§31, Phase 5) ·
-migration-pending behaviour in a task (§20, Phase 2) · FTS5 vs `LIKE` for search (§20, Phase 2) ·
-the permission-request mechanism and the Reduce-Motion plumbing (§28–§30, Phase 4) · the final
-crash SDK + its default and the `beforeSend` scrub (§33, Phase 5) · the contingency hybrid
-(native posts a provisional notification, JS replaces it) — **documented, not built**; adopt only
-if a ~2-week field test on OEM battery-killer devices shows > ~5 % dropped events or > ~10 s
-median latency (D18 / D23).
+Notification channel / category IDs + action-button config → **§31**. Migration-pending behaviour
+in a task → **§20.4**. FTS5 vs `LIKE` → **§20 / D27** (FTS5 primary, `LIKE` fallback). Permission-
+request mechanism → **§30.2 / §30.16**; Reduce-Motion plumbing → **§28.4**. Final crash SDK +
+default + `beforeSend` scrub → **§33.4 / D34** (Sentry, opt-in / default OFF). Still **documented,
+not built:** the contingency hybrid (native posts a provisional notification, JS replaces it) —
+adopt only if a ~2-week field test on OEM battery-killer devices shows > ~5 % dropped events or
+> ~10 s median latency (D18 / D23).
 
 ---
 
@@ -1798,3 +1803,946 @@ IMP-010).
 `date-fns` locale wiring + the Hermes grouping shim details (Phase 4, when components consume
 them) · the final `SENDER_SEED` contents (curated during Phase 3 implementation; device-driven
 expansion is Future) · keyword tuning from the first real-SMS field test.
+
+---
+
+## 28. Navigation
+
+### 28.0 §16 addendum (Phase 4)
+
+Added: `lucide-react-native` (icons, §29.2) · `expo-linear-gradient` `~57.x` (only as a fallback
+for `<AppBackground>`; primary is `react-native-svg`, already pinned). No other change.
+
+### 28.1 Route tree (final — supersedes §18.2 where they differ)
+
+```
+src/app/
+  _layout.tsx        <MigrationGate> → providers → <Redirect> to (onboarding) while !onboardingDone,
+                     else renders <Stack screenOptions={{ headerShown:false }}>. Reads the cold-start
+                     deep link here (§28.4). Providers, outer→inner:
+                     GestureHandlerRootView · SafeAreaProvider · SentryWrap · <AppBackground> ·
+                     ThemeProvider(dark) · BottomSheetModalProvider · SheetRegistryProvider ·
+                     AnimatedSplashOverlay
+  (onboarding)/
+    _layout.tsx      <Stack> — full-screen, own back stack; Back allowed after step 1 (§6.1)
+    welcome.tsx  ·  permissions.tsx  ·  categories.tsx
+  (tabs)/
+    _layout.tsx      <Tabs tabBar={p => <CoinFlowTabBar {...p}/>}
+                       screenOptions={{ headerShown:false, animation:'none' }}>   (tab switch = cross-fade, §3.5)
+                     unstable_settings.initialRouteName = 'index'
+    index.tsx        Home                     transactions.tsx   Transactions
+    analytics.tsx    Analytics                settings.tsx       Settings
+  review-queue.tsx           pushed, native transition (slow, §3.5)
+  transaction/[id].tsx       pushed — Details
+  categories/index.tsx       pushed — Manage categories
+  settings/
+    payment-methods.tsx · sms-notifications.tsx · account-rules.tsx · data.tsx · about.tsx   (pushed)
+  +not-found.tsx
+```
+
+Top bars are custom components (§3.6), so every route sets `headerShown:false`. Pushed pages use
+the native-stack transition (`slow` — iOS slide-from-right / Android shared-axis X, §3.5). The
+tab switch does **not** slide — outgoing content cross-fades to incoming over `base`; scroll +
+state preserved (§4 / §3.5).
+
+### 28.2 The sheet layer — `SheetRegistry` (D25)
+
+`SheetRegistryProvider` is mounted once in the root layout, inside `BottomSheetModalProvider`,
+**above** the navigator so a sheet floats over any route. Store (`useSheetRegistry`, §22.2):
+
+```ts
+type SheetName = 'add' | 'edit' | 'confirm' | 'filter'
+              | 'categoryPicker' | 'createCategory' | 'editCategory';
+interface SheetRegistry {
+  current: SheetName | null;
+  params: SheetParamMap[SheetName] | null;          // e.g. confirm → { suggestionId: string }
+  open<N extends SheetName>(name: N, params: SheetParamMap[N]): void;
+  close(): void;                                    // hard close
+  requestClose(): void;                             // dirty-guarded close (V-6)
+}
+```
+
+- A single `<SheetHost>` renders one `<BottomSheetModal>` and switches its child on `current`
+  (`AddSheet` / `EditSheet` / `ConfirmSheet` / `FilterSheet` / `CategoryPickerSheet` /
+  `CreateCategorySheet` / `EditCategorySheet`). `onDismiss → close()`.
+- `requestClose()` reads the active sheet's `dirty` flag (`useAddSheetDraft` for add/edit/confirm,
+  `useFilterDraft` for filter, local state for the category sheets). Dirty → show the discard
+  `ConfirmDialog` (V-6 / §3.6); not dirty → `close()`. The `@gorhom` swipe-down / scrim-tap are
+  wired to `requestClose`, not `close`.
+- **Snap points:** the keypad sheets (`add`/`edit`/`confirm`) use one large snap (~92% — the
+  amount block + docked keypad + pinned primary button, §6.4); `filter` / `categoryPicker` /
+  `createCategory` / `editCategory` size to content (`enableDynamicSizing`).
+- **Keypad ↔ OS keyboard (§6.4 / §3.5):** the keypad-sheet body owns a `keypadMode` in
+  `useKeypad` (`'amount'` vs `'text'`). Focusing Account / Note / Description sets `'text'` →
+  the in-app `NumericKeypad` slides out (`base accelerate`) as the OS keyboard rises and the
+  amount collapses to the sticky summary bar; blurring back to the amount reverses it. The
+  primary **Add/Save** button is pinned below the keypad in `'amount'` mode and rides just above
+  the OS keyboard (input-accessory style) in `'text'` mode.
+- Not expo-router modal routes — that behaviour set needs one controlled `@gorhom` host (D25).
+
+### 28.3 Notification deep links (`coinflow://`)
+
+| Notification payload / tap | Link | Target |
+|---|---|---|
+| single Suggestion, `pending`, body tap | `coinflow://review?open=<suggestionId>` | Review Queue mounts, then `sheets.open('confirm', { suggestionId })` |
+| group (2+ pending), tap | `coinflow://review` | Review Queue |
+| tap on a Suggestion now `confirmed` (stale) | `coinflow://transaction/<txnId>` | Details |
+| Suggestion `dismissed` / txn deleted | `coinflow://` | Home |
+| action button **Add** (app foregrounds) | — | same as `review?open=<id>` |
+| action buttons **Save** / **Discard** | — | handled headless by `NOTIFICATION_RESPONSE_TASK` (§17.4b / §31); **no navigation** |
+
+Cold start: after `<MigrationGate>` resolves, `_layout.tsx` reads
+`Notifications.getLastNotificationResponseAsync()` then `Linking.getInitialURL()` and routes
+once. Warm: `Notifications.addNotificationResponseReceivedListener` + a `Linking` `url` listener.
+`initialRouteName='index'` guarantees Home sits under any deep-pushed screen for Back.
+
+### 28.4 Reduce-Motion
+
+`src/constants/motion.ts` — the three duration tokens (`fast 120 / base 200 / slow 320`) and
+three easings (§3.5) + `resolveMotion(spec, reduced)` returning the spec or an opacity-only /
+instant variant. `useReducedMotion()` (`src/hooks/use-reduce-motion.ts`) wraps reanimated's hook
+with an `AccessibilityInfo.isReduceMotionEnabled` fallback and a listener. **One hook**, consumed
+by the motion factories (§29.5) — not ad-hoc per-component checks.
+
+---
+
+## 29. Component architecture + `theme.ts` rewrite
+
+### 29.1 `theme.ts` rewrite (§3.7 — this section is the build target)
+
+```ts
+// src/constants/theme.ts  (V1 = one dark theme; Colors.light mirrors Colors.dark, §2)
+export const Colors = {
+  dark: {
+    bg:'#0d0e14', bgTop:'#1b2238', surface:'#16171d', surface2:'#1c1e26', surface3:'#262832',
+    hairline:'#2b2d38', text:'#f5f5f6', text2:'#9a9aa1', text3:'#85858c',
+    primary:'#ffffff', primaryInk:'#0b0b0c',
+  },
+};
+Colors.light = Colors.dark;                       // dark-only V1; use-color-scheme.ts pins 'dark'
+export type ThemeColor = keyof typeof Colors.dark;
+
+export const CategoryPalette = {                  // §3.1 — ONLY the Analytics "Where it went" (V-11)
+  bills:'#7fb2e8', food:'#efa98c', groceries:'#93ce85', transport:'#b69be0', shopping:'#e6c36b',
+  entertainment:'#e79bc5', health:'#e58f8b', education:'#6fcec0', other:'#9aa0a6',
+} as const;                                       // Uncategorized → a hatched grey, never a hue
+
+export const Radius = { pill:999, card:24, sheet:28, control:14, txnCard:18, iconTile:13, iconTileSm:11 };
+export const Elevation = {                        // §3.3 — card surfaces only; controls stay flat
+  card: { shadow:'0 8px 24px rgba(0,0,0,.5), 0 1px 4px rgba(0,0,0,.4)', topEdge:'rgba(255,255,255,.05)' },
+  pop:  { shadow:'0 12px 34px rgba(0,0,0,.6), 0 3px 10px rgba(0,0,0,.45)' },                     // nav pill, popovers
+};
+export const Fonts = Platform.select({           // bundled via expo-font; system stack fallback
+  default: { sans:'Geist', display:'Manrope', mono:'monospace' },
+  ios:     { sans:'Geist', display:'Manrope', mono:'ui-monospace' },
+});
+// Spacing unchanged (half2 one4 two8 three16 four24 five32 six64); BottomTabInset, MaxContentWidth kept.
+```
+
+- **Fonts:** `expo-font` `useFonts` loads Manrope + Geist TTFs at weights **400 / 500 / 600 /
+  700** (+ Manrope **300** for the lock-screen clock only, §3.2). `Fonts.mono` reserved, unused.
+- **`<AppBackground>`** (`src/ui/app-background.tsx`) — the §3.1 radial ground
+  (`radial-gradient(135% 54% at 50% -8%, bgTop 0%, #0e0f18 42%, #090a0d 100%)`) drawn full-bleed
+  with `react-native-svg` `<RadialGradient>` behind the navigator; `expo-linear-gradient`
+  three-stop vertical approximation is the documented fallback. Ambient only — never on a
+  foreground element (V-11).
+- `use-color-scheme.ts` / `.web.ts` → return `'dark'` constant (V1). `ThemeProvider` value =
+  dark.
+
+### 29.2 Icon wrapper
+
+`src/ui/icon.tsx` — `<Icon name={IconName} size={number} color={ThemeColor} />`, wraps
+`lucide-react-native`, forces `strokeWidth={1.6}` (§3.4), resolves `color` from the theme.
+`IconName` = the §3.4 chrome glyph union ∪ the payment-method icons ∪
+`src/constants/category-icons.ts` (keyed by category `key`; confirms the §20.5 proposal against
+the real package — `food→utensils`, `transport→bus`, `groceries→shopping-basket`, `bills→receipt`,
+`shopping→shopping-bag`, `entertainment→clapperboard`, `health→heart-pulse`,
+`education→graduation-cap`, `other→shapes`, `uncategorized→help-circle`, `income→arrow-down-to-line`).
+The icon **picker** grid (§6.12) offers a fixed ~30-glyph subset of the same union.
+
+### 29.3 `ThemedText` / `ThemedView` (moved to `src/ui/`; template `src/components/themed-*` deleted)
+
+`ThemedText` — `type` = a §3.2 role; family + size + weight + tracking + `tabular-nums` fixed per
+role:
+
+| `type` | px / weight / tracking | family | tabular |
+|---|---|---|---|
+| `amountHero` | 44–52 / 700 / −0.02em | Manrope | ✓ |
+| `balanceHero` | 46 / 700 / −0.022em | Manrope | ✓ |
+| `analyticsNet` | 27 / 700 / −0.015em | Manrope | ✓ |
+| `title` | 17–20 / 600 / −0.01em | Manrope | — |
+| `body` | 15 / 400 / 0 | Geist | — |
+| `label` | 13 / 500 / 0 | Geist | — |
+| `caption` | 12.5 / 500 / 0 | Geist | ✓ (numeric) |
+| `micro` | 11.5 / 600 / 0 | Geist | ✓ (numeric) |
+
+Optional `themeColor?: ThemeColor` (default `text` for ≥`title`, `text2` for `body`/`label`,
+`text3` for `caption`/`micro`). `ThemedView` — `surface?: 'bg'|'surface'|'surface2'|'surface3'`,
+`elevation?: 'card'|'pop'` (applies the §3.3 shadow + hairline top edge). Build every screen from
+these, not bare `<Text>` / `<View>` (§3.7).
+
+### 29.4 Component catalog → files + contracts
+
+`src/ui/` = design-system primitives (theme-only deps). `src/features/*/components/` = components
+that read repos/stores. All ~45 of §3.6:
+
+| Component | File | Key props | Used by | Notes |
+|---|---|---|---|---|
+| `TopBar` | `ui/top-bar.tsx` | `variant:'brand'\|'title'\|'back'`, `title?`, `month?`, `count?`, `onBack?`, `right?` | every screen | sticky, gradient-masked (§3.6) |
+| `CoinFlowTabBar` | `features/app-shell/tab-bar.tsx` | `BottomTabBarProps` | `(tabs)/_layout` | 4 tabs + raised centre **Add** (opens `sheets.open('add')`); active `text`, rest `text3`; `pop` elevation; blurred pill |
+| `AddButton` (FAB notch) | `features/app-shell/add-button.tsx` | `onPress` | tab bar | filled `primary`, never a selected state (§6.16) |
+| `PermissionBanner` | `ui/permission-banner.tsx` | `kind:'sms'\|'notif'`, `onEnable`, `onDismiss` | Home, Review Queue | neutral inset, not tinted (V-9); shown per §30 rules |
+| `Badge` | `ui/badge.tsx` | `count` | tab bar, action strip | `surface3`/`text2`, `formatCount` (§27.1) |
+| `Button` | `ui/button.tsx` | `variant:'primary'\|'ghost'\|'disabled'`, `loading?`, `onPress`, `children` | sheets, states | pill, 700 label; `loading` → spinner, locks (§6.4) |
+| `Card` | `ui/card.tsx` | `elevation?`, `padding?` | hero, analytics, txn rows | `surface` + `Elevation.card` |
+| `BalanceHero` | `features/home/balance-hero.tsx` | `runningMinor` | Home | "Total balance" + `balanceHero` figure, de-emphasised `₹` (§6.2) |
+| `StatTile` | `ui/stat-tile.tsx` | `label`, `valueMinor`, `delta?:{pct\|null}`, `deltaLabel?` | Home Income/Spending, Analytics Mean/Median | display-only; delta line + trend glyph; `deltaLabel` = "Last month"/"Last week" (CR-1) |
+| `ActionStripRow` | `features/home/action-strip.tsx` | `kind:'review'\|'uncat'`, `count`, `onPress` | Home | fill-dot vs ring marker (not colour); chevron; render only when `count>0` |
+| `TransactionCard` | `ui/transaction-card.tsx` | `txn`, `showTime?`, `onPress`, `onSwipeDelete?` | Home Recent, Transactions | icon tile (inverts for income), label = note→account→"No note", meta = category name (+ rel. time on Home only), signed amount; Uncategorized = "?" tile + dashed-underline word (V-4) |
+| `DayGroupHeader` | `ui/day-group-header.tsx` | `dayStartMs`, `subtotalMinor?` | Transactions | plain label between card groups, not a card (§6.7) |
+| `SuggestionCard` | `features/detection/suggestion-card.tsx` | `suggestion`, `known:boolean`, `onOpen`, `onSave?`, `onDismiss` | Review Queue | method icon tile + signed amount + neutral descriptor ("UPI payment") + rel. time + overflow; inline **Save** only when `known` |
+| `Sheet` / `SheetHost` | `ui/sheet.tsx`, `features/app-shell/sheet-host.tsx` | — | all sheets | grabber, scrim, `requestClose` on swipe/scrim (§28.2) |
+| `KeypadSheetScaffold` | `ui/keypad-sheet-scaffold.tsx` | `title`, `amountSlot`, `fieldsSlot`, `primaryLabel`, `onPrimary`, `primaryDisabled?` | Add/Edit/Confirm | docks `NumericKeypad`, pins primary below it, collapse-on-scroll amount, keypad↔keyboard swap (§6.4 / §28.2) |
+| `AmountInput` | `ui/amount-input.tsx` | `amountMinor`, `mode:'full'\|'summary'`, `helper?` | keypad sheets | 52px centred figure + caret, `₹` in `text3`, helper for 0 / over-max (V-10) |
+| `NumericKeypad` | `ui/numeric-keypad.tsx` | `onKey(k:'0'..'9'\|'.'\|'back')` | keypad sheets | 3×4, 62px keys, hairline grid, amount-only |
+| `SegmentedControl` | `ui/segmented-control.tsx` | `options`, `value`, `onChange` | direction, Analytics Month/Week, Filter type | selected pill slides (`fast`), `surface3` lift |
+| `SelectorRow` | `ui/selector-row.tsx` | `icon`, `label`, `value?`, `onPress` | category / method / date rows in sheets | icon+label+value+chevron → opens a picker |
+| `TextField` | `ui/text-field.tsx` | `value`, `onChangeText`, `state:'empty'\|'filled'\|'focus'`, `multiline?`, `maxLength?` | account/note/description, category name | inset `surface2`; focus = `primary` border |
+| `AccountAutocomplete` | `features/transactions/account-autocomplete.tsx` | `query`, `onPick(rule)` | Add/Edit/Confirm | bordered list under the account field; row = account + remembered note/category ("categorises as Food") or "new" |
+| `Chip` | `ui/chip.tsx` | `variant:'category'\|'uncategorized'\|'filter'`, `label`, `onRemove?` | Details meta, Filter | Uncategorized = dashed `text3` outline; filter chip has ✕ |
+| `CategoryPickerSheet` | `features/categories/category-picker-sheet.tsx` | `value:categoryId\|null`, `onSelect` | Confirm/Add/Edit | full sheet; Uncategorized + 9 rows; current = check; "Manage categories →" foot |
+| `FilterBlocks` | `features/transactions/filter-blocks.tsx` | `draft`, `onChange` | Filter sheet | category chips / type segment / method chips / date-range presets + custom; Reset + "Show N results" |
+| `ArcGauge` | `features/analytics/arc-gauge.tsx` | `fill:0..1`, `balanceMinor`, `caption` | Analytics "This month" | greyscale continuous arc; `d3-shape` arc; empty when `fill=0` (IMP-037) |
+| `CategoryBreakdown` | `features/analytics/category-breakdown.tsx` | `rows:{key,amountMinor,share}[]` | Analytics "Where it went" | ranked rows (dot+bar) + donut; **only** coloured surface (`CategoryPalette`); Uncategorized hatched + "Fix N" |
+| `DayByDayChart` | `features/analytics/day-by-day-chart.tsx` | `series:number[]`, `mean`, `outlierIdx?` | Analytics | greyscale area/line + dashed mean line "avg ₹…"; outlier clipped + labelled (§26.6); `d3-shape`/`d3-scale` |
+| `BiggestExpenses` | `features/analytics/biggest-expenses.tsx` | `rows:txn[]` | Analytics | top ~5 → Details |
+| `PeriodControl` | `features/analytics/period-control.tsx` | `period`, `onStep(dir)`, `onModeChange` | Analytics | Month/Week segment + `‹ label ›` stepper; next disabled on current (§27.3) |
+| `ConfirmDialog` | `ui/confirm-dialog.tsx` | `glyph`, `title`, `body`, `confirmLabel`, `destructive?`, `twoStep?`, `onConfirm`, `onCancel` | delete, discard, clear-all | stacked actions, filled confirm on top, plain-text Cancel; no red (V-7); `twoStep` adds the type-`CONFIRM` field |
+| `UndoSnackbar` | `ui/undo-snackbar.tsx` | `message`, `onUndo` | Transactions/Details delete | translucent bar above nav, ~5s (§27.4) |
+| `Toast` | `ui/toast.tsx` | `message`, `action?` | post-add "View" | bottom, above nav, ~5s |
+| `EmptyState` | `ui/empty-state.tsx` | `glyph`, `line`, `cta?` | every list/summary | exactly one primary action (UI-003) |
+| `Skeleton` | `ui/skeleton.tsx` | `layout` preset | every screen loading | neutral `surface3` blocks matching final layout, no spinner (V-3) |
+| `ErrorState` | `ui/error-state.tsx` | `message`, `onRetry` | every screen error | alert glyph + short line + hairline **Try again** (UI-004) |
+| `ProvenanceLine` | `features/transactions/provenance-line.tsx` | `sender`, `date` | Details (detected only) | "Detected automatically · <bank> · <date>" — no SMS body (P-9) |
+| `DetailFieldRow` | `ui/detail-field-row.tsx` | `label`, `value` | Details | key (`text3`) over value |
+| `OnboardingStepFrame` | `features/onboarding/step-frame.tsx` | `step:1..3`, `art`, `heading`, `primaryLabel`, `onNext`, `onBack?` | onboarding | 3-dot progress, abstract B&W art, one bottom primary |
+| `PermissionCard` | `features/onboarding/permission-card.tsx` | `kind`, `state:'idle'\|'granted'\|'denied'`, `optional?`, `onRequest` | onboarding step 2, Settings › SMS & notifications | icon tile + why + Allow/status; Notifications marked **Optional** (UI-063) |
+| `SettingsGroup` / `SettingsRow` | `ui/settings-list.tsx` | `label`, `rows:{label,sub?,danger?,onPress}[]` | Settings + subpages | inset `surface2` groups; `sub` line ("Off"); `danger` bold label variant |
+| `AccountRuleRow` | `features/settings/account-rule-row.tsx` | `rule`, `onEdit`, `onDelete` | Account rules | lifted card: account · note · category chip · hit count |
+| `IconPicker` | `ui/icon-picker.tsx` | `value`, `onChange` | Create/Edit Category | fixed 6-wide grid; selected cell inverts (identity, no colour) |
+
+### 29.5 Motion factories
+
+`src/ui/motion/` — reanimated `entering`/`exiting`/`layout` factories, each taking `{ reduced }`
+and pulling tokens from `src/constants/motion.ts` (§28.4): `sheetTransition` (slide-up `slow
+decelerate` / scrim `base`; reduced = fade), `snackbarTransition` (`base decelerate` up),
+`listRowTransition` (height+opacity `base` + neighbour layout), `dialogTransition` (scrim `base` +
+card .96→1 `base standard`), `segmentThumb` (`fast standard`), `pressScale` (→.97 over `fast`, no
+bounce). Stack/tab transitions come from the navigator config (§28.1).
+
+---
+
+## 30. Screen specs (data + state binding)
+
+Per screen: **reads** (repo hooks, §21) · **stores** (§22.2) · **actions/writes** · **states**
+(delta from the V-3 baseline — skeleton / empty / error) · **satisfies** (`UI-0xx` §7 UI-UX /
+`IMP-0xx` §13) · **nav**.
+
+### 30.1 Onboarding — Welcome (`(onboarding)/welcome.tsx`)
+reads none · stores `useOnboarding.step=1` · actions **Get started** → `permissions` · states
+static (no V-3) · satisfies UI-062 · nav: entered by the root `<Redirect>` on first launch.
+
+### 30.2 Onboarding — Permissions (`permissions.tsx`)
+reads live OS permission status (`coinflowSms.getPermissionsAsync`,
+`Notifications.getPermissionsAsync`; re-check on `AppState→active`, §22.4) · stores
+`useOnboarding.step=2` · actions **Allow** per card → OS dialog; permanently-denied → deep-link
+to system settings (IMP-042); **Continue** always enabled (no permission is mandatory, §11) ·
+states static · satisfies UI-063, IMP-040/041/042 · nav → `categories`; Back → `welcome`.
+
+### 30.3 Onboarding — Category review (`categories.tsx`)
+reads `categoryRepo.useCategories()` (the seeded set, §20.5) · stores `useOnboarding` toggles +
+optional order · actions toggle a default off/on, optional reorder → commit on **Done**:
+`categoryRepo.reorderCategories` + soft-hide deselected (mark not-shown — or just leave; V1:
+deselect = delete the default row, reversible later via re-add) → `setSetting('onboardingDone',
+true)` → replace nav with `(tabs)` · states static · satisfies UI-060/062, IMP-017 · nav → Home;
+Back → `permissions`.
+
+### 30.4 Home (`(tabs)/index.tsx`)
+reads `useRunningBalance` · `usePeriodSummary(currentMonth)` + `useMoMDeltas` · `usePendingCount`
+· `useUncategorizedCount()` · `useRecentTransactions(8)` · live OS permission status ·
+`useSetting('*BannerDismissedAt')` · stores `useSheetRegistry` (centre Add) · actions: Add →
+`sheets.open('add')`; "N to review" → `/review-queue`; "N uncategorized" →
+`/transactions?filter=uncategorized`; "See all" → `/transactions`; a card → `/transaction/[id]`;
+banner Enable / dismiss · states: **skeleton** = hero block + 2 tiles + 3 card rows; **empty
+(new user)** hero `₹0`, tiles `₹0` + "no prior month", no action strip, Recent → EmptyState
+("No transactions yet…" + Add); **error** hero area → "Couldn't load your data" + Retry ·
+satisfies UI-010..014, IMP-020 (uncat counted), D2 · nav: tab.
+
+### 30.5 Review Queue (`review-queue.tsx`)
+reads `usePendingSuggestions()` (+ per-row `getAccountRule(normalizedKey)` for known/new) · live
+permission status · stores `useSheetRegistry` · actions: row body → `sheets.open('confirm',
+{suggestionId})`; inline **Save** (known only) → `insertTransaction` + `confirmSuggestion` +
+`upsertFromTransaction` in one txn (§17.4b shared path); swipe → `dismissSuggestion` (hard
+delete); **Dismiss all** → `ConfirmDialog` → `dismissAllPending` · states: **empty** = calm
+"You're all caught up." (not an error, UI-023); **skeleton** = 4 suggestion-card blocks ·
+satisfies UI-023/024, IMP-003/004/005/007 · nav: pushed from Home / deep link; Back → Home.
+
+### 30.6 Transaction Confirmation sheet (`ConfirmSheet`)
+reads `getSuggestion(id)` (seed once) · `useCategories` · `searchByPrefix` for the account
+autocomplete · on account match `resolveCategoryForAccount` to pre-fill · stores
+`useAddSheetDraft(mode:'confirm')` + `useKeypad` · actions: edit any field; **Add** →
+`insertTransaction` (+ `confirmSuggestion` + `upsertFromTransaction`, one txn) → toast "Added …
+· View"; **Cancel** / swipe → `requestClose` (dirty ⇒ discard confirm), Suggestion stays pending
+(IMP-006) · states: *submitting* (Add spinner, sheet locked, not dismissible); *save error*
+inline above Add · edge: amount 0 / >₹10,00,000 → helper + extra confirm (IMP-008); Income →
+hide category row (UI-022) · satisfies UI-020/021/045, IMP-003/005/008 · nav: over Review Queue /
+deep link.
+
+### 30.7 Add sheet (`AddSheet`)
+reads `useCategories` · `searchByPrefix` · `resolveCategoryForAccount` on pick · stores
+`useAddSheetDraft(mode:'add')` + `useKeypad` · defaults: direction Expense, method UPI, category
+Uncategorized (hidden if Income), date now · actions: **Add** (disabled until `amountMinor>0`) →
+`insertTransaction` (+ `upsertFromTransaction` when account set) → toast; **Cancel** →
+`requestClose` · states: *invalid* (amount 0/empty → inline, Add disabled), *submitting*, *save
+error* · edge: paise shown when typed; future date → "scheduled?" helper · satisfies UI-030/032/045,
+IMP-010/011/012/013 · nav: centre Add from any tab; empty-state CTAs.
+
+### 30.8 Edit sheet (`EditSheet`)
+reads `getTransaction(id)` (seed) + same helpers · stores `useAddSheetDraft(mode:'edit',
+sourceId)` · actions: **Save** → `updateTransaction` (+ `upsertFromTransaction`; `editedByUser=1`)
+; **Cancel** → `requestClose` (dirty ⇒ discard confirm) · states as Add + *invalid* when a
+required field is cleared · satisfies UI-031, IMP-013 · nav: from Details.
+
+### 30.9 Transactions (`(tabs)/transactions.tsx`)
+reads `useTransactionList(query)` (FlashList; FTS join when `search` set) · `useDaySubtotals` ·
+applied filter from **route params** (survives tab switch / deep link, §22.2) · stores
+`useFilterDraft` (only while the Filter sheet is open) · actions: search input;
+**Filter** → `sheets.open('filter')`; remove a filter chip; row → `/transaction/[id]`; swipe →
+`ConfirmDialog` → `softDeleteTransaction` + `UndoSnackbar` (`restoreTransaction`) · states:
+**empty (no data)** EmptyState + Add; **empty (no matches)** "No transactions match" + Clear
+filters (visually distinct, UI-042); **loading** skeleton day-group + rows; **loading more**
+footer spinner · edge: 2,000+ virtualized; deleting a day's last row drops its header ·
+satisfies UI-040..043, IMP-015/016/018 · nav: tab; entered pre-filtered from Home / Analytics.
+
+### 30.10 Transaction Details (`transaction/[id].tsx`)
+reads `useTransaction(id)` · `getCategoryMap` for the chip · stores none · actions: **Edit** →
+`sheets.open('edit',{id})`; overflow **Delete** → `ConfirmDialog` → `softDeleteTransaction` →
+pop, `UndoSnackbar` on the previous screen; inline **Set category** (Uncategorized) →
+`sheets.open('categoryPicker')` → `updateTransaction` (+ rule upsert) · states: *manual* (no
+provenance line); *deleting*; *deleted* (pops) · edge: missing note → "Add a note"; future date
+plain · satisfies UI-044/046, IMP-013/016 · nav: pushed from any row / post-add toast / stale
+notification.
+
+### 30.11 Filter sheet (`FilterSheet`)
+reads `useCategories` for the chips; a debounced count via `useTransactionList(draftQuery).length`
+for "Show N results" · stores `useFilterDraft` · actions: adjust blocks; **Reset** (disabled when
+no filters); **Apply** → write the applied filter to Transactions route params, `close()` · edge:
+custom range start>end → inline error on Apply · satisfies UI-041, IMP-015 · nav: over Transactions.
+
+### 30.12 Analytics (`(tabs)/analytics.tsx`)
+reads `usePeriodSummary(period)` · `useCategoryBreakdown` · `useDailySeries` (+ mean/median, this
+period **and** previous — §26.6) · `useLargestExpenses` · `useUncategorizedCount(period)` ·
+stores `useAnalyticsPeriod` (mode + anchor; optional persist `analyticsPeriodMode`) · actions:
+Month/Week + stepper (`stepPeriod`, next disabled on current); a category row →
+`/transactions?category=<id>&period=…`; a biggest-expense row → Details; "Fix N" →
+`/transactions?filter=uncategorized&period=…` · states: **empty (period)** "Nothing recorded for
+August" + Add / step; **insufficient (no prior period)** hide the "Last month/week …" tile values
+(CR-1); **loading** skeleton cards + chart placeholders · edge: one category ≈90%; income but
+zero spend; negative Balance (leading −, full arc); incomplete month → days-elapsed averages ·
+satisfies UI-050..056, IMP-030..038 · nav: tab.
+
+### 30.13 Categories (`categories/index.tsx`)
+reads `useCategories()` (+ P2 usage counts) · actions: **＋ Add** → `sheets.open('createCategory')`;
+row → `sheets.open('editCategory',{id})`; swipe → `ConfirmDialog` ("N transactions become
+Uncategorized", count from `deleteCategory`) → reassign + delete; **Other** / **Uncategorized**
+have no swipe (silent, no lock icon) · states: Custom section empty → "No custom categories yet" ·
+satisfies UI-060, IMP-017/018 · nav: pushed from Settings / any category selector's "Manage".
+
+### 30.14 Create / Edit Category sheet (`CreateCategorySheet` / `EditCategorySheet`)
+reads `useCategories` (for the uniqueness check) · stores local form state · actions: name
+(≤24, unique case-insensitive — else inline error, IMP-019) + `IconPicker`; **Save** →
+`createCategory` / `updateCategory`; on edit (custom only) **Delete** (ghost) → same confirm as
+§30.13 · satisfies UI-061 · nav: over Categories.
+
+### 30.15 Settings (`(tabs)/settings.tsx`)
+reads `useSetting` for the SMS/Notifications subtitle (On/Off) · static list → **Categories**,
+**Payment methods**, **SMS & notifications** (warning glyph when off), **Account rules**,
+**Data**, **About**; version in the footer · nav: each row pushes its subpage · satisfies UI-064.
+
+### 30.16 Settings subpages
+- **Payment methods** (`payment-methods.tsx`) — static read-only list of the 5 methods + icons;
+  footer "Custom accounts are coming later."
+- **SMS & notifications** (`sms-notifications.tsx`) — reads live OS status; two `PermissionCard`s
+  (SMS; Notifications = **Optional**) with Enable / **Open system settings**; a "Which messages
+  CoinFlow reads" explainer. Satisfies UI-063/064, IMP-040/042; re-check on `AppState→active`.
+- **Account rules** (`account-rules.tsx`, D16 / P2) — reads `useAccountRules()`; `AccountRuleRow`
+  list; row → edit note/category (`updateAccountRule`); swipe → `deleteAccountRule`; empty state
+  until the first rule. Backs F8.
+- **Data** (`data.tsx`) — **Export** row → `exportJson` + `exportCsv` → `Sharing.shareAsync`
+  (IMP-043); **Clear all data** (danger) → two-step `ConfirmDialog` (type `CONFIRM`) →
+  `clearAllData` → relaunch into onboarding (IMP-044/065).
+- **About** (`about.tsx`) — version; "All your data stays on this device."; licenses + help
+  links.
+
+### 30.17 Transaction notification (system surface)
+Not a screen — its content, channel, category actions, and known-vs-new action set are specified
+in **§31** (Phase 5). Deep-link targets are §28.3. Satisfies UI-024, IMP-003.
+
+### 30.18 Delivered in Phase 5
+
+The notification surface build → **§31**; the error-state / logging matrix → **§32**; the
+per-screen `test-id` map feeding `IMP-0xx → test` → **§34.4**.
+
+---
+
+## 31. Notifications
+
+> Reconciles §10 (behaviour) and §17 (the headless pipeline). No new dependency —
+> `expo-notifications ~57.0.15` + `expo-task-manager ~57.0.14` were pinned in §16.4. All posting
+> and all response handling is JS/TS (D18 / D23 / D24); the Kotlin side never touches
+> `expo-notifications`.
+
+### 31.1 Channel
+
+One Android channel, created at first app launch and re-asserted on every launch (idempotent):
+
+| Field | Value |
+|---|---|
+| `id` | `txn-review` |
+| `name` | "Transaction review" |
+| `importance` | `HIGH` (heads-up + lock screen; the core loop must be actionable without opening the app) |
+| `sound` | default |
+| `vibrationPattern` | short single pulse |
+| `lockscreenVisibility` | `PRIVATE` — title/body hidden behind the user's secure-lock-screen setting; CoinFlow does not force `PUBLIC` because the title carries an amount |
+| `bypassDnd` | false |
+| `showBadge` | true |
+
+No second channel in V1 (no reminders, no digests). The channel is created via
+`Notifications.setNotificationChannelAsync('txn-review', …)` from a `src/services/notifications/channel.ts` helper called by both the app-launch bootstrap and `SMS_INGEST_TASK` step 7 (a headless post must not assume the UI ever ran).
+
+### 31.2 Categories & the known-vs-new action switch
+
+Two `expo-notifications` categories, registered at module scope in
+`src/services/notifications/categories.ts` (imported from the app entry alongside the task
+definitions, §17.2, so they exist in a headless context):
+
+| Category id | Buttons (in order) | When used |
+|---|---|---|
+| `txn-known` | **Save** · **Add** · **Discard** | the parsed account matched an `AccountRule` **that has a category** (§25.1) |
+| `txn-new` | **Add** · **Discard** | no rule, or a rule with no category yet |
+
+Button config:
+
+| Button | `identifier` | `opensAppToForeground` | `options` |
+|---|---|---|---|
+| Save | `SAVE` | `false` | — writes headless (§31.5) |
+| Add | `ADD` | `true` | — foregrounds into the Confirmation sheet |
+| Discard | `DISCARD` | `false`, `isDestructive: true` | writes headless |
+
+`Save` appears **only** in `txn-known`. Per §6.15 / IMP-003: when the rule has a category but no
+stored note, the button is still just **Save** (it writes with `note = null`). The group summary
+(§31.4) carries **no** action buttons.
+
+### 31.3 Content & data payload
+
+Built by `buildTxnNotification(suggestion, rule)` in `src/services/notifications/content.ts`:
+
+- **title** — `formatMoney(amountMinor, {signed:false})` + ` ` + `debited` \| `credited`
+  (direction word, not a sign — the lock screen has no CoinFlow typographic context). Example:
+  `₹450 debited`.
+- **body** — `account` + ` · ` + payment-method label; `Unknown account` when `account` is null
+  (§6.15). Example: `Swiggy · UPI`.
+- **`categoryIdentifier`** — `txn-known` or `txn-new` per §31.2.
+- **`data`** (the routing payload, JSON-safe, **no** financial fields beyond ids):
+  ```ts
+  { kind: 'suggestion', suggestionId: string, dedupeKey: string,
+    ruleKey: string | null, postedAt: number }
+  ```
+  `amountMinor` / `account` / `note` are **not** put in `data` — the headless response re-reads
+  the `Suggestion` row by `suggestionId` (it is the source of truth and may have changed).
+- **`identifier`** (the notification's own id) — `sug:<suggestionId>`, so a later run can find and
+  update/cancel it deterministically.
+- **`threadId` / group key** — `txn-review-group` on every post, so the OS can visually stack them
+  and the summary (§31.4) owns the same key.
+
+### 31.4 Posting — single vs group (`SMS_INGEST_TASK` step 7)
+
+After the `Suggestion` is durably written (§17.3 step 5) and the rule looked up (step 6):
+
+1. Read `pendingCount = count(suggestion WHERE status='pending')`.
+2. **`pendingCount === 1`** → post one notification (`sug:<id>`, §31.3). Cancel any stale group
+   summary.
+3. **`pendingCount >= 2`** → post/replace the **group summary**: `identifier = 'txn-group'`,
+   title `"N transactions to review"`, body empty, **no category / no buttons**, same `threadId`.
+   Individual per-suggestion notifications posted earlier are **left in place** (Android stacks
+   them under the summary); newly, for the 2nd+ suggestion CoinFlow still posts its individual
+   `sug:<id>` notification first, then the summary — so expanding the stack shows each one, and
+   IMP-004's "no per-item Add/Discard on the group" is satisfied because the **summary itself**
+   carries no buttons.
+4. `data` on the summary: `{ kind: 'group' }`.
+
+This runs identically whether the JS context was started by the UI or by the SMS receiver.
+
+### 31.5 Response handling
+
+`Notifications.setNotificationCategoryAsync` + a single background response task cover both the
+killed and warm cases:
+
+- **`NOTIFICATION_RESPONSE_TASK`** (registered via
+  `TaskManager.defineTask` + `Notifications.registerTaskAsync`, §17.2) — fires for
+  `SAVE` and `DISCARD` (both `opensAppToForeground:false`) whether the app is killed or backgrounded.
+  - **`SAVE`** → the §17.4(b) transaction, verbatim: re-load `Suggestion` by id → re-match
+    `AccountRule` by `normalizedKey` → one DB transaction { insert `Transaction`
+    (amount + `occurredAt` from the Suggestion; `note`/`categoryId`/`paymentMethod` from the rule;
+    `source='sms'`, `smsRef`, `dedupeKey` copied), `suggestion.status='confirmed'` +
+    `confirmedTransactionId`, `AccountRule.hitCount++` + `updatedAt` } → cancel `sug:<id>` →
+    refresh or cancel the group summary (`pendingCount` recount).
+    - Rule deleted between post and tap → **do not write blind**: fall through to opening the
+      Confirmation sheet (set a pending deep link, then `Notifications` will foreground on the
+      next user interaction; in practice `SAVE` with no rule is impossible to reach because the
+      button only exists in `txn-known`, but the guard stays for the race).
+  - **`DISCARD`** → `suggestionRepo.dismiss(suggestionId)` (hard `DELETE`, D26) → cancel
+    `sug:<id>` → recount + refresh/cancel the summary. No ledger write (IMP-007).
+- **Foreground taps** — `ADD` button and **body taps** carry `opensAppToForeground:true`; handled
+  by the JS listener in `_layout.tsx` (§28.3), not the task:
+  - cold start → `Notifications.getLastNotificationResponseAsync()` after `<MigrationGate>`.
+  - warm → `Notifications.addNotificationResponseReceivedListener`.
+  - Both resolve to a `coinflow://` route via the §28.3 table, then `router` navigates once.
+
+`NOTIFICATION_RESPONSE_TASK` obeys the §17.2 budget (< 5 s, no network, wrapped so a throw is
+logged scrubbed and swallowed — §32).
+
+### 31.6 Stale-tap routing (formalises §10)
+
+Resolved at handling time by re-reading the `Suggestion` (`getSuggestion(suggestionId)`):
+
+| Current state | `SAVE` / `DISCARD` (headless) | `ADD` / body tap (foreground) |
+|---|---|---|
+| `pending` | act normally (§31.5) | `coinflow://review?open=<suggestionId>` → Confirmation sheet |
+| `confirmed` (already added) | no-op; cancel the notification | `coinflow://transaction/<confirmedTransactionId>` → Details |
+| row gone / `dismissed` | no-op; cancel the notification | `coinflow://` → Home |
+| underlying `Transaction` soft-deleted | treat as `dismissed` | `coinflow://` → Home |
+
+### 31.7 Permission off — silent (P-7 / IMP-041)
+
+`POST_NOTIFICATIONS` denied → `SMS_INGEST_TASK` still runs every step **except** the post: the
+`Suggestion` is written, no notification is attempted (no throw, no log noise). The Review Queue
+(F11) and the Home "N to review" action strip + tab badge are the entire surface. Nothing in the
+pipeline branches on a *stored* permission flag — step 7 calls
+`Notifications.getPermissionsAsync()` live and returns early if not `granted` (§22.4).
+
+### 31.8 Reboot / process-death restore
+
+Android does not persist posted notifications across a reboot, and CoinFlow deliberately does
+**not** add a `BOOT_COMPLETED` receiver (keeps the native surface "SMS bridge only", D24). Recovery
+is JS-side and lazy:
+
+- **`reconcileNotifications()`** (`src/services/notifications/reconcile.ts`) runs on every app
+  launch and on `AppState → active`: diff `pending` Suggestions against
+  `Notifications.getPresentedNotificationsAsync()`; re-post (`sug:<id>`, or the summary if ≥ 2)
+  for any `pending` Suggestion with no live notification.
+- `SMS_INGEST_TASK` step 8 (self-heal, §17.3) does the same on the next incoming SMS.
+- Between a reboot and the next app-open-or-SMS the durable Review Queue + badge cover it (P-7).
+  This is the accepted trade for not shipping a boot receiver.
+
+### 31.9 Files
+
+`src/services/notifications/` — `channel.ts` · `categories.ts` · `content.ts` · `post.ts`
+(single/group decision, §31.4) · `respond.ts` (the `SAVE`/`DISCARD` bodies shared with §17.4b) ·
+`reconcile.ts` · `deep-link.ts` (payload → `coinflow://` route, §28.3). The task *definitions*
+live in `src/services/tasks/` (§17.2) and call into `respond.ts`.
+
+---
+
+## 32. Error handling
+
+### 32.0 Principles
+
+1. **The SMS receiver and both headless tasks must never crash the app.** Every task body is
+   wrapped in a top-level `try/catch` that logs scrubbed (§32.1) and returns cleanly (§17.2).
+   A parse throw, a gate throw, a DB error, a notification error — all degrade to "no Suggestion
+   this time / no notification this time", never a crash dialog.
+2. **No financial data in any log or crash payload** — no SMS body, amount, account, note,
+   category, balance, or VPA. This is enforced by a redaction helper, not developer discipline
+   (§32.1). Amends nothing in D21; makes it operational.
+3. **User-facing errors are actionable (P-4).** Every error state gives the user one concrete next
+   step — Retry, Enable, Open settings, or "your data is safe, reopen the app".
+4. **Verbose logging is dev-only.** `__DEV__` gates the detailed console output; release builds
+   strip `console.*` (§33.5) and emit only the scrubbed crash report *if the user opted in*
+   (§33.4).
+
+### 32.1 Logging & redaction policy
+
+- `src/lib/log.ts` — `log.debug/info/warn/error`. In `__DEV__`: full `console`. In release:
+  `debug`/`info` are no-ops; `warn`/`error` forward to Sentry **only when `crashReportingEnabled`**
+  (§33.4), otherwise drop.
+- `redactError(e): { name, message, stack }` — takes only those three fields, then runs
+  `scrubText()` over `message` + `stack`: strips anything matching a currency pattern
+  (`₹\s?[\d,]+`), a bare 4–12 digit run, a VPA (`\S+@\S+`), and collapses any string literal longer
+  than 40 chars to `"[…]"`. Parser code therefore must not embed the SMS body in `Error` messages
+  (lint note + code review; the corpus tests assert `parseSms` never throws on fixture input).
+- **Allowed in a log/crash line:** exception `name`, a static `message` from CoinFlow's own
+  `throw new Error('…')` sites, the scrubbed `stack`, `Platform.OS` + OS version, app version /
+  build, the *name* of the failing operation (`'SMS_INGEST_TASK'`, `'migration'`,
+  `'export.csv'`), counts (`pendingCount`), and enum values (`direction`, `paymentMethod`).
+- **Never:** SMS body, `amountMinor`, `account`, `note`, `description`, category name, sender id,
+  `dedupeKey`, file contents, DB rows.
+
+### 32.2 Failure matrix
+
+| # | Failure | User-facing behaviour | Logging |
+|---|---|---|---|
+| E1 | **Native `SmsReceiver.onReceive` throws** (bad PDU, OEM quirk) | nothing visible; that one SMS is not detected — same class as "app not installed" (§17.4a) | Kotlin `Log.w` tag `CoinflowSms`, message only; no body |
+| E2 | **Headless task fails to start** (OS refused the `HeadlessJsTaskService`) | nothing visible; Review Queue stays the fallback; `reconcile` + step 8 recover on the next event | native warn |
+| E3 | **`parseSms` throws** (should be impossible — corpus asserts total function) | task catches, returns; no Suggestion | `error` scrubbed, op `SMS_INGEST_TASK/parse` |
+| E4 | **Sender/ignore gate rejects** (expected, not an error) | no Suggestion | `debug` only |
+| E5 | **DB write of the Suggestion fails** (disk full, locked) | no Suggestion, no notification; next SMS or app-open retries (dedupeKey makes it safe) | `error` scrubbed, op `SMS_INGEST_TASK/insert` |
+| E6 | **Migration pending when a task fires** | task calls `ensureMigrated()` first (§20.4); if it runs, proceed; if it throws, defer — skip the write, let the next app-open reconcile | `warn` op `task/ensureMigrated` |
+| E7 | **Migration fails at launch** | full-screen non-dismissible **"Couldn't open your data"** + **Try again** (re-run) + "Your transactions are safe on this device." — **no wipe, no auto-reset** (§20.4) | `error` op `migration`, from-version → to-version only |
+| E8 | **DB file corrupt / won't open** | same screen as E7 with a secondary, guarded **"Reset app data"** (two-step `ConfirmDialog`, type `CONFIRM`) — the *only* path that wipes, and only on explicit user action | `error` op `db/open` |
+| E9 | **Notification post fails / permission revoked mid-run** | silent; Suggestion still written; Review Queue + badge (§31.7) | `warn` op `notify/post` once, not per retry |
+| E10 | **`NOTIFICATION_RESPONSE_TASK` (`SAVE`) fails mid-write** | one DB transaction, so it rolls back atomically; the notification stays; the user can tap again or open the app | `error` op `notify/save` |
+| E11 | **`ADD` / body tap, but the Suggestion is gone** | §31.6 routing — Details or Home, never a dead sheet | `debug` |
+| E12 | **SMS permission denied / permanently denied** | persistent `PermissionBanner` on Home + Review Queue (V-9 / IMP-040); Settings › SMS card shows the state; permanently-denied → **Open system settings** (IMP-042) | none (expected) |
+| E13 | **Notification permission denied** | no banner is mandatory, but Settings shows "Off" + warning glyph (UI-064); detection still fills the queue (IMP-041) | none |
+| E14 | **A foreground repo write fails** (Add/Edit/Confirm submit, category save, rule edit) | sheet stays open, inline error line above the primary button ("Couldn't save — try again"), button re-enabled; no optimistic row was shown (§22.1) so nothing to roll back | `error` op `repo/<method>` scrubbed |
+| E15 | **A screen's live query throws** | that screen's `ErrorState` (alert glyph + line + **Try again** → refetch), rest of the app unaffected (§32.3) | `error` op `query/<hook>` |
+| E16 | **FTS5 query fails** (device build lacks FTS5) | transparent fallback to the `searchText` + `LIKE` path (D27); no user-visible change | `warn` once op `search/fts-fallback`, then suppress |
+| E17 | **Export: file write or share fails** | Data screen toast **"Couldn't create the export file."** + Retry; nothing partially shared (write to a temp path in cache, share, then delete — §33.1) | `error` op `export/<json\|csv>`, no row contents |
+| E18 | **`clearAllData` fails partway** | it runs as one DB transaction + a settings reset; on failure it rolls back and shows "Couldn't clear data — nothing was changed." | `error` op `maintenance/clear` |
+| E19 | **Deep link to a `transaction/[id]` that doesn't exist** | `+not-found` → a friendly "That transaction isn't here anymore." + **Go home** | `debug` |
+| E20 | **Uncaught render error anywhere** | root error boundary (§32.3): full-screen **"Something went wrong."** + **Reload app** (re-mounts the tree); data untouched | `error` op `boundary`, component stack scrubbed |
+
+### 32.3 Error boundaries
+
+- **Root boundary** — a class component just inside the providers in `_layout.tsx`, above the
+  navigator. Catches render/lifecycle throws, shows the E20 screen, offers **Reload app**
+  (`expo-updates` `reloadAsync` in release; a state-bump remount in dev). Forwards to Sentry per
+  §33.4.
+- **Screen-level** — each tab screen and each pushed page wraps its content in
+  `<ScreenErrorBoundary fallback={<ErrorState …/>}>` so one screen's failure doesn't blank the
+  shell. `ErrorState` (§29.4) provides **Try again**.
+- **Sheets** — a throw inside a sheet closes it via `close()` and shows a `Toast` ("Couldn't open
+  that — try again"); it must not take down the screen underneath.
+
+### 32.4 Copy (the actionable strings — P-4)
+
+| Situation | Line | Action |
+|---|---|---|
+| Home data query failed | "Couldn't load your data." | Try again |
+| List query failed | "Couldn't load transactions." | Try again |
+| Analytics query failed | "Couldn't load analytics." | Try again |
+| Save/Add failed (sheet) | "Couldn't save — try again." | (button re-enabled) |
+| Migration failed | "Couldn't open your data. Your transactions are safe on this device." | Try again |
+| DB corrupt | "Couldn't open your data." | Try again · Reset app data (two-step) |
+| Export failed | "Couldn't create the export file." | Retry |
+| Missing deep-link target | "That transaction isn't here anymore." | Go home |
+| Render crash | "Something went wrong." | Reload app |
+
+No red, no error iconography beyond the neutral alert glyph (V-7 / UI-004).
+
+---
+
+## 33. Security & privacy
+
+### 33.0 Scope (recap of D21)
+
+**In V1:** app-private storage, `android:allowBackup="false"`, no network except opt-in crash
+reporting, SMS body never persisted, scrubbed logs. **Not in V1 (Future):** biometric / PIN app
+lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — one optional egress).
+
+### 33.1 Storage
+
+- The SQLite file lives in the app-private data dir (`expo-sqlite` default —
+  `<app files>/SQLite/coinflow.db`); WAL sidecars alongside. No use of external / shared storage,
+  no `WRITE_EXTERNAL_STORAGE`.
+- **`android:allowBackup="false"`** + `android:fullBackupContent="false"` injected by the
+  `coinflow-sms` config plugin (or `expo-build-properties` — §33.6), so the DB is excluded from
+  Android auto-backup / adb backup / cloud backup.
+- **Export files** are written to `FileSystem.cacheDirectory` (also app-private), handed to
+  `Sharing.shareAsync`, and **deleted in a `finally`** after the share sheet returns. They are
+  never written to a world-readable location by CoinFlow; where the user then sends them is the
+  user's choice (§12 / IMP-043).
+- No `MediaStore`, no clipboard writes of financial data.
+
+### 33.2 No-network assertion
+
+- The Android manifest requests **no `INTERNET`-adjacent capability beyond what the OS grants by
+  default**; there is no backend, no analytics SDK, no ad SDK, no font CDN (fonts are bundled,
+  §29.1), no remote config.
+- The **only** code path that can open a socket is `@sentry/react-native`, and only after
+  `Sentry.init()` — which CoinFlow calls **only** when `crashReportingEnabled === true` (§33.4).
+  Default state: `init` is never called, the transport is never constructed.
+- **Verified by:** (a) a manifest review checklist item in §35.7; (b) a unit test that greps the
+  built `src/domain`, `src/db`, `src/features`, `src/services` trees for `fetch(`,
+  `XMLHttpRequest`, `WebSocket`, `axios` and fails on a hit outside `src/services/crash/`;
+  (c) IMP-045 (manual: run the core loop with a network monitor, assert zero egress with crash
+  reporting off).
+
+### 33.3 SMS handling (P-9)
+
+- The SMS body is read in the native receiver, coalesced, passed to JS **in memory**, parsed, and
+  discarded at `SMS_INGEST_TASK` step 5. It is **never** written to SQLite, a file, a log, or a
+  crash payload (§32.1 redaction).
+- What *is* retained per detected transaction: `source='sms'`, `smsRef = { sender, receivedAt }`
+  (sender label + timestamp only), and the parsed structured fields the user then confirms.
+- `READ_SMS` + `RECEIVE_SMS` are requested because auto-detection is the product (F1). This is
+  acceptable **because distribution is direct-install, not the Play Store** (D20) — Play's SMS
+  policy does not apply. The Settings › SMS screen explains, in plain language, which messages are
+  read and that nothing is uploaded (§30.16, "Which messages CoinFlow reads").
+
+### 33.4 Crash reporting — the P-9 amendment (D34)
+
+| Aspect | Decision |
+|---|---|
+| SDK | **`@sentry/react-native ~8.24.0`** + the Expo config plugin (`@sentry/react-native/expo`); native crash capture on; `tracesSampleRate: 0` (no performance tracing); `enableAutoSessionTracking: false`; `sendDefaultPii: false` |
+| Default | **OFF — opt-in.** `app_setting.crashReportingEnabled` defaults `false` (§22.3). `Sentry.init()` is called from `src/services/crash/index.ts` **only** if the setting is `true` at launch; toggling it on in Settings › Data calls `init` immediately, toggling off calls `Sentry.close()` and takes effect fully on next launch. |
+| Disclosure | Because nothing transmits by default, there is **no onboarding step** and the About-screen line **"All your data stays on this device."** stays literally true. Settings › Data carries the toggle with one sentence: *"Send anonymous crash reports (stack traces only — never your transactions or messages)."* |
+| `beforeSend(event)` | drop `event.contexts.device.name`, `event.user`, `event.request`, `event.server_name`; run every `exception.value` + every frame `filename`/`function` через `scrubText()` (§32.1); drop the event entirely if any `value` still matches a currency / VPA / long-digit pattern after scrubbing (fail closed) |
+| `beforeBreadcrumb(b)` | **return `null` for every breadcrumb whose category is `navigation` and whose route is in the financial set** (`transaction/*`, `analytics`, `review-queue`, any sheet); drop all `console` and `xhr`/`fetch` breadcrumbs; keep only `app.lifecycle` and `error` categories |
+| Allowed payload | exception name + scrubbed message + scrubbed stack; `Platform.OS` + version; app version + build number; the failing op name (§32.1); `pendingCount` / enum values. **Nothing else.** |
+| Release plumbing | source maps uploaded by the Sentry EAS build hook **on the `production` profile only**; `SENTRY_AUTH_TOKEN` is an EAS secret, never committed; the DSN sits in `app.json → extra.sentryDsn` (a DSN is a write-only ingest key — safe to ship) |
+| ProGuard mapping | R8 mapping file uploaded alongside for native stack symbolication |
+
+### 33.5 Release hardening
+
+- **R8 / ProGuard on** for `release` (`android.enableProguardInReleaseBuilds = true`,
+  `enableShrinkResourcesInReleaseBuilds = true`) via `expo-build-properties`. Keep rules for
+  Expo modules, Reanimated, `@shopify/flash-list`, `react-native-svg`, the `coinflow-sms` module,
+  and Sentry (its plugin adds them).
+- **Hermes** engine (RN 0.86 default) — bytecode, not readable JS, in the APK.
+- **Strip `console.*` in production** — `babel-plugin-transform-remove-console` (keep `error` +
+  `warn` so `log.ts` can still route them) in the release Babel env.
+- No debug flags: `expo-dev-client` and Sentry `debug:false` in release; `EXPO_PUBLIC_*` carries
+  nothing sensitive.
+- The app sets `WindowManager.LayoutParams.FLAG_SECURE`? **No** in V1 (blocks screenshots
+  globally; deferred with the app-lock work). Documented as a Future toggle.
+
+### 33.6 Final permission list
+
+| Permission | Source | Why | Optional? |
+|---|---|---|---|
+| `android.permission.RECEIVE_SMS` | `coinflow-sms` plugin | wake on incoming SMS (F1) | yes — app fully usable manually without it (§11) |
+| `android.permission.READ_SMS` | `coinflow-sms` plugin | read the message body to parse (F1) | yes |
+| `android.permission.POST_NOTIFICATIONS` | `expo-notifications` plugin | the core-loop notification (F2) | yes — queue + badge cover it (P-7) |
+| `android.permission.RECEIVE_BOOT_COMPLETED` | — | **not requested** (no boot receiver, §31.8) | n/a |
+| `INTERNET` | Android default (implicitly granted) | used **only** by Sentry, **only** when opted in (§33.4) | n/a |
+
+`allowBackup=false` is an `<application>` attribute, not a permission, set as in §33.1.
+
+---
+
+## 34. Testing strategy
+
+### 34.0 Tooling (recap §16.6) & CI
+
+`jest-expo 57.0.5` (preset, RN 0.86 transform) · `@testing-library/react-native 14.0.1` +
+`@testing-library/jest-native` matchers · **Maestro** (external binary, YAML flows) for the one
+E2E lane. No Detox (D35). `npx tsc --noEmit` + `expo lint` are the other two gates.
+
+**CI (GitHub Actions, `ci.yml`):** on push / PR — `npm ci` → `tsc --noEmit` → `expo lint` →
+`jest --ci --coverage`. **No native build, no emulator, no Maestro in CI** (the dev-client +
+SMS module make an emulator run heavy; E2E is run locally against an EAS `development` build
+before a release — §35.7). A nightly or pre-release manual EAS build is the native smoke.
+
+### 34.1 Unit tests (business logic — `SPEC/PLAN.md` §8, the centrepiece)
+
+`src/domain/**` is pure TS with no RN imports (D22), so these run fast and without a renderer:
+
+| Suite | File | What it asserts |
+|---|---|---|
+| **SMS parser corpus** | `domain/sms/__tests__/corpus.test.ts` + `fixtures/*.json` | the anonymised real-shape SMS → expected `ParseResult` table (§23.6). Covers: major banks (HDFC, ICICI, SBI, Axis, Kotal), UPI apps (GPay, PhonePe, Paytm, CRED), debit + credit, UPI / card / IMPS·NEFT·RTGS / wallet, Indian digit grouping + paise, and every ignore rule (OTP, promo, balance-only, request-money, foreign-currency, not-yet-settled). Asserts `parseSms` is **total** — never throws on any fixture. This file is the single most important test asset. |
+| Normalization | `domain/accounts/__tests__/normalize.test.ts` | the §24.2 worked input→key table verbatim, including the §8 near-miss pairs (must / must-not collapse) |
+| Categorization | `domain/categorize/__tests__/*.test.ts` | exact-key match only (§24.3); the save/edit upsert semantics (§25.2) — keep learned category when the new save is Uncategorized; cleared note clears `lastNote`; last-write-wins |
+| Analytics math | `domain/analytics/__tests__/*.test.ts` | per §26: core aggregates, running balance sign, MoM deltas (Income=0 guard), by-category with the Uncategorized bucket + share, largest-5, daily zero-fill, mean over **days-elapsed** for the current period, **median** of the zero-filled series, arc-fill clamp `[0,1]`, outlier scaling, ISO-week boundaries + previous-ISO-week comparison (D31) |
+| Money formatter | `domain/format/__tests__/money.test.ts` | `₹` prefix, Indian grouping (`1,00,000`), always-present sign, thin-space, paise only when non-zero, negative running balance |
+| Dates / periods | `domain/format/__tests__/time.test.ts` | relative-vs-absolute switch (V-2), local-day boundary, `monthPeriod` / `isoWeekPeriod` / `previousPeriod` / `stepPeriod`, DST-free (epoch-ms UTC + local math, D28) |
+| Undo | `domain/undo/__tests__/undo.test.ts` | soft-delete sets `deletedAt`, restore clears it, reads filter it out, purge removes only rows past the grace window (§27.4) |
+| Dedupe key | `domain/sms/__tests__/dedupe.test.ts` | `sha256(sender\|amountMinor\|floor(occurredAt/60000)\|direction)` is stable, and a bank+UPI pair for one payment produces **two** keys (D8, §17.3 step 4) |
+
+Target: 100 % of `src/domain` statements; the parser corpus is the acceptance bar for F1.
+
+### 34.2 Component tests (RNTL — the V-3 states)
+
+One test file per screen / major component, asserting the **skeleton / empty / error** deltas
+from §30 plus the primary interaction, with repos and stores mocked:
+
+- Home — skeleton shape, new-user empty (`₹0`, no action strip, Recent EmptyState), query-error
+  → "Couldn't load your data" + Retry, action strip renders only when `count>0`.
+- Review Queue — 4-card skeleton, "You're all caught up." empty (**not** an error state), known
+  row shows inline **Save**, new row does not.
+- Transactions — no-data empty vs no-match empty are **visually distinct** (UI-042), loading-more
+  footer, swipe→ConfirmDialog→UndoSnackbar.
+- Analytics — period empty ("Nothing recorded for August"), insufficient-prior-period hides the
+  "Last month/week" tile values (CR-1), skeleton cards.
+- Confirm / Add / Edit sheets — invalid (amount 0 → primary disabled), submitting (spinner, sheet
+  locked), save-error inline line; Income hides the category row (UI-022).
+- Categories / Create-Edit — duplicate name rejected inline (IMP-019); Other has no swipe.
+- Settings subpages — SMS card state reflects live permission; Data → two-step clear dialog.
+- `ConfirmDialog` / `UndoSnackbar` / `PermissionBanner` / `EmptyState` / `ErrorState` — prop
+  contracts and the "no colour / no red" rule (V-7).
+
+### 34.3 E2E (Maestro — J-flows)
+
+YAML flows in `e2e/`, run against an EAS **`development`** build on a physical Android device or
+emulator (SMS simulated via `adb emu sms send` / a fixture broadcast):
+
+| Flow | File | Steps |
+|---|---|---|
+| **J2 — core loop** | `e2e/j2-core-loop.yaml` | seed a known `AccountRule` → fire a fixture transaction SMS → assert the notification → tap **Save** → assert the app did **not** open → open the app → assert the transaction is in the list with the learned note + category and the running balance moved |
+| **J4 — manual add** | `e2e/j4-manual-add.yaml` | tab bar centre **Add** → keypad enters an amount → pick category + method → **Add** → assert the toast, the new row, and the updated Home tiles |
+| **J9 — delete + undo** | `e2e/j9-delete-undo.yaml` | open a transaction → Delete → confirm → assert row gone + `UndoSnackbar` → **Undo** → assert the row is back and the balance restored |
+
+### 34.4 Traceability matrix (`UI-0xx → IMP-0xx → component → test`)
+
+`SPEC/traceability.md` (generated/maintained during feature work) holds the full grid; the spec
+fixes the **column contract** and the `test-id` convention:
+
+- **`test-id` convention:** `screen:element` kebab (`home:balance-hero`, `review:row-save`,
+  `add:keypad-key-7`, `analytics:arc-gauge`, `confirm:primary`). Every interactive element named
+  in §30 gets one; RNTL queries by it, Maestro asserts on it.
+- **Row shape:** `IMP-0xx | criterion | UI-0xx (or —) | component/service | test kind (unit / RNTL / Maestro / manual) | test id or file | status (Pending → Pass)`.
+- **Seed rows** (from §13; all `status: Pending` until the build verifies):
+
+| IMP | Test kind | Where |
+|---|---|---|
+| IMP-001 / 002 | unit | parser corpus + `SMS_INGEST_TASK` gate test |
+| IMP-003 | RNTL + Maestro | Review Queue row (known/new) · J2 |
+| IMP-004 | unit + manual | `post.ts` single/group decision · manual notification render |
+| IMP-005 / 013 / 014 | unit + Maestro | upsert semantics · J2 |
+| IMP-006 / 007 | RNTL | Confirm cancel leaves pending · Discard hard-deletes |
+| IMP-008 | RNTL | amount 0 / >₹10,00,000 extra-confirm |
+| IMP-009 | manual | kill/reboot, `reconcileNotifications` |
+| IMP-010..012 | RNTL | Add validation · Income omits category · `type` always stored |
+| IMP-015 | unit + RNTL | search over note/description/account · filter AND-combination |
+| IMP-016 | unit + Maestro | undo window · J9 |
+| IMP-017..019 | RNTL | default set = 9 · reassign-on-delete · duplicate name |
+| IMP-020 / 031..037 | unit | analytics math suite (§34.1) |
+| IMP-030 | RNTL | period stepper, Month/Week |
+| IMP-038 | RNTL | Analytics has no Top-accounts / run-rate / insight cards |
+| IMP-040..042 | RNTL + manual | permission banner / states · system-settings deep link |
+| IMP-043 / 044 | RNTL + manual | export produces a file · clear-all returns to onboarding |
+| IMP-045 | manual | network monitor, crash reporting off — zero egress |
+
+### 34.5 Not automated in V1 (documented manual QA)
+
+Native `SmsReceiver` on real OEM devices (Xiaomi / Samsung / OnePlus battery killers) · actual
+lock-screen notification rendering + action buttons · OS permission dialogs · the headless cold
+start latency (the D18 field-test metric) · visual parity against `design-prototype/01-midnight/`
+(the `UI-0xx` list — `SPEC-UI-UX.md` §7). These live in a pre-release checklist (§35.7).
+
+---
+
+## 35. Build & release
+
+### 35.1 `app.json` changes required
+
+| Key | Change |
+|---|---|
+| `expo.android.package` | set to `com.ckworkforce.coinflow` (currently unset — required for a store-less signed build) |
+| `expo.android.permissions` | leave unset — the `coinflow-sms` plugin injects `RECEIVE_SMS` / `READ_SMS`; `expo-notifications` injects `POST_NOTIFICATIONS`. Do **not** also list them here (double-declaration). |
+| `expo.plugins` | add, in order: `expo-font` (with the Manrope + Geist TTF asset list), `expo-notifications` (with the `txn-review` icon + colour), `./modules/coinflow-sms/app.plugin.js`, `["expo-build-properties", { android: { enableProguardInReleaseBuilds: true, enableShrinkResourcesInReleaseBuilds: true, extraProguardRules: "…" } }]`, `["@sentry/react-native/expo", { organization, project, url }]` |
+| `expo.scheme` | already `"coinflow"` — used by the `coinflow://` deep links (§28.3); no change |
+| `expo.android.allowBackup` | set `false` (or via `expo-build-properties` `android.allowBackup` — pick one, §33.1) |
+| `expo.extra.sentryDsn` | add the DSN (write-only ingest key) |
+| `expo.extra.eas.projectId` / `owner` | unchanged |
+| `expo.version` | ignored for versioning — `appVersionSource: "remote"` in `eas.json` (§35.3) |
+| `expo.android.userInterfaceStyle` | set `"dark"` (V1 is dark-only, D33) — currently `"automatic"` at root |
+
+`android:exported`, the `<receiver>` + `<service>` entries, and the `BROADCAST_SMS` permission
+attribute come from the `coinflow-sms` config plugin (§17.6), not `app.json`.
+
+### 35.2 Config-plugin / prebuild order
+
+`expo prebuild` (or the EAS build) applies plugins top-to-bottom; `coinflow-sms` must run after
+`expo-notifications` (both edit `AndroidManifest.xml`; order keeps the diffs clean) and Sentry's
+plugin last (it wraps `MainApplication` + adds the upload hook). CoinFlow does **not** commit the
+`android/` folder — it stays a managed (CNG) project; the native module lives in `modules/`, not
+in `android/`.
+
+### 35.3 EAS profiles (`eas.json` — already present)
+
+| Profile | Use | Notes |
+|---|---|---|
+| `development` | daily dev + **E2E** | `developmentClient: true`, `internal` distribution; this is the only build that runs Metro. Install once, iterate over the dev server. |
+| `preview` | share / field test | `internal` distribution, a **release** JS bundle in a dev-less APK; this is the D18 field-test build and the pre-release smoke target |
+| `production` | the shipped APK | `autoIncrement: true`, `appVersionSource: "remote"`; R8 + Sentry source-map upload on; signed with the EAS-managed keystore |
+
+No `production` App Bundle / Play track — **direct install** (D20): the signed APK from
+`eas build -p android --profile production` is distributed via EAS internal distribution links or
+sideloaded.
+
+### 35.4 Distribution workflow
+
+1. `eas build -p android --profile production` → EAS signs with the managed keystore, uploads
+   Sentry source maps + R8 mapping, produces a download URL.
+2. Share the URL (EAS internal distribution) or the `.apk` directly.
+3. Installer enables "install unknown apps" for the source once; subsequent versions install over
+   the top (same package + signing key).
+4. No auto-update channel in V1 (`expo-updates` is only used for the error-boundary `reloadAsync`,
+   not OTA). A new version = a new build + a new link.
+
+### 35.5 Versioning
+
+`appVersionSource: "remote"` — EAS owns `versionCode` (`autoIncrement` on `production`) and the
+human `version`. `app.json → version` is display-only and not the source of truth. Tag each
+release in git (`v1.0.0`) to match the EAS build.
+
+### 35.6 `reset-project` caveat
+
+`npm run reset-project` is **destructive** (moves `src/` + `scripts/` into `example/` and
+scaffolds a blank app). It must not be run on this repo again — the template it would restore has
+been fully replaced (§18.4). Documented here and in `CLAUDE.md`.
+
+### 35.7 Pre-release checklist
+
+- [ ] `tsc --noEmit` + `expo lint` + `jest` green (CI)
+- [ ] parser corpus covers every bank/UPI-app in the tester's own SMS history
+- [ ] `preview` build installs on ≥ 2 real OEM devices; core loop works with the screen off
+- [ ] fire 20 real transaction SMS → correct Suggestions, notifications, one-tap Save
+- [ ] kill the app, fire an SMS, reboot → Suggestion present, `reconcileNotifications` re-posts
+- [ ] SMS + notification permissions denied → manual mode fully usable, banners correct
+- [ ] Maestro J2 / J4 / J9 pass on the `development` build
+- [ ] network monitor: crash reporting **off** → zero egress during a full session (IMP-045)
+- [ ] crash reporting **on** → force a test crash → the Sentry event carries **no** amount /
+      account / note / SMS text (inspect the payload)
+- [ ] `allowBackup=false` verified (`adb backup` produces nothing useful)
+- [ ] visual pass against `design-prototype/01-midnight/` for the frozen `UI-0xx` list
+- [ ] Settings › About shows the correct version; "data stays on this device" is accurate
+- [ ] git tagged; EAS `production` build archived with its Sentry release + mapping
+
+---
+
+## 36. Specification status
+
+**`SPEC-implementation.md` is FROZEN (v1) — 2026-09-01.** Part I (§1–§15, product / behaviour) and
+Part II (§16–§35, technical) are complete and consistent with `SPEC-UI-UX.md` (v1 frozen) and
+`SPEC/idea.md`. `SPEC/IMPLEMENTATION-PLAN.md` Phases 0–5 are done.
+
+`SPEC/PLAN.md` §11 final-review pass:
+
+- **Product** — audience / problem / value prop (§2), features justified + prioritised (§3),
+  non-goals documented (§14). ✓
+- **UX** — journeys (§4), navigation (§28), primary actions (§30), empty/loading/error states
+  (§30 + §32.2), edge cases (per-feature + §32), accessibility (Reduce-Motion §28.4, tabular
+  numerals §29.3, live-region toasts). ✓ (visual side owned by `SPEC-UI-UX.md`)
+- **UI** — design system frozen in `SPEC-UI-UX.md` §3; `theme.ts` build target in §29.1;
+  component catalog §29.4. ✓
+- **Technical** — architecture (§17), data models (§19), persistence (§20), business logic tested
+  (§34.1), core journeys tested (§34.3), error handling (§32), security (§33). ✓
+- **Specification** — every requirement has an id (`F#` §3, `IMP-0xx` §13, `UI-0xx` in
+  `SPEC-UI-UX.md` §7); traceability contract in §34.4; decisions logged D1–D35 (§1). ✓
+
+**Change protocol from here (`SPEC/PLAN.md` §10):** both specs are frozen. A change is a
+change-request — update the spec first, then the implementation, then verify. Post-freeze changes
+are logged in §37.
+
+Next track: feature implementation (`SPEC/PLAN.md` §9) — one feature at a time, each following
+`read spec → implement → test → run → compare to prototype → verify `IMP-0xx` → mark done`.
+
+---
+
+## 37. Change log (post-freeze)
+
+_None yet. Entries here follow `SPEC/PLAN.md` §10 — date, trigger, what changed in this doc, and
+any linked change in `SPEC-UI-UX.md` §9._

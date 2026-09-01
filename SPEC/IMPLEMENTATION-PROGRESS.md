@@ -3,6 +3,140 @@
 Running log of work on the technical half of `SPEC-implementation.md`, phase by phase, per
 `SPEC/IMPLEMENTATION-PLAN.md`. Newest entries at the top of each phase.
 
+> **2026-09-01 — ALL PHASES COMPLETE. `SPEC-implementation.md` is FROZEN (v1).**
+> Part I (§1–§15) + Part II (§16–§37) done and consistent with `SPEC-UI-UX.md` (v1) + `SPEC/idea.md`.
+> `SPEC/PLAN.md` §11 final-review pass recorded in `SPEC-implementation.md` §36. Next track:
+> feature implementation (`SPEC/PLAN.md` §9), one feature at a time — outside this plan.
+
+---
+
+## Phase 5 — Notifications, errors, security, testing, release; freeze
+
+**Status:** ✅ Done (2026-09-01)
+**Produced:** `SPEC-implementation.md` §31 Notifications · §32 Error handling · §33 Security &
+privacy · §34 Testing strategy · §35 Build & release · **§36 Specification status (freeze)** ·
+§37 Change log (post-freeze). Added decisions **D34–D35** to §1. Rewrote the top status blockquote
+(DRAFT → FROZEN v1), updated the Contents TOC and §15 Q8. Ticked Phase 5 in
+`SPEC/IMPLEMENTATION-PLAN.md` §3 and marked the plan complete.
+
+### Decisions locked (now D34–D35 in `SPEC-implementation.md` §1)
+
+| # | Decision |
+|---|---|
+| D34 | **Crash reporting = Sentry (`@sentry/react-native ~8.24.0`), opt-in / default OFF.** `Sentry.init()` only when `crashReportingEnabled` (default `false`) → nothing transmits by default, About copy stays literally true, no onboarding disclosure. `beforeSend` + `beforeBreadcrumb` scrub via `scrubText()` and **fail closed**; financial-route breadcrumbs dropped; strict allowed-payload allowlist. Source maps / R8 mapping on the `production` profile only. P-9 amendment (D21). |
+| D35 | **Testing = Jest (`jest-expo`) unit on `src/domain` (parser corpus = centrepiece + F1 acceptance bar) + RNTL per-screen V-3 states + Maestro J2/J4/J9 — not Detox.** CI = `tsc` + `expo lint` + `jest` only (no native/emulator/Maestro). Release = EAS `production` (autoIncrement, remote version), R8/ProGuard + resource shrink, `console.*` stripped, signed APK via EAS internal distribution (no Play track, D20). `test-id` = `screen:element`; traceability grid contract in §34.4. |
+
+### Open sub-questions — resolved (user-confirmed)
+
+- **Crash-reporting default** → **opt-in, OFF by default** (user picked "Opt-in" over
+  "on-with-opt-out"). Keeps `idea.md`'s on-device positioning intact; solo dev flips it on for
+  their own field testing.
+- **Crash SDK** → **Sentry** (`@sentry/react-native`), as pencilled in D21 — best SDK-57 support,
+  Expo config plugin, `beforeSend` scrub, free tier is plenty for one user.
+- **E2E runner** → **Maestro** (YAML flows, no instrumented build) over Detox — matches the plan's
+  lean and a solo Android-only project.
+
+### Shape of what was specified
+
+- **§31** — one `txn-review` HIGH channel; two categories `txn-known` (Save·Add·Discard) /
+  `txn-new` (Add·Discard) + the known-vs-new switch; content builder (title/body/`data` payload
+  carries **ids only**, no money); single-vs-group posting decision inside `SMS_INGEST_TASK`
+  step 7; `NOTIFICATION_RESPONSE_TASK` handling `SAVE`/`DISCARD` headless (rolls back atomically)
+  + foreground `ADD`/body-tap via the §28.3 deep-link table; stale-tap routing table; permission-off
+  = silent (live `getPermissionsAsync`, never a stored flag); reboot recovery = JS
+  `reconcileNotifications()` on launch/foreground + step-8 self-heal (**no `BOOT_COMPLETED`
+  receiver** — keeps the native surface "SMS bridge only", D24); `src/services/notifications/*`
+  file list.
+- **§32** — 4 principles (tasks never crash the app; no financial data in any log/crash payload;
+  P-4 actionable; verbose = dev-only); `src/lib/log.ts` + `redactError` + `scrubText` redaction
+  policy with explicit allowed / never lists; a **20-row failure matrix** (E1–E20: native receiver
+  throw → render crash) each with user-facing behaviour + logging; error boundaries (root +
+  per-screen + sheet); the actionable-copy table (no red, neutral alert glyph only).
+- **§33** — storage (app-private SQLite, `allowBackup=false`, export via cache dir + delete in
+  `finally`); the no-network assertion + how it's verified (manifest checklist, a grep test over
+  `src/**` for `fetch`/`XHR`/`WebSocket` outside `src/services/crash/`, IMP-045 manual); SMS
+  handling (P-9 — body never persisted, `smsRef` = sender+timestamp only, `READ_SMS` justified by
+  direct-install D20); the **P-9 crash-reporting amendment table** (D34 detail — init gate,
+  `beforeSend`/`beforeBreadcrumb`, allowed payload, release plumbing); release hardening (R8,
+  Hermes, console-strip, no `FLAG_SECURE` in V1); the final permission table.
+- **§34** — tooling + CI (no native build in CI); unit-test suite table (parser corpus,
+  normalization, categorization, analytics math, formatter, periods, undo, dedupe — target 100 %
+  of `src/domain`); RNTL component tests keyed to the §30 V-3 states; Maestro J2/J4/J9 flow specs;
+  the traceability matrix column contract + `test-id` convention + ~20 seed rows mapping
+  `IMP-0xx` → test kind → location; the "not automated in V1" manual-QA list.
+- **§35** — required `app.json` changes (package name, plugin list + order, `allowBackup`,
+  `userInterfaceStyle:"dark"`, Sentry DSN); EAS profile table (`development` = only Metro build +
+  E2E target; `preview` = field-test / D18 metric; `production` = shipped APK); prebuild/plugin
+  order (CNG, `android/` not committed, module in `modules/`); versioning (remote
+  `appVersionSource`); the direct-install distribution workflow; `reset-project` caveat; a
+  16-item pre-release checklist.
+- **§36** — the `SPEC/PLAN.md` §11 final-review pass (Product / UX / UI / Technical /
+  Specification, each ✓ with section pointers); the from-here change protocol.
+- **§37** — empty post-freeze change-log stub.
+
+### Freeze
+
+`SPEC-implementation.md` top blockquote: **DRAFT → FROZEN (v1) — 2026-09-01.** No CR was needed
+against `SPEC-UI-UX.md` this phase (the notification surface §6.15, the V-3 states, and the
+security posture were all already covered by the frozen UI/UX spec; opt-in-OFF crash reporting
+needs no onboarding change).
+
+### Log
+
+- **2026-09-01** — Started Phase 5. Re-read the plan's Phase 5 section + `SPEC-implementation.md`
+  §10 (notifications behaviour), §11 (permissions), §12 (persistence & data mgmt), §13 (IMP-0xx),
+  §14 (future scope), §15 (open questions), §17.1–§17.6 (native trigger + headless tasks +
+  walkthroughs + module plan), §28.3 (deep links), §30 (screen specs); `SPEC-UI-UX.md` §6.15
+  (notification), §6.16 (global components), §7 (UI-0xx); `SPEC/PLAN.md` §8 + §11; `app.json`.
+- **2026-09-01** — Asked the user the three Phase 5 sub-questions → opt-in/OFF · Sentry · Maestro.
+- **2026-09-01** — Wrote §31–§37; added D34–D35; froze the doc; updated the TOC, §15 Q8, the plan
+  §3, and this log.
+
+---
+
+## Phase 4 — Navigation, components, screen wiring
+
+**Status:** ✅ Done (2026-09-01)
+**Produced:** `SPEC-implementation.md` §28 Navigation · §29 Component architecture + `theme.ts`
+rewrite · §30 Screen specs (data + state binding). Done in **one pass** (not split 4a/4b). Added
+decisions **D32–D33**; §16 addendum (§28.0) for `lucide-react-native` + `expo-linear-gradient`.
+Ticked Phase 4 in `SPEC/IMPLEMENTATION-PLAN.md` §3.
+
+### Decisions locked (now D32–D33 in `SPEC-implementation.md` §1)
+
+| # | Decision |
+|---|---|
+| D32 | **`SheetRegistry` API** (root-mounted, imperative `open`/`close`/`requestClose` with a dirty-guard) + **custom `CoinFlowTabBar`** (raised centre Add opens `sheets.open('add')`), confirming D25 · **one `useReducedMotion()` hook** + `resolveMotion()` feeding reanimated motion factories. |
+| D33 | **`theme.ts` rewrite** — `Colors.dark` = §3.1 ramp (`Colors.light` mirrors it; `use-color-scheme` pins `'dark'`); `CategoryPalette` scoped to Analytics "Where it went" only; `<AppBackground>` = `react-native-svg` `<RadialGradient>` (LinearGradient fallback); `Fonts.sans=Geist` / `Fonts.display=Manrope`; `src/ui/icon.tsx` wraps `lucide-react-native` @ `strokeWidth 1.6`; `ThemedText`/`ThemedView` → `src/ui/` with §3.2 roles / §3.1 surfaces. |
+
+### Open sub-questions — resolved
+
+- **Sheet system** → root-mounted `@gorhom` `SheetRegistry` (already D25; API specified in §28.2).
+- **Tab bar** → custom `CoinFlowTabBar`, not `NativeTabs` (already D25; §29.4).
+- **Reduce-Motion plumbing** → one `useReducedMotion()` hook + motion factories (§28.4 / §29.5),
+  taken inline (low-stakes).
+
+### Shape of what was specified
+
+- **§28** — final route tree (Stack/Tabs/Redirect/onboarding group; `headerShown:false`
+  everywhere; native push transition; cross-fade tab switch); the `SheetRegistry` type +
+  `<SheetHost>` + snap points + the keypad↔OS-keyboard swap mechanism; the notification
+  deep-link table + cold-start/warm handling; Reduce-Motion hook + `resolveMotion`.
+- **§29** — the concrete `theme.ts` (token names, `CategoryPalette`, `Radius`, `Elevation`,
+  `Fonts`); `<AppBackground>` (svg radial); `src/ui/icon.tsx` (`IconName` union + the confirmed
+  default-category glyph map); `ThemedText` role table + `ThemedView` surfaces; a ~45-row
+  **component catalog** (file · key props · used-by · notes) covering all of §3.6; the motion
+  factories.
+- **§30** — a data/state binding block for all ~22 screens: repo hooks read · stores touched ·
+  actions/writes · V-3 state deltas · the `UI-0xx` / `IMP-0xx` each satisfies · nav in/out.
+
+### Carried into Phase 5
+
+Notification surface build (channels, categories, action-set switch, headless response handler) →
+**§31**. Error-state copy matrix → **§32**. Per-screen `test-id` map for `IMP-0xx → test` →
+**§34**. `date-fns` locale wiring + Hermes `Intl` grouping shim (from Phase 3) land when the
+formatter components are actually built.
+
 ---
 
 ## Phase 3 — Business logic
