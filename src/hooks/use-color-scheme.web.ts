@@ -1,19 +1,5 @@
-import { useSyncExternalStore } from 'react';
-import { useColorScheme as useRNColorScheme } from 'react-native';
-
-const emptySubscribe = () => () => {};
-
-/**
- * To support static rendering, this value needs to be re-calculated on the client side for web.
- * The server/first-paint snapshot is `light`; after hydration the client swaps to the real scheme.
- */
-export function useColorScheme() {
-  const hasHydrated = useSyncExternalStore(
-    emptySubscribe,
-    () => true,
-    () => false,
-  );
-  const colorScheme = useRNColorScheme();
-
-  return hasHydrated ? colorScheme : 'light';
+// V1 is dark-only (D33 / SPEC-implementation.md §29.1). Static web export renders dark
+// too — no hydration swap needed.
+export function useColorScheme(): 'dark' {
+  return 'dark';
 }
