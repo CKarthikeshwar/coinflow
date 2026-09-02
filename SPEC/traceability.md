@@ -48,3 +48,38 @@ transactions to review" opening the Review Queue screen (F11, doesn't exist yet)
 notification with the right buttons, that tapping `Save`/`Discard` while the app is killed writes
 the transaction / deletes the suggestion, and that a reboot doesn't lose a pending suggestion's
 visibility (Review Queue badge, once F11 exists, is the fallback today).
+
+## F11 — Review queue
+
+Also the first real navigation: `src/app/index.tsx` (Home) is still a placeholder (§30.4 is a much
+larger, separate feature) but now carries the one real, spec'd piece it needs to exist for this —
+the "N to review" action-strip row (§6.2) — and `src/app/review-queue.tsx` is a genuine pushed
+route. Both currently live flat under `src/app/` rather than the eventual `(tabs)/` group (§28.1)
+since the full tab shell isn't built yet.
+
+| IMP | Criterion | UI-0xx | Component/service | Test kind | Test id / file | Status |
+|---|---|---|---|---|---|---|
+| IMP-003 | (continued from F2) Review Queue lists every pending Suggestion with the known/new action set. | UI-023/024 | `src/app/review-queue.tsx` · `src/features/detection/suggestion-card.tsx` | RNTL | `suggestion-card.test.tsx` | Partial — card + screen built; no RNTL test of the screen itself (DB/notifications mocking owed) |
+| IMP-004 | (continued from F2) "N transactions to review" now actually opens the Review Queue. | — | `src/features/home/action-strip.tsx`, Home → `router.push('/review-queue')` | — | — | Pass (manual code review; no navigation test written) |
+| IMP-005 | (continued from F2) Review Queue's inline **Save** writes the transaction the same way the notification's Save does. | — | `review-queue.tsx` reuses `respond.ts`'s `handleSave` directly (§17.4b shared path, exactly as spec'd) | unit (via `respond.test.ts`, already covers `handleSave` itself) | — | Pass |
+| IMP-007 | (continued from F2) Review Queue dismiss removes a Suggestion permanently, adds nothing. | — | `review-queue.tsx` reuses `respond.ts`'s `handleDiscard`; "Dismiss all" → `dismissAllPending` + `cancelAllSuggestionNotifications` | unit (`handleDiscard` via `respond.test.ts`) | — | Pass for per-row dismiss; "Dismiss all" has no dedicated test |
+
+**Simplification vs. spec (documented, not silent):** the card's "overflow → Dismiss" is a direct
+tap-to-dismiss icon button, not a swipe gesture. Same functional outcome, simpler to build
+correctly in this pass. Noted in `src/features/detection/suggestion-card.tsx`.
+
+**Not yet built:** tapping a card body should open the Confirmation sheet — needs the
+`SheetRegistry` (§28.2) and the Confirmation sheet itself (F3), neither exists yet; currently a
+no-op (`review-queue.tsx` TODO comment). The full `(tabs)/` navigation shell, deep links (§28.3),
+and the rest of Home (§30.4: balance hero, income/spending tiles, recent activity, quick add) are
+separate, larger, not-yet-started work.
+
+**Infra fixes made along the way (not feature-specific, benefit every future component test):**
+`jest.config.js` didn't transform `lucide-react-native` (ESM-only export) or handle its
+`"react-native"` package.json export condition — added to `transformIgnorePatterns` +
+`moduleNameMapper`. Also discovered `@testing-library/react-native@14`'s `render()` is `async`
+(a real API change from earlier versions) — must be `await`ed, unlike older RNTL docs/examples.
+
+**Manual verification still owed:** on-device, confirm Review Queue actually lists a real pending
+suggestion, that inline Save/Dismiss work, and that the permission banner shows/hides correctly
+against real OS permission state.

@@ -76,3 +76,11 @@ export async function cancelForSuggestion(suggestionId: string): Promise<void> {
   await Notifications.dismissNotificationAsync(`sug:${suggestionId}`).catch(() => {});
   await refreshGroupSummary();
 }
+
+/**
+ * Review Queue "Dismiss all" (§6.3 / §30.5). V1 has exactly one notification category, so
+ * clearing every presented notification is safe and simpler than tracking individual ids.
+ */
+export async function cancelAllSuggestionNotifications(): Promise<void> {
+  await Notifications.dismissAllNotificationsAsync().catch(() => {});
+}

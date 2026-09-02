@@ -9,6 +9,12 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@gorhom/.*|@shopify/.*|drizzle-orm|drizzle-kit))',
   ],
+  // `lucide-react-native`'s package.json "exports" maps a "react-native" condition straight to
+  // its `.mjs` build, which Jest's transform (keyed by .js/.jsx/.ts/.tsx) never touches — force
+  // resolution to the plain CJS build instead of fighting the exports map.
+  moduleNameMapper: {
+    '^lucide-react-native$': '<rootDir>/node_modules/lucide-react-native/dist/cjs/lucide-react-native.js',
+  },
   collectCoverageFrom: [
     'src/domain/**/*.{ts,tsx}',
     '!src/domain/**/*.d.ts',

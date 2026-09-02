@@ -42,7 +42,13 @@ export function formatMoney(amountMinor: number, opts: FormatMoneyOptions = {}):
 
   if (sign === 'none') return magnitude;
 
-  // Thin space (U+2009) between the sign and the amount — `+ ₹1,15,000`, `− ₹842` (§27.1).
+  // Thin space (U+2009, explicit escape so it can't silently drift to a plain space) between
+  // the sign and the amount — `+ ₹1,15,000`, `− ₹842` (§27.1).
   const signChar = isNegative ? '−' : '+';
   return `${signChar} ${magnitude}`;
+}
+
+/** Badge / count caps at "99+" (§27.1). */
+export function formatCount(n: number): string {
+  return n > 99 ? '99+' : String(n);
 }

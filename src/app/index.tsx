@@ -1,14 +1,24 @@
+/**
+ * Home — still a stub. The full screen (SPEC-implementation.md §30.4: balance hero, income/
+ * spending tiles, recent activity, quick add) is a separate, larger feature not built yet.
+ *
+ * This pass adds exactly one real, spec'd piece: the "N to review" action-strip row (§6.2),
+ * because Review Queue (F11) needs a way to be reached. Everything else here stays placeholder.
+ */
+
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
+import { usePendingCount } from '@/db/repositories/suggestions';
+
+import { ActionStripRow } from '@/features/home/action-strip';
 import { ThemedText } from '@/ui/themed-text';
 
-/**
- * Placeholder Home. The real screen (SPEC-implementation.md §30.4) is built in the
- * feature phase; this exists so the app boots on the new design foundation.
- */
 export default function HomeScreen() {
+  const { count } = usePendingCount();
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.center}>
@@ -16,6 +26,9 @@ export default function HomeScreen() {
         <ThemedText type="body" themeColor="text3">
           Home — coming soon
         </ThemedText>
+      </View>
+      <View style={styles.strip}>
+        <ActionStripRow kind="review" count={count} onPress={() => router.push('/review-queue')} />
       </View>
     </SafeAreaView>
   );
@@ -29,4 +42,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.two,
   },
+  strip: { paddingBottom: Spacing.four },
 });

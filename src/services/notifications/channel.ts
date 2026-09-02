@@ -14,7 +14,10 @@ export async function ensureNotificationChannel(): Promise<void> {
   await Notifications.setNotificationChannelAsync(TXN_REVIEW_CHANNEL_ID, {
     name: 'Transaction review',
     importance: Notifications.AndroidImportance.HIGH,
-    sound: 'default',
+    // No `sound` field at all — omitting it (not `'default'`) is what actually makes
+    // expo-notifications fall back to the system default sound. Passing the literal string
+    // `'default'` makes it look for a *custom sound file* named "default" and warn when it's
+    // not found (confirmed against the installed `expo-notifications` Android source).
     vibrationPattern: [0, 150],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
     bypassDnd: false,
