@@ -10,7 +10,9 @@ import { useAppFonts } from '@/constants/fonts';
 import { MigrationGate } from '@/db/migration-gate';
 import { AppBackground } from '@/ui/app-background';
 
+import { NotificationRouter } from '@/features/app-shell/notification-router';
 import { SheetHost } from '@/features/app-shell/sheet-host';
+import { ToastHost } from '@/features/app-shell/toast-host';
 import { UndoHost } from '@/features/transactions/undo-host';
 
 SplashScreen.preventAutoHideAsync();
@@ -38,6 +40,8 @@ export default function RootLayout() {
                 />
                 <SheetHost />
                 <UndoHost />
+                <ToastHost />
+                <NotificationRouter />
               </BottomSheetModalProvider>
             </AppBackground>
             <AnimatedSplashOverlay />

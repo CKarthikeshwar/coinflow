@@ -58,9 +58,9 @@ TaskManager.defineTask<Notifications.NotificationTaskPayload>(
       | undefined;
     if (payload?.kind !== 'suggestion' || !payload.suggestionId) return;
 
-    // `ADD` and a body tap carry `opensAppToForeground:true` — those are handled by the
-    // foreground listener in `_layout.tsx` (§28.3), not here. That listener + the Confirmation
-    // sheet it opens are F3 (not built yet); until then a tap opens the app with no routing.
+    // `ADD` and a body tap carry `opensAppToForeground:true` — those are handled by
+    // `NotificationRouter` (`src/features/app-shell/notification-router.tsx`, mounted in
+    // `_layout.tsx`, §28.3), not here.
     if (data.actionIdentifier === 'SAVE') {
       await handleSave(payload.suggestionId);
     } else if (data.actionIdentifier === 'DISCARD') {

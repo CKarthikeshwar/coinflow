@@ -2602,6 +2602,13 @@ fixes the **column contract** and the `test-id` convention:
   `add:keypad-key-7`, `analytics:arc-gauge`, `confirm:primary`). Every interactive element named
   in §30 gets one; RNTL queries by it, Maestro asserts on it.
 - **Row shape:** `IMP-0xx | criterion | UI-0xx (or —) | component/service | test kind (unit / RNTL / Maestro / manual) | test id or file | status (Pending → Pass)`.
+- **Status contract (`SPEC/PLAN.md` §9.1 is the authority; this is the summary):** `Pass` means the
+  criterion is implemented **and** carries the test tier(s) §34.1/§34.2 call for at this feature's
+  scope — not "works when I tried it once." `Partial` is reserved for a named, bounded deferral
+  with an explicit trigger (a specific future feature or dependency that closes it) — it is
+  **not** a valid status for "the test wasn't written" or "not verified yet." A row stuck at
+  `Partial` with no trigger condition is a bug in the traceability entry itself: either finish it
+  or name what unblocks it.
 - **Seed rows** (from §13; all `status: Pending` until the build verifies):
 
 | IMP | Test kind | Where |

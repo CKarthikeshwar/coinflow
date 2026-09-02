@@ -1,10 +1,16 @@
 # CoinFlow — Traceability matrix
 
 `UI-0xx → IMP-0xx → component/service → test`, per `SPEC-implementation.md` §34.4. Maintained
-incrementally as each feature (`SPEC/PLAN.md` §9) lands — rows are added when a feature starts,
-`status` flips to Pass when its tests are green.
+incrementally as each feature (`SPEC/PLAN.md` §9, definition of done in §9.1) lands — rows are
+added when a feature starts, `status` flips to Pass when its tests are green.
 
 Row shape: `IMP-0xx | criterion | UI-0xx | component/service | test kind | test id / file | status`.
+
+**Status contract (`SPEC/PLAN.md` §9.1 / `SPEC-implementation.md` §34.4):** `Pass` = implemented +
+carries the test tier(s) its scope calls for. `Partial` = a *named, bounded* deferral with an
+explicit trigger ("closes when F8 lands") — never a stand-in for "didn't write the test" or "not
+verified yet." Every `Partial` row below predates this contract (see the audit at the bottom of
+this file) and needs a pass to either close it out or attach a real trigger.
 
 ## Cross-cutting fix — web bundling broke (§18.3)
 
@@ -286,9 +292,12 @@ used for Review Queue's dismiss (F11) and the transaction list's delete (F5).
 **Not yet built:** the Settings hub itself (§6.13/6.14) doesn't exist, so "Entry: Settings ›
 Categories" isn't reachable that way yet — only via the Category Picker's "Manage categories"
 link, which is sufficient for this pass since Settings is separate, not-yet-started work. Usage
-count per row (marked P2 in §6.11) isn't shown. Reordering (`reorderCategories` exists in the
-repo) has no drag-to-reorder UI. Navigating to Manage Categories from mid-Add/Confirm and coming
-back does not preserve that sheet's in-progress draft (it resets, same as reopening Add fresh) —
+count per row (marked P2 in §6.11) isn't shown. (`reorderCategories` in the repo is **not** a §6.11
+gap — re-reading §30.3, it's onboarding's category-review screen, F12, not started, that calls it
+on **Done**; §6.11's own Controls list has no reorder affordance at all. An earlier pass through
+this file miscategorized it as an F6 deferral — corrected here, see the 2026-09-03 audit's note.)
+Navigating to Manage Categories from mid-Add/Confirm and coming back does not preserve that
+sheet's in-progress draft (it resets, same as reopening Add fresh) —
 acceptable for how rarely that detour happens, not worth the added state-preservation complexity
 this pass.
 
@@ -383,3 +392,144 @@ flip isn't data entry the way typing an amount or picking a category is; it shou
 "discard changes?" prompt on Cancel/back even when it's a genuine, non-reverted change. Fixed by
 removing `direction`/`type` and `paymentMethod` from `add-sheet-draft.ts`'s `DIRTY_KEYS` entirely
 — only `amountMinor`, `categoryId`, `account`, `note`, `description` count toward `dirty` now.
+
+## Cross-cutting — closing the F2–F5 functional deferrals (2026-09-03)
+
+Following the audit below (§9.1's definition of done), the "Not yet built" items across F2–F5 that
+had no closing trigger were built out in one pass, each with the unit tests §9.1 point 2 calls for.
+
+**Notification routing (§28.3/§31.5/§31.6).** New `src/services/notifications/deep-link.ts` —
+`resolveNotificationTarget(data)`, pure, re-reads the Suggestion/Transaction by id rather than
+trusting the notification's own `data` (a `Suggestion` may have been confirmed/dismissed since the
+notification posted). New `src/features/app-shell/notification-router.tsx`, mounted in
+`_layout.tsx`, uses `Notifications.useLastNotificationResponse()` — the SDK 57 hook that covers
+both cold-start and a warm tap in one reactive value — rather than the spec's literal
+`getLastNotificationResponseAsync()` + `addNotificationResponseReceivedListener` pairing; same
+§31.6 routing table, simpler mechanism. `SAVE`/`DISCARD` never reach this component (they're
+`opensAppToForeground:false`, always handled headless by `NOTIFICATION_RESPONSE_TASK`) — it only
+acts on `ADD`/body-tap. 6 unit tests (`deep-link.test.ts`).
+
+**Edit sheet (§6.6/§30.8).** `transaction-sheet.tsx` gained a third `TransactionSheetMode`,
+`'edit'` — seeded from `getTransaction(id)` via a new `params.transactionId`, written through a new
+`writeEditedTransaction()` in `write-confirmed-transaction.ts` (`updateTransaction` +
+`upsertFromTransaction`, matching §30.8's "`updateTransaction` (+ `upsertFromTransaction`;
+`editedByUser=1`)" — an early pass at this file had skipped the rule upsert as "F8 isn't built,"
+which was wrong: the function already exists in `account-rules.ts`, unused until now).
+`transaction/[id].tsx` gained the bottom-anchored **Edit** button §6.8 always specified but that
+was never actually added (only the *behavior* was stubbed as a TODO; the button itself didn't
+exist), and an Uncategorized "Set category" control in the meta row (opens Edit rather than a
+standalone one-tap picker — documented simplification, no separate write path outside the normal
+draft/sheet system for a one-off). 8 new/updated unit tests in `write-confirmed-transaction.test.ts`.
+
+**Bug found while wiring Edit (own code, pre-existing, not introduced today):**
+`category-picker-sheet.tsx`'s `pick()` was hardcoded to `open('confirm', params)` regardless of
+which sheet opened the picker — so picking a category from the Add sheet would silently reopen it
+as Confirm (wrong title, wrong validation gate, `getSuggestion(undefined)` failing open). Fixed by
+passing `returnTo: mode` through `openSheet('categoryPicker', ...)` from every caller and having
+the picker reopen whichever sheet actually opened it.
+
+**Filter sheet (§6.9).** New `src/features/transactions/filter-sheet.tsx` (Category multi-select ·
+Type segmented · Payment method multi-select · date-range preset chips + Custom) and
+`filter-params.ts` (pure route-param ↔ query serialization, unit tested). Applied filter lives in
+`transactions.tsx`'s own route params (`filter-draft.ts`'s pre-existing header comment already
+called this out) via `router.setParams`; the query-side plumbing (`categoryIds`/`type`/`methods`/
+`from`/`to` in `useTransactionList`) already existed, unused, since F5's first pass. New shared
+`src/ui/chip.tsx` (toggle chip for the sheet, removable chip for Transactions' active-filter row) —
+justified as a real shared component since both files needed it, not spec's not-yet-built `Chip`
+catalog entry built speculatively. Date range "Custom" uses two plain `yyyy-MM-dd` text fields, not
+a calendar picker — no calendar component exists yet and no native date-picker package is
+installed (a new native module needs a dev-client rebuild, a separate decision). 5 unit tests
+(`filter-params.test.ts`).
+
+**Bug found while wiring Filter (own code, pre-existing):** `SheetHost`'s `dirty` computation fell
+through to `useAddSheetDraft`'s `dirty` for any sheet that wasn't the category editor — meaning the
+Filter sheet's swipe/scrim-tap-to-close could be silently disabled by a stale `dirty:true` left
+over from an unrelated Add/Confirm/Edit session, since nothing clears that flag just because a
+different sheet opened. Filter has no discard-guard of its own (worst case of an accidental close
+is re-picking the same filters), so it's now hardcoded `dirty:false`.
+
+**Account autocomplete (§6.5) + date/time editing.** Both added to `transaction-sheet.tsx`:
+`searchByPrefix` now backs a live dropdown under the Account field (each row shows the remembered
+category; picking pre-fills only the category, not note/method — a different, narrower trigger
+than F8's "known-rule" pre-fill on a detected suggestion). Date & time is now a tap-to-reveal pair
+of `yyyy-MM-dd`/`HH:mm` text fields — same mechanism as Filter's Custom range, not a calendar/clock
+picker, for the same reason (no picker component, no native date-picker dependency installed).
+
+**Success toast (§30.6/§30.7).** New `src/stores/toast.ts` (generalized version of `undo.ts`'s
+snackbar shape — message + one optional action + auto-hide timer) + `src/ui/toast.tsx` +
+`src/features/app-shell/toast-host.tsx`, mounted in `_layout.tsx`. Add/Confirm's `submit()` now
+shows "Added ₹… " with a **View** action that pushes `/transaction/[id]`, matching §30.6's
+`toast "Added … · View"`. Edit does not get this toast — §30.8 doesn't spec one for it.
+
+**Not a real gap, corrected instead of built:** "Drag-to-reorder categories" — see the Audit
+section below.
+
+All verified together: `npm run typecheck` clean, `npx eslint` clean on every touched file,
+`npm test` 161/161 passing (up from 143 at the start of this pass).
+
+## Audit — gaps against the definition of done (`SPEC/PLAN.md` §9.1), 2026-09-03
+
+Everything below predates §9.1 — F1 through F6 were built under the older, looser "run tests" loop.
+This is the one-time reconciliation pass the new contract requires: name every gap plainly, then
+either close it or attach a real trigger. Nothing here is new breakage; it's what was already
+quietly true, made visible. Grouped by kind, not by feature.
+
+### A. Test-tier debt (§9.1 point 2 — the specific thing that prompted this audit)
+
+No RNTL test exists for **any** screen or sheet built so far, except one:
+`suggestion-card.test.tsx` covers the card component, not the screen it lives in. Missing, per
+feature:
+
+- **F11** — `review-queue.tsx` itself (list rendering, known/new action set, Dismiss all).
+- **F3/F4** — `transaction-sheet.tsx` (both modes): validation states, discard-guard, edge-amount
+  gate, category-picker round-trip. This is the single highest-value gap — it's the sheet every
+  other sheet's bugs this session came out of, and it's the one component with zero automated
+  coverage of its actual rendered behavior.
+- **F5** — `transactions.tsx` (search, day-grouping, empty states) and `transaction/[id].tsx`
+  (detail view, delete confirm).
+- **F6** — `categories.tsx` and `category-editor-sheet.tsx` — directly relevant, since three of the
+  four bugs found this session (dead-zone chevron, dismiss/present race, missing `BottomSheetView`)
+  were exactly the class of bug an RNTL render/interaction test catches cheaply.
+
+No Maestro flow exists — `e2e/` doesn't exist as a directory. J2's dependency chain (F1, F2, F11,
+F3, F8) isn't fully closed yet (F8 not built), so under §9.1 point 2 this isn't overdue yet, but
+**J4 (manual add)'s chain — F4 — closed back when F4 shipped**, and its flow was never written.
+That one is overdue now, not a "someday."
+
+No direct repository-layer unit tests: `categories.ts`, `account-rules.ts`, `transactions.ts` are
+only exercised indirectly through UI/feature-layer tests. F6's own note calls this "consistent with
+the rest of `src/db/repositories/`" — true, but that consistency is the debt, not a justification.
+Several rows across F3–F6 are marked `Pass by construction — no dedicated test` (IMP-006, IMP-008,
+IMP-010, IMP-017, IMP-019) — real behavior, correctly reasoned about, never actually asserted by a
+test that would fail if the logic regressed.
+
+### B. Functional deferrals still open (not test gaps — actual behavior not built)
+
+**Closed out same day (2026-09-03), each per §9.1 — see the feature sections below for detail:**
+notification `Add`/body-tap + Review-Queue group-summary tap routing (new `deep-link.ts` +
+`notification-router.tsx`) · Edit sheet (Transaction Details' Edit button + Uncategorized "Set
+category," both wired through the existing `transaction-sheet.tsx` as a third `mode`) · Filter
+sheet (new `filter-sheet.tsx` + `filter-params.ts`, Transactions' Filter button + removable chip
+row) · account autocomplete (`searchByPrefix` wired to a dropdown) · date/time editing (two text
+fields, same mechanism as Filter's custom range) · success toast (new `toast.ts`/`toast.tsx` +
+`ToastHost`, "Added ₹… · View").
+
+**Not a real gap — corrected, not closed:** "Drag-to-reorder categories (F6)" was misattributed in
+this file's earlier F6 section. `reorderCategories` belongs to F12's onboarding category-review
+screen (§30.3), not §6.11's Categories management screen, which has no reorder affordance in the
+UX spec at all. Nothing to build here until F12.
+
+**Still open:**
+
+- Native OS-level notification grouping (F2) — not a deferral, a documented library limitation
+  (`expo-notifications@57.0.16` has no group-key support without native code beyond D24's "SMS
+  bridge only" surface). Correctly documented already; listed here only so it isn't confused with
+  a genuine deferral.
+
+### C. What this doesn't mean
+
+Not every "Partial" above needs fixing *right now* — §9.1 point 3 allows deferral. What it doesn't
+allow is what several of these had: no trigger, so they never come back up. The fix this audit
+makes is informational (naming things plainly); the actual close-out — writing the RNTL tests, the
+J4 Maestro flow, deciding Edit/Filter's place in the plan — is follow-up work, prioritized with the
+user, not implied by this list existing.

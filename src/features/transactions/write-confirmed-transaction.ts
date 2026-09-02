@@ -11,6 +11,8 @@ import { eq } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 
 import { db } from '@/db/client';
+import { upsertFromTransaction } from '@/db/repositories/account-rules';
+import { updateTransaction } from '@/db/repositories/transactions';
 import { accountRules, suggestions, transactions } from '@/db/schema';
 import { normalizeAccount } from '@/domain/normalize';
 import type { AddSheetDraft } from '@/stores/add-sheet-draft';
@@ -100,6 +102,47 @@ export function writeConfirmedTransaction(draft: AddSheetDraft, smsRef: SmsRef):
       }
     }
   });
+
+  return { transactionId };
+}
+
+/**
+ * §6.6/§30.8 Edit — identical fields to Add, but updates the existing row (`draft.sourceId`, the
+ * transaction id) instead of inserting a new one, then upserts the `AccountRule` the same as
+ * Add/Confirm (§30.8: "`updateTransaction` (+ `upsertFromTransaction`; `editedByUser=1`)").
+ * `updateTransaction` already carries the row-update logic (income-null category, `editedByUser`,
+ * `searchText`, `normalizedAccountKey`), so this is a thin draft → patch mapping plus the learn
+ * step `accountRuleRepo.upsertFromTransaction` already implements.
+ */
+export function writeEditedTransaction(draft: AddSheetDraft): { transactionId: string } {
+  const transactionId = draft.sourceId;
+  if (!transactionId) throw new Error('writeEditedTransaction: draft.sourceId (transaction id) is required');
+
+  const account = draft.account.trim() || null;
+  const note = draft.note.trim() || null;
+  const categoryId = draft.direction === 'credit' ? null : draft.categoryId; // IMP-011
+
+  updateTransaction(transactionId, {
+    amountMinor: draft.amountMinor,
+    direction: draft.direction,
+    type: draft.type,
+    categoryId,
+    paymentMethod: draft.paymentMethod,
+    account,
+    note,
+    description: draft.description.trim() || null,
+    occurredAt: draft.occurredAt,
+  });
+
+  if (account) {
+    upsertFromTransaction({
+      account,
+      categoryId,
+      categoryIsUncategorized: categoryId === null,
+      note,
+      paymentMethod: draft.paymentMethod,
+    });
+  }
 
   return { transactionId };
 }

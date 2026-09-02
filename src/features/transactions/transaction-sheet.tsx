@@ -4,30 +4,38 @@
  * the discard-guard; they only differ in how the draft is seeded and how the amount gate
  * behaves on submit. Kept as one file rather than duplicating ~200 lines across two.
  *
+ * Date & time is editable via two plain `yyyy-MM-dd`/`HH:mm` text fields revealed on tap, not a
+ * calendar/clock picker — same simplification as the Filter sheet's custom date range (no
+ * calendar component exists yet, and no native date-picker package is installed).
+ *
+ * Account autocomplete (`searchByPrefix`) shows past accounts as you type; picking one pre-fills
+ * its remembered category (§6.5) — not note/payment method, which is F8's broader "known-rule"
+ * pre-fill on a *detected* suggestion (a different trigger from typing here).
+ *
  * Deferred for both (documented, not silent — see `SPEC/traceability.md`):
- *  - Date & time is shown, not editable — no date/time picker built yet.
- *  - Account is a plain text field, not the "matching past accounts" autocomplete
- *    (`searchByPrefix` exists in the repo but isn't wired to a dropdown here).
  *  - The amount block doesn't collapse to a sticky summary bar on scroll, and the numeric
  *    keypad doesn't swap for the OS keyboard when a text field is focused — both stay docked;
  *    text fields simply also raise the OS keyboard on top when focused.
  *  - Payment method is a `SegmentedControl` row rather than its own picker sheet.
- *  - No success toast — the sheet just closes (§30.7 mentions a toast; `ui/toast.tsx` isn't
- *    built yet).
  */
 
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Colors, Spacing } from '@/constants/theme';
-import { getAccountRule } from '@/db/repositories/account-rules';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { getAccountRule, searchByPrefix } from '@/db/repositories/account-rules';
 import { useCategories } from '@/db/repositories/categories';
 import { getSuggestion } from '@/db/repositories/suggestions';
+import { getTransaction } from '@/db/repositories/transactions';
+import type { AccountRule } from '@/db/schema';
 import { resolveCategoryForAccount } from '@/domain/categorize';
+import { formatMoney } from '@/domain/format/money';
 import { useAddSheetDraft, useKeypad, useSheetRegistry } from '@/stores';
 import type { KeypadKey } from '@/stores/keypad';
+import { useToast } from '@/stores/toast';
 
 import { AmountInput } from '@/ui/amount-input';
 import { Button } from '@/ui/button';
@@ -39,7 +47,10 @@ import { SelectorRow } from '@/ui/selector-row';
 import { TextField } from '@/ui/text-field';
 import { ThemedText } from '@/ui/themed-text';
 
-import { writeConfirmedTransaction, type SmsRef } from './write-confirmed-transaction';
+import { writeConfirmedTransaction, writeEditedTransaction, type SmsRef } from './write-confirmed-transaction';
+
+const DATE_FMT = 'yyyy-MM-dd';
+const TIME_FMT = 'HH:mm';
 
 const PAYMENT_METHOD_OPTIONS = [
   { value: 'upi', label: 'UPI' },
@@ -52,12 +63,21 @@ const PAYMENT_METHOD_OPTIONS = [
 /** ₹10,00,000 in paise — §6.4 edge threshold (Confirm mode only; Add just disables the button). */
 const MAX_SANE_AMOUNT_MINOR = 10_00_000_00;
 
-const HEADER_TITLE = { confirm: 'Review transaction', add: 'Add transaction' } as const;
+const HEADER_TITLE = {
+  confirm: 'Review transaction',
+  add: 'Add transaction',
+  edit: 'Edit transaction',
+} as const;
 
-export type TransactionSheetMode = 'confirm' | 'add';
+const PRIMARY_LABEL = { confirm: 'Add', add: 'Add', edit: 'Save' } as const;
+
+export type TransactionSheetMode = 'confirm' | 'add' | 'edit';
 
 export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
-  const params = useSheetRegistry((s) => s.params) as { suggestionId?: string };
+  const params = useSheetRegistry((s) => s.params) as {
+    suggestionId?: string;
+    transactionId?: string;
+  };
   const suggestionId = params.suggestionId;
   const close = useSheetRegistry((s) => s.close);
   const open = useSheetRegistry((s) => s.open);
@@ -70,6 +90,25 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   const smsRefRef = useRef<SmsRef>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showEdgeAmountConfirm, setShowEdgeAmountConfirm] = useState(false);
+
+  // Account autocomplete (§6.5) — `pickedAccount` tracks the last value chosen from the list so
+  // it doesn't immediately reopen showing the same one-item match right after a pick; typing
+  // again (a real edit) clears it.
+  const [pickedAccount, setPickedAccount] = useState<string | null>(null);
+  const accountSuggestions: AccountRule[] =
+    draft.account.trim() && draft.account !== pickedAccount ? searchByPrefix(draft.account) : [];
+
+  // Date & time editing — closed by default; opens to two text fields seeded from the current
+  // `occurredAt` when tapped.
+  const [editingDate, setEditingDate] = useState(false);
+  const [dateText, setDateText] = useState('');
+  const [timeText, setTimeText] = useState('');
+  // `Date.now()` can't be called inline during render (React Compiler purity rule) — a lazy
+  // `useState` initializer is the sanctioned one-time-impure-read escape hatch, so "now" here
+  // means "whenever this sheet instance was mounted," stable for its lifetime. Good enough for
+  // an edge-case helper that doesn't need to react to the clock ticking while the sheet is open.
+  const [openedAtMs] = useState(() => Date.now());
+  const isFutureDate = draft.occurredAt > openedAtMs;
 
   useEffect(() => {
     if (mode === 'add') {
@@ -86,6 +125,32 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
         occurredAt: Date.now(),
       });
       useKeypad.getState().reset();
+      smsRefRef.current = null;
+      return;
+    }
+
+    if (mode === 'edit') {
+      const transactionId = params.transactionId;
+      if (!transactionId) return;
+      const txn = getTransaction(transactionId);
+      if (!txn) {
+        close();
+        return;
+      }
+      useAddSheetDraft.getState().open({
+        mode: 'edit',
+        sourceId: txn.id,
+        amountMinor: txn.amountMinor,
+        direction: txn.direction,
+        type: txn.type,
+        categoryId: txn.categoryId,
+        paymentMethod: txn.paymentMethod,
+        account: txn.account ?? '',
+        note: txn.note ?? '',
+        description: txn.description ?? '',
+        occurredAt: txn.occurredAt,
+      });
+      useKeypad.getState().setFromMinor(txn.amountMinor);
       smsRefRef.current = null;
       return;
     }
@@ -120,11 +185,27 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
       receivedAt: suggestion.smsReceivedAt,
       dedupeKey: suggestion.dedupeKey,
     };
-  }, [mode, suggestionId, close]);
+  }, [mode, suggestionId, params.transactionId, close]);
 
   const handleKey = (key: KeypadKey) => {
     useKeypad.getState().press(key);
     draft.patch({ amountMinor: useKeypad.getState().amountMinor });
+  };
+
+  const pickAccountSuggestion = (rule: AccountRule) => {
+    setPickedAccount(rule.displayAccount);
+    draft.patch({ account: rule.displayAccount, categoryId: rule.categoryId });
+  };
+
+  const openDateEdit = () => {
+    setDateText(format(draft.occurredAt, DATE_FMT));
+    setTimeText(format(draft.occurredAt, TIME_FMT));
+    setEditingDate(true);
+  };
+
+  const applyDateTime = (nextDateText: string, nextTimeText: string) => {
+    const parsed = parse(`${nextDateText} ${nextTimeText}`, `${DATE_FMT} ${TIME_FMT}`, new Date());
+    if (!Number.isNaN(parsed.getTime())) draft.patch({ occurredAt: parsed.getTime() });
   };
 
   const categoryName =
@@ -133,7 +214,9 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
       : (categories ?? []).find((c) => c.id === draft.categoryId)?.name ?? 'Uncategorized';
 
   const isEdgeAmount = draft.amountMinor === 0 || draft.amountMinor > MAX_SANE_AMOUNT_MINOR;
-  const addDisabled = mode === 'add' && draft.amountMinor <= 0;
+  // Confirm allows ₹0 through its own edge-amount extra-confirm gate below; Add and Edit both
+  // just stay disabled until there's a real amount (§6.5/§6.6 — Edit is "identical to Add").
+  const addDisabled = mode !== 'confirm' && draft.amountMinor <= 0;
 
   const handleCancel = useCallback(() => {
     if (draft.dirty) setShowDiscardConfirm(true);
@@ -157,7 +240,18 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   const submit = () => {
     draft.setSubmitting(true);
     try {
-      writeConfirmedTransaction(useAddSheetDraft.getState(), smsRefRef.current);
+      const current = useAddSheetDraft.getState();
+      if (mode === 'edit') {
+        writeEditedTransaction(current);
+      } else {
+        // §30.6/§30.7 — Add/Confirm's save toast; Edit's own spec (§30.8) doesn't have one.
+        const { transactionId } = writeConfirmedTransaction(current, smsRefRef.current);
+        const signedMinor = current.direction === 'credit' ? current.amountMinor : -current.amountMinor;
+        useToast.getState().show(`Added ${formatMoney(signedMinor)}`, {
+          label: 'View',
+          onPress: () => router.push(`/transaction/${transactionId}`),
+        });
+      }
       draft.reset();
       close();
     } catch {
@@ -199,7 +293,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
               ? draft.amountMinor === 0
                 ? 'Amount is ₹0'
                 : "That's a large amount"
-              : mode === 'add' && draft.amountMinor === 0
+              : mode !== 'confirm' && draft.amountMinor === 0
                 ? 'Enter an amount'
                 : undefined
           }
@@ -221,7 +315,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
             icon="tag"
             label="Category"
             value={categoryName}
-            onPress={() => open('categoryPicker', params)}
+            onPress={() => open('categoryPicker', { ...params, returnTo: mode })}
           />
         ) : null}
 
@@ -236,17 +330,67 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           />
         </View>
 
-        <View style={styles.staticRow}>
-          <Icon name="calendar" size={18} color="text3" />
-          <ThemedText type="body" themeColor="text" style={styles.staticLabel}>
-            Date & time
+        <Pressable accessibilityRole="button" onPress={editingDate ? () => setEditingDate(false) : openDateEdit}>
+          <View style={styles.staticRow}>
+            <Icon name="calendar" size={18} color="text3" />
+            <ThemedText type="body" themeColor="text" style={styles.staticLabel}>
+              Date & time
+            </ThemedText>
+            <ThemedText type="body" themeColor="text3">
+              {format(new Date(draft.occurredAt), 'd MMM · h:mm a')}
+            </ThemedText>
+          </View>
+        </Pressable>
+        {editingDate ? (
+          <View style={styles.dateEditRow}>
+            <TextField
+              value={dateText}
+              onChangeText={(t) => {
+                setDateText(t);
+                applyDateTime(t, timeText);
+              }}
+              placeholder="yyyy-mm-dd"
+            />
+            <TextField
+              value={timeText}
+              onChangeText={(t) => {
+                setTimeText(t);
+                applyDateTime(dateText, t);
+              }}
+              placeholder="hh:mm"
+            />
+          </View>
+        ) : null}
+        {isFutureDate ? (
+          <ThemedText type="caption" themeColor="text3">
+            Scheduled?
           </ThemedText>
-          <ThemedText type="body" themeColor="text3">
-            {format(new Date(draft.occurredAt), 'd MMM · h:mm a')}
-          </ThemedText>
-        </View>
+        ) : null}
 
-        <TextField value={draft.account} onChangeText={(account) => draft.patch({ account })} placeholder="Account" />
+        <View>
+          <TextField value={draft.account} onChangeText={(account) => draft.patch({ account })} placeholder="Account" />
+          {accountSuggestions.length > 0 ? (
+            <View style={styles.suggestionList}>
+              {accountSuggestions.map((rule) => (
+                <Pressable
+                  key={rule.normalizedKey}
+                  accessibilityRole="button"
+                  onPress={() => pickAccountSuggestion(rule)}
+                  style={styles.suggestionRow}
+                >
+                  <ThemedText type="body" themeColor="text">
+                    {rule.displayAccount}
+                  </ThemedText>
+                  <ThemedText type="caption" themeColor="text3">
+                    {rule.categoryId
+                      ? ((categories ?? []).find((c) => c.id === rule.categoryId)?.name ?? 'Category')
+                      : 'Uncategorized'}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
         <TextField value={draft.note} onChangeText={(note) => draft.patch({ note })} placeholder="Note" />
         <TextField
           value={draft.description}
@@ -270,7 +414,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           loading={draft.submitting}
           style={styles.primaryButton}
         >
-          Add
+          {PRIMARY_LABEL[mode]}
         </Button>
       </View>
 
@@ -318,6 +462,22 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   staticLabel: { flex: 1 },
+  dateEditRow: { flexDirection: 'row', gap: Spacing.two },
+  suggestionList: {
+    marginTop: Spacing.one,
+    borderRadius: Radius.control,
+    backgroundColor: Colors.dark.surface2,
+    overflow: 'hidden',
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 44,
+    paddingHorizontal: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.dark.hairline,
+  },
   error: { paddingHorizontal: Spacing.one },
   primaryRow: {
     paddingHorizontal: Spacing.three,

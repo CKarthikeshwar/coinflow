@@ -1,8 +1,10 @@
 import { getTableName, type Table } from 'drizzle-orm';
 
+import { upsertFromTransaction } from '@/db/repositories/account-rules';
+import { updateTransaction } from '@/db/repositories/transactions';
 import type { AddSheetDraft } from '@/stores/add-sheet-draft';
 
-import { writeConfirmedTransaction } from './write-confirmed-transaction';
+import { writeConfirmedTransaction, writeEditedTransaction } from './write-confirmed-transaction';
 
 const mockInsertedRows: Record<string, unknown>[] = [];
 const mockUpdates: { table: string; values: Record<string, unknown> }[] = [];
@@ -38,6 +40,11 @@ jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'new-txn-id') }));
 jest.mock('@/db/client', () => ({
   db: { transaction: jest.fn((cb: (tx: unknown) => void) => cb(mockMakeTx())) },
 }));
+jest.mock('@/db/repositories/transactions', () => ({ updateTransaction: jest.fn() }));
+jest.mock('@/db/repositories/account-rules', () => ({ upsertFromTransaction: jest.fn() }));
+
+const mockUpdateTransaction = updateTransaction as jest.Mock;
+const mockUpsertFromTransaction = upsertFromTransaction as jest.Mock;
 
 function draft(overrides: Partial<AddSheetDraft> = {}): AddSheetDraft {
   return {
@@ -63,6 +70,8 @@ beforeEach(() => {
   mockInsertedRows.length = 0;
   mockUpdates.length = 0;
   mockExistingRule.current = null;
+  mockUpdateTransaction.mockReset();
+  mockUpsertFromTransaction.mockReset();
 });
 
 describe('writeConfirmedTransaction', () => {
@@ -134,5 +143,69 @@ describe('writeConfirmedTransaction', () => {
     writeConfirmedTransaction(draft({ account: '' }), null);
     expect(mockInsertedRows.some((r) => r.__table === 'account_rule')).toBe(false);
     expect(mockUpdates.some((u) => u.table === 'account_rule')).toBe(false);
+  });
+});
+
+describe('writeEditedTransaction', () => {
+  it('updates the existing transaction by draft.sourceId with the draft fields', () => {
+    const result = writeEditedTransaction(
+      draft({ mode: 'edit', sourceId: 'txn-42', account: 'Zomato', note: 'Dinner' }),
+    );
+    expect(result).toEqual({ transactionId: 'txn-42' });
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      'txn-42',
+      expect.objectContaining({
+        amountMinor: 45000,
+        direction: 'debit',
+        type: 'expense',
+        categoryId: 'cat-food',
+        account: 'Zomato',
+        note: 'Dinner',
+      }),
+    );
+  });
+
+  it('never inserts a new transaction or touches the suggestion table', () => {
+    writeEditedTransaction(draft({ mode: 'edit', sourceId: 'txn-42' }));
+    expect(mockInsertedRows).toHaveLength(0);
+    expect(mockUpdates.some((u) => u.table === 'suggestion')).toBe(false);
+  });
+
+  it('throws rather than writing blind when sourceId is missing', () => {
+    expect(() => writeEditedTransaction(draft({ mode: 'edit', sourceId: undefined }))).toThrow();
+    expect(mockUpdateTransaction).not.toHaveBeenCalled();
+    expect(mockUpsertFromTransaction).not.toHaveBeenCalled();
+  });
+
+  it('upserts the AccountRule (§30.8) when the account is non-blank', () => {
+    writeEditedTransaction(draft({ mode: 'edit', sourceId: 'txn-42', account: 'Zomato', categoryId: 'cat-food' }));
+    expect(mockUpsertFromTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ account: 'Zomato', categoryId: 'cat-food', categoryIsUncategorized: false }),
+    );
+  });
+
+  it('does not upsert an AccountRule when the account field is blank', () => {
+    writeEditedTransaction(draft({ mode: 'edit', sourceId: 'txn-42', account: '' }));
+    expect(mockUpsertFromTransaction).not.toHaveBeenCalled();
+  });
+
+  it('forces categoryId null for income, both in the update and the rule upsert', () => {
+    writeEditedTransaction(
+      draft({ mode: 'edit', sourceId: 'txn-42', direction: 'credit', type: 'income', account: 'Employer' }),
+    );
+    expect(mockUpdateTransaction).toHaveBeenCalledWith('txn-42', expect.objectContaining({ categoryId: null }));
+    expect(mockUpsertFromTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryId: null, categoryIsUncategorized: true }),
+    );
+  });
+
+  it('blanks account/note/description to null rather than storing empty strings', () => {
+    writeEditedTransaction(
+      draft({ mode: 'edit', sourceId: 'txn-42', account: '  ', note: '  ', description: '  ' }),
+    );
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      'txn-42',
+      expect.objectContaining({ account: null, note: null, description: null }),
+    );
   });
 });

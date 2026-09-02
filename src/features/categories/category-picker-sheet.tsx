@@ -11,6 +11,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import { useCategories } from '@/db/repositories/categories';
 import { useAddSheetDraft, useSheetRegistry } from '@/stores';
+import type { SheetName } from '@/stores/sheet-registry';
 
 import { Icon, type IconName } from '@/ui/icon';
 import { ThemedText } from '@/ui/themed-text';
@@ -21,11 +22,15 @@ export function CategoryPickerSheet() {
   const patch = useAddSheetDraft((s) => s.patch);
   const open = useSheetRegistry((s) => s.open);
   const close = useSheetRegistry((s) => s.close);
-  const params = useSheetRegistry((s) => s.params);
+  const params = useSheetRegistry((s) => s.params) as { returnTo?: SheetName };
 
+  // Reopens whichever sheet actually opened the picker (Add/Confirm/Edit all pass their own
+  // `mode` through as `returnTo`) — not hardcoded to Confirm, which used to silently turn an Add
+  // or Edit sheet into a Confirm sheet (wrong title, wrong validation gate) the moment a category
+  // was picked. Falls back to `add` only for the unreachable case of a missing `returnTo`.
   const pick = (id: string | null) => {
     patch({ categoryId: id });
-    open('confirm', params);
+    open(params.returnTo ?? 'add', params);
   };
 
   const manageCategories = () => {

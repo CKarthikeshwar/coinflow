@@ -2,11 +2,12 @@
  * Transaction Details — SPEC-UI-UX.md §6.8, SPEC-implementation.md §30.10. Part of F5 ("Open a
  * row → Details").
  *
+ * Edit (bottom-anchored primary button) opens the Edit sheet (§6.6), pre-filled from this row.
+ * The Uncategorized "Set category" control (meta row) also opens the Edit sheet rather than a
+ * standalone one-tap category picker — same underlying capability, documented simplification (no
+ * separate write path outside the normal draft/sheet system for what's otherwise a one-off).
+ *
  * Deferred for this pass (documented, not silent — see `SPEC/traceability.md`):
- *  - **Edit** is a TODO no-op — the Edit sheet (§30.8, `EditSheet`) isn't built yet.
- *  - The Uncategorized "Set category" inline control isn't built either — same reason (it's the
- *    same category-picker-for-an-existing-row capability Edit would need); shows plain
- *    "Uncategorized" text instead.
  *  - Overflow is a direct-tap Delete icon, not a dropdown menu — there's only one overflow
  *    action right now, same simplification as Review Queue's card overflow.
  */
@@ -17,13 +18,15 @@ import { format } from 'date-fns';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { getCategoryMap } from '@/db/repositories/categories';
 import { softDeleteTransaction, useTransaction } from '@/db/repositories/transactions';
 import type { PaymentMethod } from '@/db/schema';
 import { formatMoney } from '@/domain/format/money';
+import { useSheetRegistry } from '@/stores';
 import { useUndo } from '@/stores/undo';
 
+import { Button } from '@/ui/button';
 import { ConfirmDialog } from '@/ui/confirm-dialog';
 import { Icon } from '@/ui/icon';
 import { ThemedText } from '@/ui/themed-text';
@@ -61,6 +64,9 @@ export default function TransactionDetailsScreen() {
     useUndo.getState().show(txn.id);
   };
 
+  const openEdit = () => useSheetRegistry.getState().open('edit', { transactionId: txn.id });
+  const isUncategorized = txn.type !== 'income' && !category;
+
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
@@ -90,9 +96,17 @@ export default function TransactionDetailsScreen() {
           <ThemedText type="label" themeColor="text3">
             ·
           </ThemedText>
-          <ThemedText type="label" themeColor="text3">
-            {txn.type === 'income' ? 'Income' : (category?.name ?? 'Uncategorized')}
-          </ThemedText>
+          {isUncategorized ? (
+            <Pressable accessibilityRole="button" onPress={openEdit} style={styles.setCategoryTap}>
+              <ThemedText type="label" themeColor="text" style={styles.setCategoryLabel}>
+                Set category
+              </ThemedText>
+            </Pressable>
+          ) : (
+            <ThemedText type="label" themeColor="text3">
+              {txn.type === 'income' ? 'Income' : (category?.name ?? 'Uncategorized')}
+            </ThemedText>
+          )}
           {txn.paymentMethod ? (
             <>
               <ThemedText type="label" themeColor="text3">
@@ -123,6 +137,12 @@ export default function TransactionDetailsScreen() {
             </ThemedText>
           </View>
         ) : null}
+      </View>
+
+      <View style={styles.footer}>
+        <Button onPress={openEdit} style={styles.editButton}>
+          Edit
+        </Button>
       </View>
 
       <ConfirmDialog
@@ -162,7 +182,7 @@ const styles = StyleSheet.create({
   headerSpacer: { flex: 1 },
   backTap: { width: 44, height: 44, marginLeft: -Spacing.two, alignItems: 'center', justifyContent: 'center' },
   overflowTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  content: { paddingHorizontal: Spacing.four, gap: Spacing.two },
+  content: { flex: 1, paddingHorizontal: Spacing.four, gap: Spacing.two },
   amount: { textAlign: 'center', marginBottom: Spacing.two },
   metaRow: {
     flexDirection: 'row',
@@ -178,4 +198,13 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     marginTop: Spacing.two,
   },
+  setCategoryTap: { paddingVertical: 2 },
+  setCategoryLabel: { textDecorationLine: 'underline', textDecorationStyle: 'dashed' },
+  footer: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.dark.hairline,
+  },
+  editButton: { width: '100%' },
 });

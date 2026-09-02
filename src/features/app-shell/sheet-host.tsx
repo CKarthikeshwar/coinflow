@@ -2,9 +2,9 @@
  * `SheetHost` — SPEC-implementation.md §28.2 (D25). One `BottomSheetModal`, mounted once at
  * the app root, that switches its child on `useSheetRegistry().current`.
  *
- * Wires `'confirm'`, `'add'`, `'categoryPicker'` (F3/F4) and `'createCategory'`/`'editCategory'`
- * (F6, both routed to the one mode-aware `CategoryEditorSheet`). `'edit'`/`'filter'` still render
- * nothing — their own features build the bodies later.
+ * Wires `'confirm'`, `'add'`, `'edit'` (all three routed to the one mode-aware
+ * `TransactionSheetBody`), `'categoryPicker'` (F3/F4), `'createCategory'`/`'editCategory'` (F6,
+ * both routed to the one mode-aware `CategoryEditorSheet`), and `'filter'` (F5, §6.9).
  *
  * V-6 discard-guard: rather than intercepting the swipe-down/scrim-tap gesture mid-flight (hard
  * to do cleanly with `@gorhom`'s gesture pipeline), this **disables** pan-down-to-close and
@@ -48,6 +48,7 @@ import { useAddSheetDraft, useCategoryDraft, useSheetRegistry } from '@/stores';
 
 import { CategoryEditorSheet } from '@/features/categories/category-editor-sheet';
 import { CategoryPickerSheet } from '@/features/categories/category-picker-sheet';
+import { FilterSheet } from '@/features/transactions/filter-sheet';
 import { TransactionSheetBody } from '@/features/transactions/transaction-sheet';
 
 // SPEC-UI-UX.md §3.5 — sheet slide-up/dismiss is the `slow` (320ms) token; @gorhom's Android
@@ -73,7 +74,12 @@ export function SheetHost() {
   const addSheetDirty = useAddSheetDraft((s) => s.dirty);
   const categoryDirty = useCategoryDraft((s) => s.dirty);
   const isCategoryEditor = current === 'createCategory' || current === 'editCategory';
-  const dirty = isCategoryEditor ? categoryDirty : addSheetDirty;
+  // `filter` shares neither draft store — falling through to `addSheetDirty` here used to mean
+  // the Filter sheet's swipe/scrim-tap-to-close could be disabled by a stale `dirty:true` left
+  // over from an unrelated Add/Confirm/Edit session, since that flag isn't cleared just because
+  // a different sheet opened. Filter has no discard-guard of its own (worst case of an accidental
+  // close is re-picking the same filters), so it's never dirty.
+  const dirty = isCategoryEditor ? categoryDirty : current === 'filter' ? false : addSheetDirty;
   const hasPresented = useRef(false);
   const dismissing = useRef(false);
 
@@ -127,7 +133,8 @@ export function SheetHost() {
   };
 
   const sizing = useMemo(() => {
-    if (current === 'confirm' || current === 'add') return { snapPoints: ['92%'], enableDynamicSizing: false };
+    if (current === 'confirm' || current === 'add' || current === 'edit')
+      return { snapPoints: ['92%'], enableDynamicSizing: false };
     return { snapPoints: undefined, enableDynamicSizing: true };
   }, [current]);
 
@@ -145,8 +152,10 @@ export function SheetHost() {
     >
       {current === 'confirm' ? <TransactionSheetBody mode="confirm" /> : null}
       {current === 'add' ? <TransactionSheetBody mode="add" /> : null}
+      {current === 'edit' ? <TransactionSheetBody mode="edit" /> : null}
       {current === 'categoryPicker' ? <CategoryPickerSheet /> : null}
       {isCategoryEditor ? <CategoryEditorSheet /> : null}
+      {current === 'filter' ? <FilterSheet /> : null}
     </BottomSheetModal>
   );
 }

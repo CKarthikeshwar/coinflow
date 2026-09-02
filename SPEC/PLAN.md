@@ -255,8 +255,46 @@ Then write `SPEC-implementation.md` with sections: Technology Stack, Architectur
 Once both specs exist:
 
 1. Give Claude Code access to `SPEC/idea.md`, `SPEC-UI-UX.md`, and `SPEC-implementation.md` as the source of truth. Don't invent product behavior that conflicts with the UX spec, or architecture that conflicts with the implementation spec. Ambiguity → stop and ask.
-2. Implement **incrementally, one feature at a time** — never "build the entire app." For each feature: read the relevant spec section → implement → run tests → run the app → compare against the approved prototype → verify acceptance criteria → fix issues → mark the requirement complete. A feature isn't done because it compiles.
+2. Implement **incrementally, one feature at a time** — never "build the entire app." For each feature: read the relevant spec section → implement → write the tests §9.1 calls for → run tests → run the app → compare against the approved prototype → verify acceptance criteria against §9.1's bar → fix issues → mark the requirement complete. A feature isn't done because it compiles, and it isn't done because a human clicked through it once either.
 3. Maintain traceability: `UI-00x` (UX requirement) → `IMP-00x` (implementation requirement) → component/service → test. This keeps requirements from silently disappearing during implementation.
+
+### 9.1 Definition of done (per feature) — no speed-running past this
+
+Feature velocity does not substitute for completeness. Writing the test, covering the edge case,
+or wiring the real entry point **is** part of implementing the feature — not a follow-up to get to
+later. Before a feature's `SPEC/traceability.md` rows can show `Pass`, all of the following hold —
+or the gap is named as an explicit, bounded deferral (point 3), never silently skipped because the
+next feature was more interesting:
+
+1. **Behavior matches spec.** Every `IMP-0xx` criterion in the feature's `SPEC-implementation.md`
+   section is implemented as written, or the deviation is logged as a **simplification**
+   (still spec-compliant in outcome, with the "why" written down) — not a silent shortcut.
+2. **Tests at the tiers `SPEC-implementation.md` §34 defines, written as part of this pass, not
+   left "owed":**
+   - Unit tests for any new pure logic (`src/domain`, business-logic branches in repos/services) —
+     §34.1.
+   - An RNTL test for every new screen/sheet/major component this feature adds or materially
+     changes, covering at minimum the primary interaction and the states §34.2 lists for it
+     (skeleton/empty/error where applicable, validation, discard-guard). "No RNTL test of the
+     screen itself" is not an acceptable steady state for a feature marked done.
+   - A Maestro flow is **not** required per feature — a J-flow usually spans several features — but
+     the moment the *last* feature in a J-flow's dependency chain lands, that flow's `.yaml` is
+     written before that feature is marked done, not deferred again.
+3. **Deferrals are explicit and bounded, never vague.** If something genuinely can't be finished in
+   this feature's pass — normally because it depends on a feature not built yet — say so precisely
+   in the traceability row / section note: what's deferred, the actual blocking dependency (not
+   "ran out of time"), and the trigger that closes it ("becomes required when F8 lands," not "not
+   yet built" with nothing else). A deferral with no trigger is scope silently dropped — don't
+   write one; either fix it now or name what unblocks it.
+4. **Manual on-device findings get automated before the feature is marked done**, wherever the bug
+   is reproducible outside real SMS/OS timing (i.e. anything that isn't a genuine device/OS-only
+   concern — see §34.5's "not automated in V1" list for what legitimately stays manual). A bug
+   found by clicking through the app gets a regression test in the same pass that fixes it, not a
+   note that it was fixed once.
+
+This is the concrete bar `status: Partial` in `SPEC/traceability.md` is checked against — see its
+header. "Run tests" in step 2 above means: write what this feature's own scope calls for per this
+section, then run it — not just re-run whatever already happened to exist.
 
 ---
 
@@ -308,9 +346,12 @@ Implementation (§9) is the current track. Do these in order:
    longer runs the app from here.
 5. **Features, one at a time, in priority order** (§9): P0 first — F1 detection → F2 notification
    → F11 review queue → F3 confirmation → F4 manual add → F5 list; then P1 (F6–F9, F12). For each:
-   read the spec section → implement → run tests → run the app → compare against
-   `design-prototype/01-midnight/` → verify its `IMP-0xx` + `UI-0xx` → mark done. Keep a
-   `SPEC/traceability.md` grid (`UI-0xx → IMP-0xx → component → test`, per §34.4) current as you go.
+   read the spec section → implement → write the tests §9.1 calls for → run tests → run the app →
+   compare against `design-prototype/01-midnight/` → verify its `IMP-0xx` + `UI-0xx` against §9.1's
+   definition of done → mark done. Keep a `SPEC/traceability.md` grid (`UI-0xx → IMP-0xx →
+   component → test`, per §34.4) current as you go — including a periodic pass back over already
+   "done" features to close out any deferral whose trigger condition has since been met (e.g. a
+   feature that unblocks a notification deep link, or completes a Maestro flow's dependency chain).
 6. **Pre-release.** The §11 final quality review; the D18 ~2-week field test on real OEM
    battery-killer devices (dropped-event rate + cold-start latency — decides whether the §17.7
    native-notification contingency gets built); the `SPEC-implementation.md` §35.7 checklist.

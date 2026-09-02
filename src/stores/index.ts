@@ -9,4 +9,5 @@ export * from './keypad';
 export * from './filter-draft';
 export * from './onboarding';
 export * from './sheet-registry';
+export * from './toast';
 export * from './undo';
