@@ -1,5 +1,5 @@
 /**
- * Background task + (later) notification-category registration (SPEC-implementation.md §17.2).
+ * Background task + notification-category registration (SPEC-implementation.md §17.2 / §31.1/2).
  *
  * Imported at the very top of the app entry (`index.js`), before `expo-router` mounts, so the
  * definitions exist whether the JS context was started by the UI or by a background trigger.
@@ -17,6 +17,10 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { AppRegistry, Platform } from 'react-native';
 
+import { ensureNotificationChannel } from '@/services/notifications/channel';
+import { registerNotificationCategories } from '@/services/notifications/categories';
+import { handleDiscard, handleSave } from '@/services/notifications/respond';
+
 import { smsIngestTask } from './sms-ingest';
 
 /** Native task name — must match `CoinflowSmsHeadlessTaskService.getTaskConfig` (§17.6). */
@@ -29,17 +33,41 @@ if (Platform.OS === 'android') {
   AppRegistry.registerHeadlessTask(SMS_INGEST_TASK, () => smsIngestTask);
 }
 
-// --- Notification action responses (app-killed) -----------------------------
-// STEP 4 SCOPE: the task is defined + registered so responses aren't dropped, but the
-// Save / Add / Discard handling (§17.4b / §31.5) is a step-5 no-op for now.
-TaskManager.defineTask(NOTIFICATION_RESPONSE_TASK, async ({ error }) => {
-  if (error) {
-    console.warn('[NOTIFICATION_RESPONSE_TASK] error:', error.message);
-    return;
-  }
-  // TODO(step 5 / §17.4b): load Suggestion by id → re-match AccountRule → one DB txn
-  // (insert Transaction, confirm Suggestion, bump rule) → cancel / refresh notifications.
+// --- Notification channel + categories (idempotent — safe to call on every launch) ----------
+ensureNotificationChannel().catch((e: unknown) => {
+  console.warn('[tasks] ensureNotificationChannel failed:', (e as Error)?.name ?? 'unknown');
 });
+registerNotificationCategories().catch((e: unknown) => {
+  console.warn('[tasks] registerNotificationCategories failed:', (e as Error)?.name ?? 'unknown');
+});
+
+// --- Notification action responses (app-killed) -----------------------------
+TaskManager.defineTask<Notifications.NotificationTaskPayload>(
+  NOTIFICATION_RESPONSE_TASK,
+  async ({ data, error }) => {
+    if (error) {
+      console.warn('[NOTIFICATION_RESPONSE_TASK] error:', error.message);
+      return;
+    }
+    // A `NotificationResponse` (our local notifications) vs. the remote-push payload shape —
+    // narrow to ours; anything else is not a shape we posted.
+    if (!data || !('actionIdentifier' in data)) return;
+
+    const payload = data.notification.request.content.data as
+      | { kind?: string; suggestionId?: string }
+      | undefined;
+    if (payload?.kind !== 'suggestion' || !payload.suggestionId) return;
+
+    // `ADD` and a body tap carry `opensAppToForeground:true` — those are handled by the
+    // foreground listener in `_layout.tsx` (§28.3), not here. That listener + the Confirmation
+    // sheet it opens are F3 (not built yet); until then a tap opens the app with no routing.
+    if (data.actionIdentifier === 'SAVE') {
+      await handleSave(payload.suggestionId);
+    } else if (data.actionIdentifier === 'DISCARD') {
+      await handleDiscard(payload.suggestionId);
+    }
+  },
+);
 
 if (Platform.OS !== 'web') {
   Notifications.registerTaskAsync(NOTIFICATION_RESPONSE_TASK).catch((e: unknown) => {

@@ -107,6 +107,26 @@ export function usePendingCount() {
   return { ...q, count: q.data[0]?.n ?? 0 };
 }
 
+/** Sync count for the headless posting/reconcile path (§31.4/§31.8) — no live query there. */
+export function countPending(): number {
+  const row = db
+    .select({ n: count() })
+    .from(suggestions)
+    .where(eq(suggestions.status, 'pending'))
+    .get();
+  return row?.n ?? 0;
+}
+
+/** Sync list for `reconcileNotifications` (§31.8) — no live query in a headless/bootstrap context. */
+export function listPending(): Suggestion[] {
+  return db
+    .select()
+    .from(suggestions)
+    .where(eq(suggestions.status, 'pending'))
+    .orderBy(desc(suggestions.createdAt))
+    .all();
+}
+
 export function purgeConfirmed(before: number): void {
   db.delete(suggestions)
     .where(and(eq(suggestions.status, 'confirmed'), lt(suggestions.createdAt, before)))

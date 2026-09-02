@@ -1,8 +1,5 @@
 /**
- * `SMS_INGEST_TASK` body (SPEC-implementation.md §17.3, steps 1–5 — F1 scope).
- *
- * Steps 6 (account-rule lookup) / 7 (notify) / 8 (self-heal) belong to F2/F11 and are not run
- * here yet — F1 ends at "create one Suggestion in the pending queue" (§2 F1).
+ * `SMS_INGEST_TASK` body (SPEC-implementation.md §17.3, steps 1–8 — F1 + F2 scope).
  *
  * Contract that holds throughout: runs with no UI, opens `expo-sqlite` itself, never logs the
  * body / amount / account, and never throws out of `smsIngestTask` (§17.2 / §32 E1/E2).
@@ -11,9 +8,13 @@
 import * as Crypto from 'expo-crypto';
 
 import { isKnownSender } from '@/constants/sms-senders';
+import { getAccountRule } from '@/db/repositories/account-rules';
+import { getSuggestion, insertIfNew } from '@/db/repositories/suggestions';
+import { hasDedupeKey } from '@/db/repositories/transactions';
 import { ensureMigrated } from '@/db/maintenance';
-import { insertIfNew } from '@/db/repositories/suggestions';
 import { parseSms } from '@/domain/parser';
+import { postForSuggestion } from '@/services/notifications/post';
+import { reconcileNotifications } from '@/services/notifications/reconcile';
 
 /** Shape handed over by `CoinflowSmsHeadlessTaskService` (Bundle → JS). */
 export type SmsHeadlessPayload = {
@@ -56,16 +57,18 @@ export async function smsIngestTask(payload: SmsHeadlessPayload | undefined): Pr
     // A background trigger can fire before the UI ever ran its migrations (§17.5 / §20.4).
     await ensureMigrated();
 
-    // Step 4 — idempotency / retry guard.
+    // Step 4 — idempotency / retry guard. Checks both tables: a `Suggestion` may already have
+    // been purged (D26, ~24h after confirm) while its `Transaction` still carries the key.
     const dedupeKey = await dedupeKeyFor(
       sender,
       result.fields.amountMinor,
       result.fields.occurredAt,
       result.fields.direction,
     );
+    if (hasDedupeKey(dedupeKey)) return;
 
     // Step 5 — write the Suggestion. `body` is never persisted (P-9).
-    insertIfNew({
+    const { created, id } = insertIfNew({
       amountMinor: result.fields.amountMinor,
       direction: result.fields.direction,
       occurredAt: result.fields.occurredAt,
@@ -76,9 +79,21 @@ export async function smsIngestTask(payload: SmsHeadlessPayload | undefined): Pr
       smsReceivedAt: receivedAt,
       dedupeKey,
     });
+    if (!created) return; // a retry of an already-recorded suggestion — already notified once
 
-    // TODO(F2/F11 — §17.3 steps 6–8): account-rule lookup, notification post (single vs. group
-    // summary), self-heal for a previous run that inserted but never notified.
+    // Step 6 — account-rule lookup.
+    const suggestion = getSuggestion(id);
+    if (!suggestion) return; // extremely unlikely (row just inserted); never throw regardless
+
+    const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
+
+    // Step 7 — notify (single vs. group decision lives in post.ts).
+    await postForSuggestion(suggestion, rule);
+
+    // Step 8 — self-heal: re-post for any older pending Suggestion missing a live notification
+    // (a previous run inserted the row but was killed before step 7). Idempotent — safe to call
+    // unconditionally every time.
+    await reconcileNotifications();
   } catch (e) {
     // The receiver + task must never crash the app. No PII — name only (§17.2).
     console.warn('[smsIngestTask] dropped SMS:', (e as Error)?.name ?? 'unknown');
