@@ -6,6 +6,7 @@
 /** @type {import('jest').Config} */
 module.exports = {
   preset: 'jest-expo',
+  resolver: 'react-native-worklets/jest/resolver',
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@gorhom/.*|@shopify/.*|drizzle-orm|drizzle-kit))',
   ],
@@ -14,6 +15,9 @@ module.exports = {
   // resolution to the plain CJS build instead of fighting the exports map.
   moduleNameMapper: {
     '^lucide-react-native$': '<rootDir>/node_modules/lucide-react-native/dist/cjs/lucide-react-native.js',
+    // RNTL can't query into the real `Modal`'s content (needs an app-root `AppContainer` that
+    // doesn't exist in a bare `render()`) — see `__mocks__/rn-modal.tsx`.
+    '^react-native/Libraries/Modal/Modal$': '<rootDir>/__mocks__/rn-modal.tsx',
   },
   collectCoverageFrom: [
     'src/domain/**/*.{ts,tsx}',

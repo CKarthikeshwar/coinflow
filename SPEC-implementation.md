@@ -2545,9 +2545,31 @@ E2E lane. No Detox (D35). `npx tsc --noEmit` + `expo lint` are the other two gat
 SMS module make an emulator run heavy; E2E is run locally against an EAS `development` build
 before a release — §35.7). A nightly or pre-release manual EAS build is the native smoke.
 
+**Which tier does *this* piece of code need?** (`SPEC/PLAN.md` §9.1 point 2 — decided at write
+time, not deferred):
+
+1. **A pure/deterministic function or branch of logic, anywhere in `src/`** — not only
+   `src/domain` — gets a **unit** test. This includes `src/db/repositories/*.ts` functions with
+   real behavior (upsert semantics, guards, derived fields), not just pass-through queries, and
+   feature-layer write paths (`write-confirmed-transaction.ts`, `deep-link.ts`-style resolvers).
+   Mock the boundary the same way `respond.test.ts` / `write-confirmed-transaction.test.ts` do:
+   `@/db/client`'s `db`, or the specific repo function one level down, never a real SQLite file.
+   "Only exercised indirectly through the UI that calls it" is not a substitute — a repo function
+   with a real guard (duplicate-name rejection, protected-category delete guard, last-write-wins)
+   gets its own test asserting that guard directly.
+2. **A screen, sheet, or reusable component with real states or user interaction** gets an
+   **RNTL** test per §34.2's per-screen checklist — skeleton/empty/error deltas plus the primary
+   interaction, repos and stores mocked.
+3. **A user journey spanning multiple screens/sheets where real navigation timing or gesture
+   handling is the thing being verified** — the class of bug that only reproduces on-device
+   (sheet-present/dismiss races, hardware back-button interception, rapid-tap sequencing) —
+   gets a **Maestro** flow (§34.3), written once its full dependency chain is built.
+
 ### 34.1 Unit tests (business logic — `SPEC/PLAN.md` §8, the centrepiece)
 
-`src/domain/**` is pure TS with no RN imports (D22), so these run fast and without a renderer:
+`src/domain/**` is pure TS with no RN imports (D22) and is the primary target (100% below) — but
+per the decision rule above, any other deterministic logic module gets the same unit-test
+treatment; it isn't exclusive to this directory:
 
 | Suite | File | What it asserts |
 |---|---|---|

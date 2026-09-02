@@ -1,0 +1,28 @@
+# J4 — manual add (SPEC-implementation.md §34.3). Run against an EAS `development` build on a
+# connected device or emulator: `maestro test e2e/j4-manual-add.yaml` (Maestro CLI, installed
+# separately — not an npm package; see https://maestro.mobile.dev).
+#
+# UNVERIFIED — written without a device/emulator or the Maestro CLI available to actually run it
+# (neither is installed in this environment). Treat this as a first draft: run it once, fix
+# whatever selector doesn't match the real screen, then remove this note.
+#
+# Adapted from the spec's literal steps to match what's actually built today, not what's
+# eventually planned:
+#   - Entry is Home's temporary "Add transaction" button, not the tab-bar centre Add — the real
+#     bottom tab bar doesn't exist yet (SPEC/traceability.md, F4's "entry point is temporary").
+#   - Asserts the toast text, not "the updated Home tiles" — Home itself is still a placeholder
+#     (§30.4 not built). Extend this flow to check the tiles once Home is real.
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- tapOn: "Add transaction"
+- assertVisible: "Add transaction"
+- tapOn: "5"
+- tapOn: "0"
+- tapOn: "0"
+- tapOn: "Category"
+- tapOn: "Food"
+- tapOn: "Cash"
+- tapOn: "Add" # the sheet's primary button — verify this doesn't ambiguously match the Home
+  # button of the same name sitting underneath the sheet; add an `index` if it does
+- assertVisible: "Added"

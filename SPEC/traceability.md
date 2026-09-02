@@ -476,32 +476,17 @@ quietly true, made visible. Grouped by kind, not by feature.
 
 ### A. Test-tier debt (§9.1 point 2 — the specific thing that prompted this audit)
 
-No RNTL test exists for **any** screen or sheet built so far, except one:
-`suggestion-card.test.tsx` covers the card component, not the screen it lives in. Missing, per
-feature:
+**Closed same day (2026-09-03, second pass) — see section D below for how:** RNTL coverage for
+`review-queue.tsx`, `transaction-sheet.tsx` (all three modes), `transactions.tsx`,
+`transaction/[id].tsx`, `categories.tsx`, `category-editor-sheet.tsx`, `filter-sheet.tsx`; direct
+unit tests for `categories.ts`, `account-rules.ts`, `transactions.ts`. The "Pass by construction —
+no dedicated test" rows (IMP-006, IMP-008, IMP-010, IMP-017, IMP-019) are now asserted directly —
+see each file's own test for which row it covers.
 
-- **F11** — `review-queue.tsx` itself (list rendering, known/new action set, Dismiss all).
-- **F3/F4** — `transaction-sheet.tsx` (both modes): validation states, discard-guard, edge-amount
-  gate, category-picker round-trip. This is the single highest-value gap — it's the sheet every
-  other sheet's bugs this session came out of, and it's the one component with zero automated
-  coverage of its actual rendered behavior.
-- **F5** — `transactions.tsx` (search, day-grouping, empty states) and `transaction/[id].tsx`
-  (detail view, delete confirm).
-- **F6** — `categories.tsx` and `category-editor-sheet.tsx` — directly relevant, since three of the
-  four bugs found this session (dead-zone chevron, dismiss/present race, missing `BottomSheetView`)
-  were exactly the class of bug an RNTL render/interaction test catches cheaply.
-
-No Maestro flow exists — `e2e/` doesn't exist as a directory. J2's dependency chain (F1, F2, F11,
-F3, F8) isn't fully closed yet (F8 not built), so under §9.1 point 2 this isn't overdue yet, but
-**J4 (manual add)'s chain — F4 — closed back when F4 shipped**, and its flow was never written.
-That one is overdue now, not a "someday."
-
-No direct repository-layer unit tests: `categories.ts`, `account-rules.ts`, `transactions.ts` are
-only exercised indirectly through UI/feature-layer tests. F6's own note calls this "consistent with
-the rest of `src/db/repositories/`" — true, but that consistency is the debt, not a justification.
-Several rows across F3–F6 are marked `Pass by construction — no dedicated test` (IMP-006, IMP-008,
-IMP-010, IMP-017, IMP-019) — real behavior, correctly reasoned about, never actually asserted by a
-test that would fail if the logic regressed.
+**Still open:** the J4 Maestro flow now exists (`e2e/j4-manual-add.yaml`) but is **unverified** — no
+device/emulator or Maestro CLI was available to actually run it; treat it as a first draft, not a
+passing test. J2's dependency chain (F1, F2, F11, F3, F8) still isn't fully closed (F8 not built),
+so its flow isn't overdue yet under §9.1 point 2.
 
 ### B. Functional deferrals still open (not test gaps — actual behavior not built)
 
@@ -533,3 +518,63 @@ allow is what several of these had: no trigger, so they never come back up. The 
 makes is informational (naming things plainly); the actual close-out — writing the RNTL tests, the
 J4 Maestro flow, deciding Edit/Filter's place in the plan — is follow-up work, prioritized with the
 user, not implied by this list existing.
+
+## Closing the test-tier debt (2026-09-03, second pass)
+
+Section A's RNTL/repository gaps, closed the same day as the audit that found them, at the user's
+explicit request. Two things had to happen before any of the actual tests could be written:
+
+**1. `SPEC-implementation.md` §34 gained the "which tier does this code need" decision rule** (a
+paragraph in §34.0) — unit tests aren't exclusive to `src/domain`; any deterministic logic module
+anywhere in `src/` gets one, repository functions with real behavior included. This is now the
+standing answer to "should this get a test, and which kind" for all future work, not just this pass.
+
+**2. RNTL had never actually been run against a real sheet/screen in this codebase — it was broken
+in four separate ways, only found by trying it:**
+- `@gorhom/bottom-sheet` transitively requires `react-native-worklets`' native loader, which
+  crashes under Jest. Fixed via `react-native-worklets/jest/resolver` (`jest.config.js`'s
+  `resolver`) — the package's own Jest-safe resolution helper, not something built here.
+- `BottomSheetView`/`BottomSheetScrollView` need an actual mounted `BottomSheet` context
+  (`useBottomSheetInternal` throws without one) that a bare `render()` doesn't provide, and
+  isn't what these tests verify anyway — sheet positioning/animation is Maestro's job, not
+  RNTL's (the same "which tier" rule). Fixed with a manual mock, `__mocks__/@gorhom/bottom-sheet.tsx`,
+  swapping the layout-measuring wrappers for plain `View`/`ScrollView` — picked up automatically
+  by Jest for every test file, no per-file wiring.
+- `react-native`'s real `Modal` (which `ConfirmDialog` is built on) renders through an
+  `AppContainer`/`RootTagContext` that only exists under a real app root, so its content silently
+  never appeared in any RNTL query — Modal-gated content (every discard-confirm, delete-confirm)
+  looked absent regardless of `visible`. Fixed with `__mocks__/rn-modal.tsx`, wired via
+  `jest.config.js`'s `moduleNameMapper` onto `react-native/Libraries/Modal/Modal` (the exact file
+  `react-native`'s own index re-exports it from) — keeps the one behavior that matters
+  (gating on `visible`) without the app-root machinery.
+- `@testing-library/react-native@14`'s `fireEvent.press`/`.changeText` return `Promise<void>` —
+  they must be `await`ed or the state update they trigger hasn't flushed before the next
+  assertion runs. Silent failure mode: the query afterward just sees stale state, not an error.
+  Same family of API-shape surprise this project already hit once with `render()` itself (F11's
+  note, "must be awaited, unlike older RNTL docs/examples") — now two for two.
+
+None of this was product code — it's why RNTL had zero real coverage in this codebase despite being
+an installed, listed dependency since Phase 1: nobody had gotten a sheet-shaped component to render
+in a test before. `suggestion-card.test.tsx` (F11) never hit any of these because `SuggestionCard`
+is a plain card with no `@gorhom`/`Modal` involvement.
+
+**Tests added**, all passing (`npm test`: 161 → 247), typecheck and `expo lint` clean throughout:
+
+| File | Kind | Covers |
+|---|---|---|
+| `db/repositories/categories.test.ts` | unit | `createCategory`/`updateCategory` duplicate-name guard (IMP-019), `deleteCategory` reassign + protected guard (IMP-017/018), `reorderCategories` |
+| `db/repositories/account-rules.test.ts` | unit | `upsertFromTransaction` insert/bump/keep-category-when-uncategorized/null-clears-note (§25.2), `searchByPrefix`, `updateAccountRule`, `deleteAccountRule` |
+| `db/repositories/transactions.test.ts` | unit | `insertTransaction`/`updateTransaction` (IMP-011, `editedByUser`, re-derived `searchText`/`normalizedAccountKey`), soft-delete/restore, `purgeDeleted`, `hasDedupeKey` (both tables) |
+| `features/categories/category-editor-sheet.test.tsx` | RNTL | create/edit mode, duplicate-name inline error (IMP-019), protected-category has no Delete, delete-confirm names the count |
+| `features/transactions/transaction-sheet.test.tsx` | RNTL | Add/Confirm/Edit modes, amount-gate disable, Income hides Category (UI-022), discard-guard incl. the toggle-isn't-dirty regression, edge-amount gate (Confirm), Save vs. Add routing |
+| `app/review-queue.test.tsx` | RNTL | loading/empty states (empty ≠ error), known/new row Save visibility, Dismiss all + confirm count |
+| `app/categories.test.tsx` | RNTL | default/custom split, protected row has no delete affordance, delete-confirm count, row→Edit, +→Create |
+| `app/transactions.test.tsx` | RNTL | skeleton, no-data vs. no-match empty (UI-042), row→Details nav, filter chip render/remove, Filter button seeds the sheet |
+| `app/transaction/[id].test.tsx` | RNTL | missing-transaction guard, Uncategorized→"Set category", income never shows it, SMS-vs-manual provenance line, Edit/Delete wiring, Undo |
+| `features/transactions/filter-sheet.test.tsx` | RNTL | Reset enablement, Apply serializes category/type/date correctly, custom-range start-after-end inline error blocks Apply |
+| `features/transactions/filter-params.test.ts` | unit | route-param ↔ query (de)serialization, `expo-router`'s array-form params |
+| `services/notifications/deep-link.test.ts` | unit | §31.6 stale-tap table (already added earlier the same day, alongside the notification-routing feature) |
+
+**Still not run, only written:** `e2e/j4-manual-add.yaml` — no Maestro CLI or device/emulator in
+this environment. First run will need selector fixes; don't trust it as passing until it's actually
+been run once.
