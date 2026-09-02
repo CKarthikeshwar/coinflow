@@ -6,8 +6,9 @@
  */
 
 import { and, count, desc, eq, lt } from 'drizzle-orm';
-import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { randomUUID } from 'expo-crypto';
+
+import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
 import { suggestions, type Direction, type PaymentMethod, type Suggestion } from '../schema';

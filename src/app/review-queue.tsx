@@ -1,11 +1,8 @@
 /**
  * Review Queue — SPEC-UI-UX.md §6.3, SPEC-implementation.md §30.5. F11.
  *
- * Not yet built (carried forward): tapping a card body should open the Confirmation sheet
- * (`sheets.open('confirm', {suggestionId})`) — that needs the `SheetRegistry` (§28.2) and the
- * Confirmation sheet itself (F3), neither exists yet, so it's a no-op for now. Root-relative
- * navigation (this file lives directly under `src/app/`, not `(tabs)/`) since the full route
- * tree isn't built yet either — see `SPEC/traceability.md`.
+ * Root-relative navigation (this file lives directly under `src/app/`, not `(tabs)/`) since
+ * the full route tree isn't built yet — see `SPEC/traceability.md`.
  */
 
 import { router } from 'expo-router';
@@ -18,9 +15,11 @@ import { getAccountRule } from '@/db/repositories/account-rules';
 import { getSetting, setSetting } from '@/db/repositories/settings';
 import { dismissAllPending, usePendingSuggestions } from '@/db/repositories/suggestions';
 import type { Suggestion } from '@/db/schema';
+import { isKnownAccountRule } from '@/domain/categorize';
 import { cancelAllSuggestionNotifications } from '@/services/notifications/post';
 import { handleDiscard, handleSave } from '@/services/notifications/respond';
 import { getSmsPermissions, requestSmsPermissions } from '@/services/sms';
+import { useSheetRegistry } from '@/stores';
 
 import { SuggestionCard } from '@/features/detection/suggestion-card';
 import { Button } from '@/ui/button';
@@ -32,16 +31,14 @@ import { TopBar } from '@/ui/top-bar';
 
 function QueueRow({ suggestion }: { suggestion: Suggestion }) {
   const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
-  const known = rule !== null && rule.categoryId !== null;
+  const known = isKnownAccountRule(rule);
+  const openSheet = useSheetRegistry((s) => s.open);
 
   return (
     <SuggestionCard
       suggestion={suggestion}
       known={known}
-      onOpen={() => {
-        // TODO(F3/§28.2): sheets.open('confirm', { suggestionId }) once the Confirmation
-        // sheet + SheetRegistry exist.
-      }}
+      onOpen={() => openSheet('confirm', { suggestionId: suggestion.id })}
       onSave={known ? () => handleSave(suggestion.id) : undefined}
       onDismiss={() => handleDiscard(suggestion.id)}
     />

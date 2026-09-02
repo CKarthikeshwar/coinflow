@@ -10,10 +10,10 @@
  */
 
 import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { randomUUID } from 'expo-crypto';
 
 import { normalizeAccount } from '@/domain/normalize';
+import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
 import { isFtsAvailable } from '../fts';

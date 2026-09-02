@@ -1,18 +1,19 @@
 /**
  * `Skeleton` — SPEC-UI-UX.md §3.6 / V-3. Neutral `surface3` blocks matching the target
- * layout, no spinner. `layout='suggestion-list'` renders 4 card-shaped blocks (§30.5).
+ * layout, no spinner. `'suggestion-list'` (§30.5) and `'transaction-list'` (§30.9) both
+ * render 4 card-shaped blocks — same shape, different screens.
  */
 
 import { StyleSheet, View } from 'react-native';
 
 import { Colors, Radius, Spacing } from '@/constants/theme';
 
-export type SkeletonLayout = 'suggestion-list';
+export type SkeletonLayout = 'suggestion-list' | 'transaction-list';
 
 export type SkeletonProps = { layout: SkeletonLayout };
 
 export function Skeleton({ layout }: SkeletonProps) {
-  if (layout === 'suggestion-list') {
+  if (layout === 'suggestion-list' || layout === 'transaction-list') {
     return (
       <View style={styles.list}>
         {[0, 1, 2, 3].map((i) => (

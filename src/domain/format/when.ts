@@ -1,9 +1,8 @@
 /**
- * Relative/absolute time formatter — SPEC-implementation.md §27.2 (the `formatWhen` half; the
- * day-header helper lands when the Transactions list needs it). Pure TS aside from `date-fns`.
+ * Relative/absolute time formatter — SPEC-implementation.md §27.2. Pure TS aside from `date-fns`.
  */
 
-import { format, isSameYear } from 'date-fns';
+import { format, isSameYear, isToday, isYesterday } from 'date-fns';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -25,4 +24,12 @@ export function formatWhen(ts: number, now: number = Date.now()): string {
 
   const date = new Date(ts);
   return isSameYear(date, now) ? format(date, 'd MMM') : format(date, 'd MMM yyyy');
+}
+
+/** `Today` / `Yesterday` / `Wed, 3 Sep` — the day-group header on the Transactions list (§6.7). */
+export function formatDayHeader(dayStartMs: number): string {
+  const date = new Date(dayStartMs);
+  if (isToday(date)) return 'Today';
+  if (isYesterday(date)) return 'Yesterday';
+  return format(date, 'EEE, d MMM');
 }

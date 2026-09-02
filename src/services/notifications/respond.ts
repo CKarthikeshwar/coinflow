@@ -11,6 +11,7 @@ import { db } from '@/db/client';
 import { getAccountRule } from '@/db/repositories/account-rules';
 import { dismissSuggestion, getSuggestion } from '@/db/repositories/suggestions';
 import { accountRules, suggestions, transactions } from '@/db/schema';
+import { isKnownAccountRule } from '@/domain/categorize';
 
 import { cancelForSuggestion } from './post';
 
@@ -28,11 +29,12 @@ export async function handleSave(suggestionId: string): Promise<SaveOutcome> {
   if (suggestion.status === 'confirmed') return { outcome: 'noop', reason: 'already-confirmed' };
 
   const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
-  // `Save` only ever appears on a known-account notification (a rule with a category, §25.1).
-  // If the rule vanished or lost its category since the notification was posted, don't write
-  // blind (§31.5) — in practice unreachable (the button doesn't exist without one); the guard
-  // stays for the race. The would-be fallback (open Confirmation pre-filled) needs F3's sheet.
-  if (!rule || !rule.categoryId) return { outcome: 'noop', reason: 'no-rule' };
+  // `Save` only ever appears on a known-account notification — a rule with a category OR a
+  // note (§25.1, `isKnownAccountRule`; category-only was too strict, a note-only rule is still
+  // "known" and a Save should be allowed to land an Uncategorized transaction with that note).
+  // If the rule vanished since the notification was posted, don't write blind (§31.5) — in
+  // practice unreachable (the button doesn't exist without one); the guard stays for the race.
+  if (!rule || !isKnownAccountRule(rule)) return { outcome: 'noop', reason: 'no-rule' };
   if (suggestion.amountMinor === null || suggestion.direction === null || suggestion.occurredAt === null) {
     return { outcome: 'noop', reason: 'incomplete' };
   }

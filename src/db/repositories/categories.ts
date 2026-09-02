@@ -5,8 +5,9 @@
  */
 
 import { asc, eq, sql } from 'drizzle-orm';
-import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { randomUUID } from 'expo-crypto';
+
+import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
 import { categories, transactions, type Category } from '../schema';
@@ -85,6 +86,16 @@ export function updateCategory(
     })
     .where(eq(categories.id, id))
     .run();
+}
+
+/** Powers the delete-confirm dialog's "N transactions become Uncategorized" body (§6.11). */
+export function countTransactionsForCategory(id: string): number {
+  const row = db
+    .select({ n: sql<number>`count(*)` })
+    .from(transactions)
+    .where(eq(transactions.categoryId, id))
+    .get();
+  return row?.n ?? 0;
 }
 
 /** Reassigns the category's transactions to Uncategorized, then deletes it. */

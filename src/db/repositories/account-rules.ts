@@ -5,9 +5,9 @@
  */
 
 import { desc, eq, like } from 'drizzle-orm';
-import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 
 import { normalizeAccount } from '@/domain/normalize';
+import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
 import { accountRules, type AccountRule, type PaymentMethod } from '../schema';

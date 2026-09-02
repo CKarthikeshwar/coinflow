@@ -1,6 +1,6 @@
 import type { AccountRule, Suggestion } from '@/db/schema';
 
-import { buildTxnNotification, isKnownAccount } from './content';
+import { buildTxnNotification } from './content';
 
 function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
   return {
@@ -35,20 +35,6 @@ function rule(overrides: Partial<AccountRule> = {}): AccountRule {
   };
 }
 
-describe('isKnownAccount', () => {
-  it('is false with no rule', () => {
-    expect(isKnownAccount(null)).toBe(false);
-  });
-
-  it('is false for a rule with no category yet', () => {
-    expect(isKnownAccount(rule({ categoryId: null }))).toBe(false);
-  });
-
-  it('is true for a rule with a category', () => {
-    expect(isKnownAccount(rule())).toBe(true);
-  });
-});
-
 describe('buildTxnNotification', () => {
   it('uses the known-account category when the rule has a category', () => {
     const content = buildTxnNotification(suggestion(), rule());
@@ -60,9 +46,14 @@ describe('buildTxnNotification', () => {
     expect(content.categoryIdentifier).toBe('txnNew');
   });
 
-  it('uses the new-account category when the rule has no category', () => {
-    const content = buildTxnNotification(suggestion(), rule({ categoryId: null }));
+  it('uses the new-account category when the rule has neither a category nor a note', () => {
+    const content = buildTxnNotification(suggestion(), rule({ categoryId: null, lastNote: null }));
     expect(content.categoryIdentifier).toBe('txnNew');
+  });
+
+  it('uses the known-account category when the rule has a note but no category yet (§25.1)', () => {
+    const content = buildTxnNotification(suggestion(), rule({ categoryId: null, lastNote: 'Splitwise' }));
+    expect(content.categoryIdentifier).toBe('txnKnown');
   });
 
   it('titles a debit as "<amount> debited"', () => {

@@ -4,6 +4,7 @@
  */
 
 export * from './add-sheet-draft';
+export * from './category-draft';
 export * from './keypad';
 export * from './filter-draft';
 export * from './onboarding';

@@ -4,7 +4,8 @@
  */
 
 import { eq } from 'drizzle-orm';
-import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
+
+import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
 import { appSettings } from '../schema';

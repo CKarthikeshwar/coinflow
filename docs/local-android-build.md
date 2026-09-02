@@ -49,7 +49,7 @@ There are two ways to compile:
 > **Note on `eas build --local`:** that command only works on macOS and Linux, **not Windows**.
 > On Windows the equivalent is `npx expo run:android`, which is what we use here. (If you ever
 > really want `eas build --local`, you'd have to install WSL2 + the Android SDK inside Ubuntu —
-> see Part 7. Not worth it for normal development.)
+> see Part 8. Not worth it for normal development.)
 
 ### The big picture of what `npx expo run:android` does
 
@@ -431,7 +431,81 @@ unless you also bundle it, and it's signed with a throwaway debug key. A proper 
 
 ---
 
-## Part 6 — Troubleshooting
+## Part 6 — Reading Android's native logs (Logcat)
+
+**When to use this:** something is visibly wrong on the phone (a screen doesn't do what it
+should, something flashes and reverts, a feature silently fails) but the **Metro terminal**
+(the one running `npx expo start` / left over from `npx expo run:android`) shows nothing —
+no red text, no warning, nothing new at all when you reproduce the problem.
+
+That happens because Metro's terminal only shows **JavaScript-side** logs (`console.log`,
+`console.warn`, JS crashes). CoinFlow also has a lot of **native** code underneath — the SMS
+receiver, and libraries like `react-native-reanimated` / `@gorhom/bottom-sheet` that do real
+work on the Android side, not just in JS. When *that* layer has a problem, it often never
+reaches Metro at all — it only shows up in **Logcat**, Android's own system-wide log.
+
+### 6.1 Open Logcat
+
+1. Open the project in **Android Studio** (`File ▸ Open` ▸ pick `D:\IISc\Projects\coinflow`,
+   or specifically the `android\` folder inside it — either works for viewing Logcat).
+2. Make sure your phone is connected (USB or wireless — see Part 2) and the app is running on
+   it (built via `npx expo run:android` per Part 3).
+3. Open the **Logcat** panel: **View ▸ Tool Windows ▸ Logcat** (or there's usually a **Logcat**
+   tab already docked at the bottom of the Android Studio window — click it).
+4. At the top of the Logcat panel there's a **device dropdown** — make sure it says your phone's
+   name, not "No devices" or an emulator.
+5. Next to it there's a **process/package dropdown** — pick `com.ckworkforce.coinflow` (CoinFlow's
+   package name) if it's listed, so you only see logs from this app, not the whole phone. If you
+   don't see that dropdown, it's fine — you'll filter another way in step 6.3.
+
+### 6.2 Clear it, then reproduce the problem
+
+1. Click the **trash-can / clear icon** in the Logcat panel's toolbar to wipe everything already
+   there — you only want to see what happens *next*.
+2. On your phone, do the exact thing that's not working (e.g., tap the button that "did
+   nothing").
+3. Watch Logcat — new lines will stream in as it happens.
+
+### 6.3 Find the useful lines
+
+Logcat is noisy — most lines are unrelated Android system chatter. To cut through it:
+
+- Use the **search box** at the top of the panel. Try, one at a time: `Reanimated`, `Worklet`,
+  `BottomSheet`, `ReactNative`, or just `coinflow`.
+- There's also a **log-level dropdown** (usually says "Verbose") — set it to **Error** or
+  **Warn** to hide most of the noise and only show lines Android itself flagged as a problem.
+- Lines Android considers serious are usually shown in **red** (Error) or **orange/yellow**
+  (Warn) regardless of filter.
+
+### 6.4 What to copy back
+
+Copy any line (or few lines around it) that:
+- Is red or orange, **and**
+- Appeared right around when you reproduced the problem (not from app startup, a minute
+  earlier), **and**
+- Mentions any of: `Reanimated`, `Worklet`, `BottomSheet`, `Exception`, `Error`, `Fatal`, or a
+  package name starting with `com.ckworkforce.coinflow` or `com.swmansion` (the library that
+  makes Reanimated/Worklets) or `com.gorhom` / `com.shopify` (bottom-sheet / flash-list).
+
+Paste that back — full text, don't paraphrase it — that's usually enough to point straight at
+the real cause, even when the JS side shows nothing at all.
+
+### 6.5 (Alternative) Same thing from a plain terminal
+
+If you'd rather not use the Android Studio panel, PowerShell works too:
+
+```powershell
+adb logcat *:E
+```
+
+This streams **only Error-level** lines from the whole phone. Clear the terminal
+(`Ctrl+L` or just scroll to note where you are), reproduce the problem, and copy what
+prints right after. `adb logcat -c` clears Android's log buffer first if you want a clean start
+before that.
+
+---
+
+## Part 7 — Troubleshooting
 
 | Symptom | Fix |
 |---|---|
@@ -454,7 +528,7 @@ unless you also bundle it, and it's signed with a throwaway debug key. A proper 
 
 ---
 
-## Part 7 — (Optional) `eas build --local` via WSL2
+## Part 8 — (Optional) `eas build --local` via WSL2
 
 Only if you specifically want to reproduce the **cloud** build on your machine. `eas build
 --local` needs Linux or macOS.

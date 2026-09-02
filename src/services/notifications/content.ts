@@ -3,6 +3,7 @@
  * calls here, just the content shape `post.ts` hands to `scheduleNotificationAsync`.
  */
 
+import { isKnownAccountRule } from '@/domain/categorize';
 import { formatMoney } from '@/domain/format/money';
 import type { AccountRule, PaymentMethod, Suggestion } from '@/db/schema';
 
@@ -50,18 +51,13 @@ export type TxnNotificationContent = {
   data: TxnNotificationData;
 };
 
-/** "known" per §25.1 = a rule exists **and** has a category. */
-export function isKnownAccount(rule: AccountRule | null): boolean {
-  return rule !== null && rule.categoryId !== null;
-}
-
 export function buildTxnNotification(
   suggestion: Suggestion,
   rule: AccountRule | null,
 ): TxnNotificationContent {
   return {
     identifier: `sug:${suggestion.id}`,
-    categoryIdentifier: isKnownAccount(rule) ? TXN_KNOWN_CATEGORY : TXN_NEW_CATEGORY,
+    categoryIdentifier: isKnownAccountRule(rule) ? TXN_KNOWN_CATEGORY : TXN_NEW_CATEGORY,
     title: buildTitle(suggestion),
     body: buildBody(suggestion),
     threadId: TXN_REVIEW_THREAD_ID,

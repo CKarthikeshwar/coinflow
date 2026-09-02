@@ -1,3 +1,5 @@
+import { getTableName, type Table } from 'drizzle-orm';
+
 import type { AccountRule, Suggestion } from '@/db/schema';
 import { getAccountRule } from '@/db/repositories/account-rules';
 import { dismissSuggestion, getSuggestion } from '@/db/repositories/suggestions';
@@ -10,16 +12,16 @@ const mockUpdates: { table: string; values: Record<string, unknown> }[] = [];
 
 function mockMakeTx() {
   return {
-    insert: (table: { _: { name?: string } }) => ({
+    insert: (table: Table) => ({
       values: (v: Record<string, unknown>) => {
         mockInsertedRows.push(v);
         return { run: () => ({ changes: 1 }) };
       },
     }),
-    update: (table: { _: { name?: string } }) => ({
+    update: (table: Table) => ({
       set: (v: Record<string, unknown>) => ({
         where: () => {
-          mockUpdates.push({ table: table._?.name ?? 'unknown', values: v });
+          mockUpdates.push({ table: getTableName(table), values: v });
           return { run: () => ({ changes: 1 }) };
         },
       }),
@@ -105,11 +107,19 @@ describe('handleSave', () => {
     expect(mockInsertedRows).toHaveLength(0);
   });
 
-  it('does not write blind when the rule lost its category', async () => {
+  it('does not write blind when the rule has neither a category nor a note', async () => {
     getSuggestionMock.mockReturnValue(suggestion());
-    getAccountRuleMock.mockReturnValue(rule({ categoryId: null }));
+    getAccountRuleMock.mockReturnValue(rule({ categoryId: null, lastNote: null }));
     const result = await handleSave('sug-1');
     expect(result).toEqual({ outcome: 'noop', reason: 'no-rule' });
+  });
+
+  it('saves an Uncategorized transaction when the rule has a note but no category yet (§25.1)', async () => {
+    getSuggestionMock.mockReturnValue(suggestion());
+    getAccountRuleMock.mockReturnValue(rule({ categoryId: null, lastNote: 'Splitwise' }));
+    const result = await handleSave('sug-1');
+    expect(result.outcome).toBe('saved');
+    expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ categoryId: null, note: 'Splitwise' }));
   });
 
   it('does not write when the suggestion has no amount/direction/occurredAt', async () => {
