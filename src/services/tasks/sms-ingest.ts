@@ -1,19 +1,19 @@
 /**
- * `SMS_INGEST_TASK` body (SPEC-implementation.md §17.3).
+ * `SMS_INGEST_TASK` body (SPEC-implementation.md §17.3, steps 1–5 — F1 scope).
  *
- * STEP 4 SCOPE — skeleton only. The full pipeline (sender gate §17.3.1, domain parser §23,
- * transaction gate §17.3.3, rule match §17.3.6, notification post §17.3.7, self-heal
- * §17.3.8) lands in step 5. For now this proves the wake → headless-JS → SQLite path:
- * every delivered SMS is recorded as one bare `pending` Suggestion, guarded by a retry key.
+ * Steps 6 (account-rule lookup) / 7 (notify) / 8 (self-heal) belong to F2/F11 and are not run
+ * here yet — F1 ends at "create one Suggestion in the pending queue" (§2 F1).
  *
- * Contract that already holds: runs with no UI, opens `expo-sqlite` itself, never logs the
+ * Contract that holds throughout: runs with no UI, opens `expo-sqlite` itself, never logs the
  * body / amount / account, and never throws out of `smsIngestTask` (§17.2 / §32 E1/E2).
  */
 
 import * as Crypto from 'expo-crypto';
 
+import { isKnownSender } from '@/constants/sms-senders';
 import { ensureMigrated } from '@/db/maintenance';
 import { insertIfNew } from '@/db/repositories/suggestions';
+import { parseSms } from '@/domain/parser';
 
 /** Shape handed over by `CoinflowSmsHeadlessTaskService` (Bundle → JS). */
 export type SmsHeadlessPayload = {
@@ -22,19 +22,18 @@ export type SmsHeadlessPayload = {
   timestampMs?: number | null;
 };
 
-/**
- * §17.3 step 4 — `dedupeKey = sha256(sender | amountMinor | floor(occurredAt/60000) | direction)`.
- * Step 4 has no parsed amount/direction yet, so the key is built from what the receiver gives
- * us. It is recomputed with the full field set once the parser lands (step 5), so a step-4
- * row and its step-5 successor can legitimately differ — acceptable for the skeleton.
- */
-async function dedupeKeyFor(sender: string, receivedAt: number): Promise<string> {
-  const minuteBucket = Math.floor(receivedAt / 60_000);
-  return Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    `${sender}|${minuteBucket}`,
-    { encoding: Crypto.CryptoEncoding.HEX },
-  );
+/** §17.3 step 4 — `sha256(sender | amountMinor | floor(occurredAt/60000) | direction)`. */
+async function dedupeKeyFor(
+  sender: string,
+  amountMinor: number | null,
+  occurredAt: number,
+  direction: string | null,
+): Promise<string> {
+  const minuteBucket = Math.floor(occurredAt / 60_000);
+  const material = `${sender}|${amountMinor ?? ''}|${minuteBucket}|${direction ?? ''}`;
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, material, {
+    encoding: Crypto.CryptoEncoding.HEX,
+  });
 }
 
 export async function smsIngestTask(payload: SmsHeadlessPayload | undefined): Promise<void> {
@@ -42,14 +41,44 @@ export async function smsIngestTask(payload: SmsHeadlessPayload | undefined): Pr
     const sender = payload?.sender?.trim();
     if (!sender) return;
 
+    // Step 1 — sender gate.
+    if (!isKnownSender(sender)) return;
+
     const raw = payload?.timestampMs ?? 0;
     const receivedAt = raw > 0 ? Math.floor(raw) : Date.now();
+    const body = payload?.body ?? '';
+
+    // Step 2 — parse. Step 3 — transaction gate (folded into the parser's own ignore/transaction
+    // gates, §23.1/§23.5): a non-`transaction` result means nothing is created.
+    const result = parseSms({ sender, body, receivedAt });
+    if (result.kind !== 'transaction') return;
 
     // A background trigger can fire before the UI ever ran its migrations (§17.5 / §20.4).
     await ensureMigrated();
 
-    const dedupeKey = await dedupeKeyFor(sender, receivedAt);
-    insertIfNew({ smsSender: sender, smsReceivedAt: receivedAt, dedupeKey });
+    // Step 4 — idempotency / retry guard.
+    const dedupeKey = await dedupeKeyFor(
+      sender,
+      result.fields.amountMinor,
+      result.fields.occurredAt,
+      result.fields.direction,
+    );
+
+    // Step 5 — write the Suggestion. `body` is never persisted (P-9).
+    insertIfNew({
+      amountMinor: result.fields.amountMinor,
+      direction: result.fields.direction,
+      occurredAt: result.fields.occurredAt,
+      account: result.fields.account,
+      normalizedKey: result.fields.normalizedKey,
+      paymentMethod: result.fields.paymentMethod,
+      smsSender: sender,
+      smsReceivedAt: receivedAt,
+      dedupeKey,
+    });
+
+    // TODO(F2/F11 — §17.3 steps 6–8): account-rule lookup, notification post (single vs. group
+    // summary), self-heal for a previous run that inserted but never notified.
   } catch (e) {
     // The receiver + task must never crash the app. No PII — name only (§17.2).
     console.warn('[smsIngestTask] dropped SMS:', (e as Error)?.name ?? 'unknown');

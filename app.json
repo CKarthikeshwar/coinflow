@@ -49,7 +49,8 @@
         }
       ],
       "expo-sharing",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,
