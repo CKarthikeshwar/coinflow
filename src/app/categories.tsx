@@ -60,7 +60,9 @@ function CategoryRow({
           <Icon name="trash-2" size={16} color="text3" />
         </Pressable>
       ) : null}
-      <Icon name="chevron-right" size={16} color="text3" />
+      <Pressable accessibilityRole="button" onPress={onEdit} hitSlop={8} style={styles.chevronTap}>
+        <Icon name="chevron-right" size={16} color="text3" />
+      </Pressable>
     </View>
   );
 }
@@ -177,6 +179,7 @@ const styles = StyleSheet.create({
   },
   label: { flex: 1 },
   deleteTap: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  chevronTap: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   emptyCustom: { paddingVertical: Spacing.three, textAlign: 'center' },
   note: { paddingTop: Spacing.three, paddingBottom: Spacing.five },
 });

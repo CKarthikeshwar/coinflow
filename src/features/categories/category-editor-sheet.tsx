@@ -9,7 +9,8 @@
  * spec asks for; icon reuse across categories is explicitly allowed (§6.12).
  */
 
-import { useEffect, useState } from 'react';
+import { BottomSheetView } from '@gorhom/bottom-sheet';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { CategoryIcons } from '@/constants/category-icons';
@@ -68,10 +69,18 @@ export function CategoryEditorSheet() {
   const saveDisabled = trimmedName.length === 0 || nameTaken;
   const canDelete = editing && target !== undefined && !target.isProtected;
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     if (draft.dirty) setShowDiscardConfirm(true);
     else close();
-  };
+  }, [draft.dirty, close]);
+
+  // Registers this sheet's own Cancel logic (dirty-check + discard confirm, V-6) as the
+  // handler `useSheetRegistry().requestClose()` invokes — so the hardware/gesture back button
+  // (SheetHost) gets the exact same guard the Cancel button does, not a bypass of it.
+  useEffect(() => {
+    useSheetRegistry.getState().setOnRequestClose(handleCancel);
+    return () => useSheetRegistry.getState().setOnRequestClose(null);
+  }, [handleCancel]);
 
   const doDiscard = () => {
     setShowDiscardConfirm(false);
@@ -111,7 +120,7 @@ export function CategoryEditorSheet() {
   };
 
   return (
-    <View>
+    <BottomSheetView>
       <View style={styles.header}>
         <Pressable accessibilityRole="button" onPress={handleCancel}>
           <ThemedText type="label" themeColor="text2">
@@ -205,7 +214,7 @@ export function CategoryEditorSheet() {
         onConfirm={doDelete}
         onCancel={() => setShowDeleteConfirm(false)}
       />
-    </View>
+    </BottomSheetView>
   );
 }
 

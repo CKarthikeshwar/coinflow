@@ -292,7 +292,94 @@ back does not preserve that sheet's in-progress draft (it resets, same as reopen
 acceptable for how rarely that detour happens, not worth the added state-preservation complexity
 this pass.
 
-**Manual verification still owed:** on-device, confirm the Categories screen lists real default +
-custom categories, Add/Edit/Delete round-trip correctly against the database, the duplicate-name
-guard actually blocks Save, and deleting a category with real transactions genuinely reassigns
-them to Uncategorized (list/Details reflect it immediately).
+**Manual verification: done.** On-device (an automated `adb`-driven pass, screenshots + taps, this
+one time): Categories lists real default + custom categories, **+** opens a genuinely fresh "New
+category" sheet, name + icon selection work, **Save** round-trips into the Custom section, the
+trash icon shows the "N transactions become Uncategorized" confirm and deletes correctly back to
+the empty state.
+
+**Bug found and fixed while verifying this (own code, not a spec gap):** `category-editor-sheet.tsx`
+initially used a plain React Native `<View>` as its root, but the sheet renders with
+`enableDynamicSizing: true` (no fixed `snapPoints`, unlike Confirm/Add) — that mode requires the
+content be wrapped in `@gorhom/bottom-sheet`'s own `<BottomSheetView>` (or `<BottomSheetScrollView>`,
+already correctly used by `category-picker-sheet.tsx`), since only those components report their
+measured height back into the library's layout state. A plain `<View>` never does, so
+`contentHeight` stayed permanently unset, no snap points could ever be computed, and **+**/row-tap
+silently did nothing — `.present()` succeeded, the sheet's content was correctly registered to
+render, but it could never compute where on screen to actually put itself. Fixed by swapping the
+root to `<BottomSheetView>`. Confirmed via targeted logging (`evaluatePosition` bailing forever on
+`detents=undefined` while `contentHeight=-999`) before the fix, then a clean `adb`-driven repro
+after it.
+
+Also hardened `@gorhom/bottom-sheet` defensively while investigating (`patches/@gorhom+bottom-sheet+5.2.14.patch`,
+alongside the pre-existing PR #2720 mount-time fix from the F3/F4 sheet-rendering bug, see the
+cross-cutting fix above): `BottomSheetModal`'s `handleDismiss` can, on Reanimated v4, suffer the
+same class of stuck-status bug as the mount case — `statusRef` clears from `DISMISSING` only via
+`<BottomSheet onClose>`, which depends on the same fragile animated reaction. Added a JS-driven
+watchdog there too. Not the root cause of *this* bug (the actual cause was the missing
+`BottomSheetView` wrapper above), but a real, separate latent risk worth keeping patched since it
+would otherwise permanently break every sheet on the shared modal instance if it ever fires.
+
+**Second bug found and fixed, same testing pass (own code again):** cancelling a sheet and
+immediately tapping a different row (well under the ~300ms a real close animation takes) silently
+dropped the new sheet's content — reproduced on-device, user-reported, and confirmed via video
+frame analysis (a clean tap on the row's label, not the earlier chevron issue, with no sheet ever
+appearing). Root cause: `SheetHost` shares one `BottomSheetModal` across every sheet type, and its
+effect called `.present()` for the new sheet the instant `current` changed — but `.dismiss()`'s
+close *animation* is still running at that point. `@gorhom`'s portal-render gate checks whether the
+modal is still mid-close **at the moment new content is registered**, not at present()-call time,
+so a present() that races an in-flight dismiss gets silently dropped and is never retried once the
+close actually finishes. Fixed in `sheet-host.tsx` by serializing the two: a `dismissing` ref makes
+the effect defer `.present()` while a close is in flight, and the modal's own `onDismiss` callback
+(previously just the registry's `close`) now re-checks `current` once the close genuinely
+completes — presenting whatever was requested in the meantime, or finalizing the close if nothing
+was. General fix, not category-specific: applies to rapid sheet-switching anywhere in the app
+(Confirm ↔ Category picker ↔ Add, not just the Categories screen), since it's the shared-modal
+timing itself that was racy, not any one sheet's content.
+
+**Third, smaller fix, same pass:** the chevron (`>`) on each Categories row was purely decorative
+with no touch handler — visually the most "tappable"-looking part of the row, but tapping it did
+nothing (confirmed via video: a tap ~60px off a delete button's trash icon landed on the chevron
+instead and silently failed). Fixed by making the chevron open Edit too, same as the row itself, so
+there's no dead zone at the row's right edge.
+
+**Fourth bug, next video, general (not category-specific):** hardware/gesture **back** while any
+sheet was open did nothing to the sheet itself — confirmed via video, several consecutive back
+presses on an open Edit-category sheet with zero effect — and instead fell through to whatever's
+behind it: the underlying route, or, with nothing left to pop, straight out of the app entirely to
+the phone's home screen (also caught on video, from within a Confirm/Add sheet). Root cause: none
+of `@gorhom`'s sheet, `SheetHost`, or `expo-router` intercepted the Android back button — the sheet
+is an overlay, not part of the route stack `expo-router`'s own back handling knows about, so an
+unhandled press fell through to the native default. Fixed in `sheet-host.tsx` with a
+`BackHandler` listener that intercepts back presses while any sheet is open. Applies to every
+sheet (`add`/`confirm`/`categoryPicker`/`createCategory`/`editCategory`), not just Categories.
+
+**Revised after user feedback** (first pass just no-op'd back when dirty, mirroring the
+swipe/scrim-tap no-op — user correctly pushed back: back should show the same "discard changes?"
+prompt Cancel does, not silently do nothing): added `onRequestClose`/`setOnRequestClose` to
+`useSheetRegistry` — each sheet body (`transaction-sheet.tsx`, `category-editor-sheet.tsx`)
+registers its own `handleCancel` (the dirty-check + discard `ConfirmDialog` logic it already had
+for its Cancel button) as this handler while mounted. `requestClose()` calls it instead of closing
+directly, so `SheetHost`'s back handler — and anything else that isn't the sheet's own Cancel
+button — now gets the *exact* Cancel behavior, not a bypass of it: discard-confirm when dirty,
+immediate close when clean. (The nested case — back while the discard-confirm dialog itself is
+showing — needs no extra code: RN's `Modal`, which `ConfirmDialog` is built on, already handles
+the Android back button itself via its own `onRequestClose` prop.)
+
+**Also fixed, same feedback (real bug, not just the back-button gap):** `dirty` in both
+`add-sheet-draft.ts` and `category-draft.ts` was a one-way latch — any `patch()` call set it
+`true` forever, so switching Income → Expense and back to Expense (a net no-op) was wrongly
+flagged as an unsaved change, and back correctly followed V-6 but for the wrong reason (there
+was nothing to discard). Fixed by snapshotting the seeded values as `_initial` on `open()` and
+recomputing `dirty` as a real diff against it on every `patch()` — a field patched back to its
+original value now correctly clears `dirty` again, same as it never changed.
+
+**Still wrong after that fix, user re-reported:** the diff-based `dirty` was verified correct for
+reverts (unit-tested directly against the store: toggle Expense→Income→Expense clears `dirty`),
+but the user's actual complaint was a *forward* toggle — switching payment method UPI→Cash, or
+Expense→Income, without reverting — still triggering the discard-confirm, which they don't want.
+Consistent with how they described the original bug ("just a tab switch"), a `SegmentedControl`
+flip isn't data entry the way typing an amount or picking a category is; it shouldn't need a
+"discard changes?" prompt on Cancel/back even when it's a genuine, non-reverted change. Fixed by
+removing `direction`/`type` and `paymentMethod` from `add-sheet-draft.ts`'s `DIRTY_KEYS` entirely
+— only `amountMinor`, `categoryId`, `account`, `note`, `description` count toward `dirty` now.

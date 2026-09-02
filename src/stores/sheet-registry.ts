@@ -21,14 +21,29 @@ type SheetRegistryStore = {
   params: Record<string, unknown>;
   open: (name: SheetName, params?: Record<string, unknown>) => void;
   close: () => void;
-  /** step 5 routes this through the discard-confirm when the sheet is dirty (V-6) */
+  /**
+   * The active sheet body's own Cancel handler (dirty-check + discard-confirm, V-6) — each
+   * sheet body registers itself here while mounted and clears it on unmount. `requestClose`
+   * calls this instead of closing directly, so anything that isn't the sheet's own Cancel
+   * button (the hardware/gesture back handler in `SheetHost`, today) gets the exact same
+   * discard guard rather than bypassing it. Falls back to a plain close for sheets that don't
+   * register one (nothing to guard, e.g. `categoryPicker`).
+   */
+  onRequestClose: (() => void) | null;
+  setOnRequestClose: (handler: (() => void) | null) => void;
   requestClose: () => void;
 };
 
-export const useSheetRegistry = create<SheetRegistryStore>((set) => ({
+export const useSheetRegistry = create<SheetRegistryStore>((set, get) => ({
   current: null,
   params: {},
+  onRequestClose: null,
   open: (name, params = {}) => set({ current: name, params }),
   close: () => set({ current: null, params: {} }),
-  requestClose: () => set({ current: null, params: {} }),
+  setOnRequestClose: (handler) => set({ onRequestClose: handler }),
+  requestClose: () => {
+    const handler = get().onRequestClose;
+    if (handler) handler();
+    else set({ current: null, params: {} });
+  },
 }));

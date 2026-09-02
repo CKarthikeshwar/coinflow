@@ -18,7 +18,7 @@
 
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { format } from 'date-fns';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Colors, Spacing } from '@/constants/theme';
@@ -135,10 +135,18 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   const isEdgeAmount = draft.amountMinor === 0 || draft.amountMinor > MAX_SANE_AMOUNT_MINOR;
   const addDisabled = mode === 'add' && draft.amountMinor <= 0;
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     if (draft.dirty) setShowDiscardConfirm(true);
     else close();
-  };
+  }, [draft.dirty, close]);
+
+  // Registers this sheet's own Cancel logic (dirty-check + discard confirm, V-6) as the
+  // handler `useSheetRegistry().requestClose()` invokes — so the hardware/gesture back button
+  // (SheetHost) gets the exact same guard the Cancel button does, not a bypass of it.
+  useEffect(() => {
+    useSheetRegistry.getState().setOnRequestClose(handleCancel);
+    return () => useSheetRegistry.getState().setOnRequestClose(null);
+  }, [handleCancel]);
 
   const doDiscard = () => {
     setShowDiscardConfirm(false);

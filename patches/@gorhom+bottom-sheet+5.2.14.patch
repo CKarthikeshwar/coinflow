@@ -101,3 +101,55 @@ index ed43773..80d8466 100644
  
    shouldCalculateHeight?: boolean;
    style?: StyleProp<ViewStyle>;
+diff --git a/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetModal/BottomSheetModal.tsx b/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetModal/BottomSheetModal.tsx
+index 2954b3f..6efeb9b 100644
+--- a/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetModal/BottomSheetModal.tsx
++++ b/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetModal/BottomSheetModal.tsx
+@@ -85,6 +85,10 @@ function BottomSheetModalComponent<T = never>(
+   const currentIndexRef = useRef(!animateOnMount ? index : -1);
+   const nextIndexRef = useRef<number | null>(null);
+   const restoreIndexRef = useRef(-1);
++  // Local patch (defense-in-depth alongside PR #2720's mount-time fix): mirrors the latest
++  // `handleBottomSheetOnClose` so `handleDismiss`'s watchdog (below) can call it without a
++  // declaration-order problem — `handleBottomSheetOnClose` is defined later in this component.
++  const handleBottomSheetOnCloseRef = useRef<() => void>(() => {});
+   //#endregion
+ 
+   //#region variables
+@@ -291,6 +295,28 @@ function BottomSheetModalComponent<T = never>(
+       statusRef.current = MODAL_STATUS.DISMISSING;
+       willUnmountSheet(key);
+       bottomSheetRef.current?.forceClose(animationConfigs);
++
++      /**
++       * On Reanimated v4, the animated reaction that drives `<BottomSheet onClose>` (and thus
++       * `handleBottomSheetOnClose` — the only place `statusRef` ever leaves `DISMISSING`) can
++       * silently fail to fire, exactly like the mount-time race PR #2720 fixes. When that
++       * happens here instead, `statusRef` is stuck at `DISMISSING` forever, which makes
++       * `handlePortalRender` (gated on that status) silently no-op for every sheet presented
++       * on this shared modal instance from then on — not just this one. Poll from JS and force
++       * the same close-transition logic if `onClose` never arrives within ~2s.
++       */
++      let attempts = 0;
++      const enforceClosed = setInterval(() => {
++        if (statusRef.current !== MODAL_STATUS.DISMISSING) {
++          clearInterval(enforceClosed);
++          return;
++        }
++        attempts += 1;
++        if (attempts >= 20) {
++          clearInterval(enforceClosed);
++          handleBottomSheetOnCloseRef.current();
++        }
++      }, 100);
+     },
+     [willUnmountSheet, unmount, key]
+   );
+@@ -511,6 +537,7 @@ function BottomSheetModalComponent<T = never>(
+     },
+     [enableDismissOnClose, unmount]
+   );
++  handleBottomSheetOnCloseRef.current = handleBottomSheetOnClose;
+   //#endregion
+ 
+   //#region expose methods
