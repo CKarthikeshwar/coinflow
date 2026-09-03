@@ -20,7 +20,7 @@ The next real work is feature implementation (§9).**
 | `SPEC-UI-UX.md` (repo root) | **Frozen (v1).** Screen inventory + priority (§1), visual direction (§2), design system (§3, all subsections frozen), navigation (§4), global rules (§5), per-screen specs (§6), visual acceptance `UI-0xx` (§7), resolved decisions (§8), post-freeze change log (§9 — CR-1). |
 | `SPEC-implementation.md` (repo root) | **Frozen (v1).** Part I §1–§15 (product / behavior, `IMP-0xx`, decisions D1–D17). Part II §16–§37 (technical: stack §16, architecture §17, project structure §18, data models §19, persistence §20, data-access §21, app state §22, SMS parsing §23, normalization §24, categorization §25, analytics §26, formatting/undo §27, navigation §28, components + `theme.ts` §29, screen specs §30, notifications §31, error handling §32, security §33, testing §34, build & release §35, freeze §36, change log §37; decisions D18–D35). |
 | `SPEC/IMPLEMENTATION-PLAN.md` + `SPEC/IMPLEMENTATION-PROGRESS.md` | **Done.** The meta-plan that produced Part II of `SPEC-implementation.md`. Phases 0–5 all complete; progress log kept per phase. |
-| Expo app (`src/app`, `src/components`) | **In progress.** Scaffolding (deps, persistence, `theme.ts`, the native SMS module) is done. Features built per `SPEC/traceability.md`: **F1, F2, F11, F3, F4, F5, F6, F6.5** — with an F2–F5 deferral-closing pass (2026-09-03), a test-tier audit the same day, and F6.5 (tab shell + real Home screen) verified on-device 2026-09-03. Template `explore.tsx` / "Welcome to Expo" home are gone. Remaining: **F7, F8, F8.5, F9, F12** (§12 step 5). |
+| Expo app (`src/app`, `src/components`) | **In progress.** Scaffolding (deps, persistence, `theme.ts`, the native SMS module) is done. Features built per `SPEC/traceability.md`: **F1, F2, F11, F3, F4, F5, F6, F6.5, F7, F8** — with an F2–F5 deferral-closing pass (2026-09-03), a test-tier audit the same day, F6.5 verified on-device 2026-09-03, and F7 verified on-device 2026-09-03. Template `explore.tsx` / "Welcome to Expo" home are gone. Remaining: **F8.5, F9, F12** (§12 step 5) — F8 owes its own on-device check. |
 
 **Conclusion:** Discovery, design, prototyping, and both specs are done and frozen (`SPEC-implementation.md`
 amended post-freeze per its §37 change log — CR-1..CR-4 — under the §10 protocol below; still v1).
@@ -345,9 +345,12 @@ Implementation (§9) is the current track. Do these in order:
    F11 review queue → F3 confirmation → F4 manual add → F5 list — all **done**
    (`SPEC/traceability.md`). **F6** (P1, done) and **F6.5 app shell & Home** (P0, added
    `SPEC-implementation.md` CR-4, 2026-09-03: the `(tabs)` shell + the real Home screen had no
-   owning feature until then) are also both **done**, F6.5 verified on-device 2026-09-03. Current
-   order from here: **F7** (**next**) → F8 → **F8.5 Settings** (added, same CR) → F9 → F12. For
-   each:
+   owning feature until then) are also both **done**, F6.5 verified on-device 2026-09-03. **F7**
+   (P1, done, verified on-device 2026-09-03) and **F8 account memory** (P1, done 2026-09-03 —
+   most of its own behaviour already existed from F2–F5/F11; this pass built the Settings ›
+   Account rules screen the spec calls its only window into that behaviour; on-device check
+   still owed) are both done too. Current order from here: **F8.5 Settings** (**next**, added,
+   same CR) → F9 → F12. For each:
    read the spec section → implement → write the tests §9.1 calls for → run tests → run the app →
    compare against `design-prototype/01-midnight/` → verify its `IMP-0xx` + `UI-0xx` against §9.1's
    definition of done → mark done. Keep a `SPEC/traceability.md` grid (`UI-0xx → IMP-0xx →
