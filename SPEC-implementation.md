@@ -241,6 +241,13 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
 - **Edge cases:** SMS & notifications reflects **live** OS permission state, never a cached flag
   (§22.4); Clear all data is irreversible and returns to onboarding (P-3); an export failure
   (E17) shows a retry toast with nothing partially shared.
+- **Housekeeping owed alongside this feature (not a new build, a consolidation):** Review Queue
+  (F11) still has its own inline SMS-only permission check, predating the shared
+  `usePermissionStatus` hook Home (F6.5) introduced — a small, known duplication (see
+  `SPEC/traceability.md`'s F6.5 entry). Building this subpage's own live SMS + notification status
+  display is the natural point to also swap Review Queue onto the shared hook and retire its
+  inline version, rather than adding a third copy. Bounded trigger: do this as part of F8.5's own
+  pass, not deferred again past it.
 
 ### F9 — Spending summary · P1
 - **Behavior (per period; default current calendar month; week view available):** for the period —
@@ -2879,3 +2886,14 @@ change in `SPEC-UI-UX.md` §9.
 
   `SPEC/PLAN.md` §12 step 5's feature build order and §0's status table are updated in the same
   pass to carry F6.5 / F8.5 and current progress.
+
+- **CR-5** (2026-09-03, F6.5 step 3 — building Home) — **F8.5 gained a bounded housekeeping item.**
+  Building Home's permission banner introduced a shared `usePermissionStatus` hook
+  (`src/hooks/use-permission-status.ts`); Review Queue (F11) already had its own older, SMS-only
+  inline version of the same check, predating that hook, now a small duplication. Rather than leave
+  it as an unbounded "worth doing sometime" note (which `SPEC/PLAN.md` §9.1 point 3 treats as scope
+  silently dropped), F8.5's own text now names it directly: F8.5 builds Settings › SMS &
+  notifications, which needs the same live-permission read Review Queue already does inline, so
+  swapping Review Queue onto the shared hook is folded into that pass, not deferred past it. No
+  behavior change to either screen today; `SPEC/traceability.md`'s F6.5 entry records the finding.
+  No linked `SPEC-UI-UX.md` change.

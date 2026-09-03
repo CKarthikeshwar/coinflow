@@ -4,8 +4,13 @@
  */
 
 export type FormatMoneyOptions = {
-  /** Leading sign. `'always'` (default) shows `+`/`−`; `'none'` shows the bare magnitude. */
-  sign?: 'always' | 'none';
+  /**
+   * Leading sign. `'always'` (default) shows `+`/`−`; `'none'` shows the bare magnitude, even
+   * for a negative input; `'negativeOnly'` omits the `+` for a positive value but still shows
+   * `−` for a genuine negative — for a figure that's a magnitude, not a signed delta, yet can
+   * still legitimately be negative (the Home running-balance hero, §27.5 / IMP-010).
+   */
+  sign?: 'always' | 'none' | 'negativeOnly';
   /** `₹` prefix. Defaults to `true`. */
   withCurrency?: boolean;
 };
@@ -40,15 +45,25 @@ export function formatMoney(amountMinor: number, opts: FormatMoneyOptions = {}):
   const currency = withCurrency ? '₹' : '';
   const magnitude = `${currency}${rupeesGrouped}${paiseSuffix}`;
 
-  if (sign === 'none') return magnitude;
-
   // Thin space (U+2009, explicit escape so it can't silently drift to a plain space) between
   // the sign and the amount — `+ ₹1,15,000`, `− ₹842` (§27.1).
+  const THIN_SPACE = '\u2009';
+
+  if (sign === 'none') return magnitude;
+  if (sign === 'negativeOnly') return isNegative ? `−${THIN_SPACE}${magnitude}` : magnitude;
+
   const signChar = isNegative ? '−' : '+';
-  return `${signChar} ${magnitude}`;
+  return `${signChar}${THIN_SPACE}${magnitude}`;
 }
 
 /** Badge / count caps at "99+" (§27.1). */
 export function formatCount(n: number): string {
   return n > 99 ? '99+' : String(n);
+}
+
+/** Signed percent change; `null` (no comparison period) renders as an em dash (§27.1 / §26.3). */
+export function formatPercentDelta(x: number | null): string {
+  if (x == null) return '—';
+  const sign = x > 0 ? '+' : '';
+  return `${sign}${Math.round(x * 100)}%`;
 }

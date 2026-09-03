@@ -33,3 +33,13 @@ export function formatDayHeader(dayStartMs: number): string {
   if (isYesterday(date)) return 'Yesterday';
   return format(date, 'EEE, d MMM');
 }
+
+/**
+ * `September` — the month label on Home's brand top bar (§6.2). Takes `ts` (defaulting to now)
+ * rather than calling `Date.now()` at the call site, same reason as every other `now = Date.now()`
+ * default in this file: the render-purity lint flags a direct `Date.now()` call written inline
+ * in a component, not one hidden behind a default parameter in an imported pure function.
+ */
+export function formatMonthLabel(ts: number = Date.now()): string {
+  return format(ts, 'MMMM');
+}

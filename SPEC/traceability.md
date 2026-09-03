@@ -607,9 +607,11 @@ the sitemap are gone too — a side benefit, not the fix's goal).
 
 ## F6.5 — App shell & Home
 
-**Status:** in progress (step 1 of 5 — see the plan in the session that started this feature).
-Added `SPEC-implementation.md` CR-4 (2026-09-03) to close the screen-ownership gap this feature
-fills; see that CR for why it exists.
+**Status:** in progress (steps 1 and 3 of 5 done — step 2, moving the existing screens into the
+shell, turned out to be a byproduct of step 1 rather than its own pass; step 4, "connect it all to
+live data," likewise landed inside step 3 since Home couldn't be built without it — see the plan in
+the session that started this feature). Added `SPEC-implementation.md` CR-4 (2026-09-03) to close
+the screen-ownership gap this feature fills; see that CR for why it exists.
 
 **Step 1 — the `(tabs)` navigation shell.** New `src/features/app-shell/tab-bar.tsx`
 (`CoinFlowTabBar`, D25/D32, §29.4) — a custom floating pill `tabBar` for `(tabs)/_layout.tsx`
@@ -639,10 +641,71 @@ no new tests were owed by this step; it's shell/layout work, not new business lo
 `expo export` for both `--platform web` and `--platform android` (the latter also confirms the
 cross-cutting Metro fix above).
 
-**Not yet built (steps 2–5, per the plan):** relocating the rest of the flat routes
-(`review-queue.tsx`, `categories.tsx`, `transaction/[id].tsx`) is **not** planned — per §28.1 these
-stay pushed pages outside the tab shell, already correctly placed. What remains is the real Home
-screen itself (§30.4 — balance hero, Income/Spending tiles, MoM deltas, Recent activity), wiring it
-to live data, and the RNTL test(s) that pass will owe once Home is more than a stub. No manual
-on-device verification done yet — `expo export --platform android` bundling successfully is not
-the same as running on a device.
+**Not yet built after step 1:** relocating the rest of the flat routes (`review-queue.tsx`,
+`categories.tsx`, `transaction/[id].tsx`) is **not** planned — per §28.1 these stay pushed pages
+outside the tab shell, already correctly placed.
+
+**Step 3 — the real Home screen (§30.4), plus the data layer it needed that didn't exist yet.**
+Nothing in the app previously computed a running balance, a period Spent/Income summary, or a
+month-over-month delta — this step built that (§26's Home-relevant slice) alongside the screen
+itself, since the screen can't exist without it:
+
+- **New `src/domain/period.ts`** — `monthPeriod()` / `previousMonthPeriod()` (§27.3), deliberately
+  narrow (month only, no week mode / stepping — that's F9's). **New `src/domain/analytics.ts`** —
+  `percentDelta(current, previous)` (§26.3), `null`-guarded on `previous === 0`, pulled out as a
+  pure function specifically so the one piece of real branching logic here has a direct unit test
+  rather than only being exercised indirectly through a hook (per §34.0's tier rule).
+- **New `src/db/repositories/analytics.ts`** (`analyticsRepo`, §21.5) — `useRunningBalance` (§26.2),
+  `usePeriodSummary` (§26.1), `useMoMDeltas` (§26.3, composes two `usePeriodSummary` calls +
+  `percentDelta`), `useUncategorizedCount` (§26.8, **unscoped** for Home — period-scoped "Fix N" is
+  a separate F9 concern). No dedicated hook-level test: the real logic (`percentDelta`) is already
+  unit-tested directly; the hooks themselves are aggregate SQL + `COALESCE` guards, the same class
+  of "plain query, no branching" the rest of `src/db/repositories/` doesn't test directly either.
+- **New UI:** `src/ui/stat-tile.tsx` (`StatTile`, §29.4 — label + figure + trend-glyph delta line,
+  "No prior month" when the delta is `null`), `src/features/home/balance-hero.tsx` (`BalanceHero`),
+  `src/ui/error-state.tsx` (`ErrorState` — genuinely new; nothing had needed a real query-failure
+  state before this), a `'home'` layout added to `Skeleton`. `TopBar` gained the `'brand'` variant
+  (wordmark + current month) its own header comment had been anticipating since F11.
+- **Rewrote `(tabs)/index.tsx`** — wires all of the above to real data: hero, Income/Spending
+  tiles, both action-strip rows (review + the new uncategorized one), Recent (≤8, reuses F5's
+  `TransactionCard`), the permission banner (new `src/hooks/use-permission-status.ts` — live
+  SMS + notification status, `AppState`-reactive, shared rather than re-inlined), and the
+  skeleton / empty (new-user) / error states.
+
+**Bugs found and fixed while building this (own code, not pre-existing):**
+1. `formatMoney`'s `sign` option had no way to show a genuine negative magnitude without also
+   forcing a `+` on positive values — `sign:'none'` strips `−` too (by design, and correctly
+   tested/relied on elsewhere: `content.ts`, `day-group-header.tsx`, `amount-input.tsx` all pass
+   already-non-negative amounts). But §27.5 explicitly requires the Home hero to show `₹0`/`₹1,234`
+   with no `+`, while still showing `−` for a real negative. Added a third option,
+   `sign:'negativeOnly'`, rather than changing `'none'`'s existing, correctly-tested behavior.
+2. (Investigated, turned out **not** to be a bug.) The V-1 "thin space" between a sign and `₹`
+   looked like a plain space in both `money.ts` and its test file when read as text — it's
+   actually already the correct `U+2009` character in both places; the tooling used to inspect it
+   just can't render the visual difference from a regular space. No change needed; confirmed with
+   a byte-level check before touching anything, so nothing was "fixed" that wasn't broken.
+3. The React Compiler's lint flagged a direct `Date.now()` call inside `TopBar`'s render body
+   (`react-hooks/purity`). Same class as `formatWhen`'s existing `now = Date.now()` default
+   parameter — moved the month-label formatting into a new `formatMonthLabel(ts = Date.now())` in
+   `domain/format/when.ts` so the impure default lives behind an imported function boundary, same
+   pattern already established, rather than suppressing the lint.
+4. `use-permission-status.ts`'s effect triggered `react-hooks/set-state-in-effect` for the same
+   reason `review-queue.tsx`'s own (now-duplicated) inline permission check already does — an
+   `eslint-disable-next-line` with the same justification comment, matching that precedent exactly
+   rather than inventing a new pattern.
+
+**Not done, noted rather than silently skipped:** `review-queue.tsx` has its own inline SMS-only
+permission check that predates this step's shared `usePermissionStatus` hook — a real, small
+duplication now. Not refactored here (different dismiss-state read mechanism — a one-time
+`useState` snapshot there vs. this step's live `useSetting` — makes it more than a drop-in swap,
+and out of scope for "build Home"). **Bounded, not vague:** scheduled into F8.5 (`SPEC-implementation.md`
+CR-5) — that feature builds Settings › SMS & notifications, which needs the identical live-status
+read, so swapping Review Queue onto the shared hook rides along with that pass rather than being a
+third open-ended "someday."
+
+**Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 276/276 (247 before this
+step + 6 `formatMoney`/`formatPercentDelta` cases + 4 `period.ts` + 5 `analytics.ts` + 14 for the
+new `(tabs)/index.test.tsx` — loading / error+retry / empty-new-user / loaded-with-negative-balance
+/ both action-strip rows / recent-row navigation / See-all / the permission-banner priority and
+dismiss-persistence rules), plus a full `expo export` for both `--platform web` and
+`--platform android`. No on-device verification yet — still owed, same as step 1.

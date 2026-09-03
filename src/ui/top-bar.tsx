@@ -3,29 +3,53 @@
  * `headerShown:false` (custom top bars, §28.1), so pushed screens render their own back
  * affordance here rather than relying on the native header.
  *
- * Full spec is `variant:'brand'|'title'|'back'` + a `right?` slot; this pass implements the
- * `'title'` shape (+ optional count, back, and right action) needed by Review Queue and
- * Categories (§6.11's "＋ Add"). `'brand'` (Home) lands with Home itself.
+ * Full spec is `variant:'brand'|'title'|'back'` + a `right?` slot. `'title'` (+ optional count,
+ * back, and right action) backs Review Queue and Categories (§6.11's "＋ Add"). `'brand'`
+ * (Home, §6.2 — "brand + month") landed with Home itself (F6.5): wordmark on the left, the
+ * current month on the right, no back/right-action slots (Home is a tab root).
  */
 
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
+import { formatMonthLabel } from '@/domain/format/when';
 
 import { Badge } from './badge';
 import { Icon, type IconName } from './icon';
 import { ThemedText } from './themed-text';
 
-export type TopBarProps = {
-  variant?: 'title';
-  title: string;
-  count?: number;
-  onBack?: () => void;
-  right?: { icon: IconName; label: string; onPress: () => void } | ReactNode;
-};
+export type TopBarRight = { icon: IconName; label: string; onPress: () => void } | ReactNode;
 
-export function TopBar({ title, count, onBack, right }: TopBarProps) {
+export type TopBarProps =
+  | {
+      variant: 'brand';
+      /** Defaults to the current month, e.g. "September". Scopes Home's tiles, not the hero (D2). */
+      monthLabel?: string;
+    }
+  | {
+      variant?: 'title';
+      title: string;
+      count?: number;
+      onBack?: () => void;
+      right?: TopBarRight;
+    };
+
+export function TopBar(props: TopBarProps) {
+  if (props.variant === 'brand') {
+    return (
+      <View style={styles.row}>
+        <ThemedText type="title" style={styles.title}>
+          CoinFlow
+        </ThemedText>
+        <ThemedText type="label" themeColor="text3">
+          {props.monthLabel ?? formatMonthLabel()}
+        </ThemedText>
+      </View>
+    );
+  }
+
+  const { title, count, onBack, right } = props;
   return (
     <View style={styles.row}>
       {onBack ? (
@@ -51,7 +75,7 @@ export function TopBar({ title, count, onBack, right }: TopBarProps) {
 }
 
 function isRightAction(
-  right: NonNullable<TopBarProps['right']>,
+  right: NonNullable<TopBarRight>,
 ): right is { icon: IconName; label: string; onPress: () => void } {
   return typeof right === 'object' && right !== null && 'onPress' in right;
 }

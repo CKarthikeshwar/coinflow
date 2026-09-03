@@ -41,6 +41,8 @@ import {
   SlidersHorizontal,
   Tag,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   TriangleAlert,
   Utensils,
   Wallet,
@@ -90,6 +92,11 @@ const ICONS = {
   'shield-check': ShieldCheck,
   'trash-2': Trash2,
   download: Download,
+
+  // Stat-tile trend glyph (§29.4's `StatTile`) — not in §3.4's own enumerated chrome list,
+  // added when the component needed it, same as every other entry here.
+  'trending-up': TrendingUp,
+  'trending-down': TrendingDown,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

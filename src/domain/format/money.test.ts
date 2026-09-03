@@ -1,4 +1,4 @@
-import { formatMoney } from './money';
+import { formatMoney, formatPercentDelta } from './money';
 
 const THIN_SPACE = ' ';
 
@@ -38,5 +38,31 @@ describe('formatMoney', () => {
 
   it('handles zero', () => {
     expect(formatMoney(0, { sign: 'none' })).toBe('₹0');
+  });
+
+  it('sign:"negativeOnly" omits "+" for a positive amount', () => {
+    expect(formatMoney(45000, { sign: 'negativeOnly' })).toBe('₹450');
+  });
+
+  it('sign:"negativeOnly" still shows "−" for a genuine negative, with the thin space', () => {
+    expect(formatMoney(-45000, { sign: 'negativeOnly' })).toBe(`−${THIN_SPACE}₹450`);
+  });
+});
+
+describe('formatPercentDelta', () => {
+  it('renders an em dash when there is no comparison period', () => {
+    expect(formatPercentDelta(null)).toBe('—');
+  });
+
+  it('shows a leading "+" and rounds a positive change', () => {
+    expect(formatPercentDelta(0.124)).toBe('+12%');
+  });
+
+  it('shows no extra "+" for a negative change (the "-" comes from Math.round itself, per §27.1)', () => {
+    expect(formatPercentDelta(-0.08)).toBe('-8%');
+  });
+
+  it('shows "0%" with no sign for no change', () => {
+    expect(formatPercentDelta(0)).toBe('0%');
   });
 });
