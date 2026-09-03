@@ -3,6 +3,12 @@
  * never stored, re-checked on `AppState → active`. Shared by every screen that shows a
  * `PermissionBanner` or a permission card (Home first, §30.4; Review Queue / onboarding /
  * Settings › SMS & notifications reuse it as they're built).
+ *
+ * `smsCanAskAgain`/`notificationsCanAskAgain` (F8.5) carry the OS's own distinction between
+ * "denied, asking again shows the normal prompt" and "permanently denied, asking again silently
+ * no-ops" — IMP-042 needs it to decide whether a permission card's action re-requests or opens
+ * the system settings screen instead. Home/Review Queue's simpler banners don't need this (they
+ * only ever re-request), so it's additive — existing `.sms`/`.notifications` consumers unaffected.
  */
 
 import * as Notifications from 'expo-notifications';
@@ -15,12 +21,16 @@ export type PermissionStatus = 'unknown' | 'granted' | 'denied';
 
 export function usePermissionStatus() {
   const [sms, setSms] = useState<PermissionStatus>('unknown');
+  const [smsCanAskAgain, setSmsCanAskAgain] = useState(true);
   const [notifications, setNotifications] = useState<PermissionStatus>('unknown');
+  const [notificationsCanAskAgain, setNotificationsCanAskAgain] = useState(true);
 
   const check = useCallback(async () => {
     const [smsRes, notifRes] = await Promise.all([getSmsPermissions(), Notifications.getPermissionsAsync()]);
     setSms(smsRes.granted ? 'granted' : 'denied');
+    setSmsCanAskAgain(smsRes.canAskAgain);
     setNotifications(notifRes.granted ? 'granted' : 'denied');
+    setNotificationsCanAskAgain(notifRes.canAskAgain);
   }, []);
 
   useEffect(() => {
@@ -37,5 +47,5 @@ export function usePermissionStatus() {
     return () => sub.remove();
   }, [check]);
 
-  return { sms, notifications, refresh: check };
+  return { sms, smsCanAskAgain, notifications, notificationsCanAskAgain, refresh: check };
 }

@@ -854,3 +854,228 @@ RNTL-tier screens/sheets, both covered directly.
 **Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 293/293. No on-device
 check yet for this pass — owed before F8 is called fully done, same standing gap noted on every
 recent feature.
+
+**2026-09-03, later — on-device re-check.** User confirmed on a real device: F8's Account rules
+screen works end to end. F8 called done.
+
+## F8.5 — Settings
+
+**Ambiguities found and resolved, recorded rather than guessed past silently:**
+
+- **`IMP-065` doesn't exist.** `SPEC-implementation.md` cites it twice (§1 line 244, §20.7) for
+  Clear all data's two-step confirm, but the §13 criteria table only ever runs `IMP-001..045` —
+  there is no `IMP-065` row anywhere, and `git log -S "IMP-065"` shows it entered the doc on
+  2026-09-01 (Phase 2/3 drafting), well before this session. Read as a typo for `UI-065`, which
+  *does* exist in `SPEC-UI-UX.md` ("Clear all data requires a two-step confirm") and is exactly
+  the requirement those two citations are describing. Treated `IMP-044` + `UI-065` together as
+  full coverage; left the doc's own typo alone per user instruction (2026-09-03) rather than
+  editing `SPEC-implementation.md`.
+- **UPI has no assigned icon.** `SPEC-UI-UX.md` §3.4's payment-method icon list only maps
+  Card/Cash/Bank transfer/Wallet to a Lucide glyph; UPI is named but given none (the prototype's
+  own UPI glyph is a hand-drawn shape with no direct Lucide equivalent). Found that
+  `suggestion-card.tsx`'s `METHOD_ICON` had already silently reused `credit-card` for UPI,
+  undocumented. `payment-methods.tsx` repeats that same choice for consistency, documented this
+  time in its own file header rather than a second silent guess.
+- **`PermissionCard` (onboarding) vs. `statusblock` (the prototype's actual Settings element)**
+  — `design-prototype/01-midnight/p1-screens.html` uses two visibly different components for
+  onboarding's permission step (`permcard`, an "Allow" CTA card) and Settings' SMS &
+  notifications (`statusblock`, a state-pill + single Enable/"Open system settings" button row).
+  `SPEC-implementation.md`'s own component catalog (line 2085) already made the call to unify
+  both into one shared `PermissionCard` at `features/onboarding/permission-card.tsx` before this
+  pass started — not re-litigated here, just followed; its props extended with an optional
+  `canAskAgain` (default `true`) beyond the catalog's literal `kind/state/optional?/onRequest`
+  list so the same component can pick "Allow" vs. "Enable" vs. "Open system settings" for its
+  action label.
+- **§30.15 says the SMS & notifications row's subtitle reads `useSetting`**, but §22.4's
+  architecture principle is permission status is "read live from the OS, never stored" — and
+  every other consumer (Home, Review Queue, this row's own subpage) already reads it live via
+  `usePermissionStatus`. Followed the repeatedly-stated architecture principle over the one
+  screen-spec line; `settings.tsx` reads `usePermissionStatus` directly, not `useSetting`.
+- **About's "licenses / help links"** have no real URL anywhere in the repo's specs, and a URL
+  isn't something to invent. Shipped version + the on-device privacy line only; the licenses/help
+  rows are a named, bounded deferral (`about.tsx`'s own header) — add them once there's an actual
+  URL to point at, not a placeholder one.
+
+**A real functional gap found and fixed, not just a naming one:** IMP-042 ("a permanently-denied
+permission's Enable action opens the system settings screen") **was not actually implemented
+anywhere** before this pass — Home's and Review Queue's existing `PermissionBanner` "Enable"
+handlers both unconditionally re-request, since neither needed the OS's denied-vs-permanently-
+denied distinction until now. `usePermissionStatus` (F6.5) gained `smsCanAskAgain`/
+`notificationsCanAskAgain` (additive — existing `.sms`/`.notifications` consumers unaffected) so
+`sms-notifications.tsx` can be the first caller to actually branch: `canAskAgain ? request() :
+Linking.openSettings()`.
+
+**Built this pass:**
+
+- **`usePermissionStatus`** (`src/hooks/use-permission-status.ts`) — extended with
+  `smsCanAskAgain`/`notificationsCanAskAgain`; its own new unit test file
+  (`use-permission-status.test.ts`, none existed before) since it now carries real branching
+  logic, not just a live-read passthrough.
+- **`PermissionCard`** (`src/features/onboarding/permission-card.tsx`) — shared component, see
+  above. First real consumer is Settings; onboarding (F12) will be the second, later.
+- **`ConfirmDialog`'s `twoStep` prop** (UI-065) — a type-`CONFIRM` inset field that gates the
+  confirm button; resets on every closing path (confirm/Cancel/scrim/hardware-back), all of which
+  already funnel through two internal handlers, not a `visible`-watching `useEffect` (would need
+  a synchronous `setState` inside the effect body — this codebase's own lint rule forbids that
+  pattern). No dedicated test existed for `ConfirmDialog` itself before this pass; added one.
+- **`src/features/settings/export.ts`** (§20.8, D17/IMP-043) — `exportJson()`/`exportCsv()`,
+  didn't exist yet. Uses SDK 57's `File`/`Paths` API (not the legacy
+  `FileSystem.writeAsStringAsync`), per `AGENTS.md`. JSON = the exact §20.8 shape (live rows
+  only). CSV = header + one row per live transaction, signed rupees to 2dp (not the UI's
+  Indian-grouped `formatMoney` — a different, plainer format §20.8 explicitly calls for),
+  `occurredAt` as ISO-8601 local, RFC-4180-style quoting for fields containing a comma/quote/
+  newline.
+- **Four new subpages** (root routes + `.web.tsx` → `AndroidOnlyNotice`, same split as
+  `categories.tsx`): `payment-methods.tsx` (static), `sms-notifications.tsx` (the two
+  `PermissionCard`s + the IMP-042 branch above), `data.tsx` (Export JSON/CSV buttons + the E17
+  retry-message path + Clear all data's two-step confirm → `clearAllData()`, which already
+  existed and needed no changes), `about.tsx` (version via `expo-constants` + the privacy line).
+- **`settings.tsx` rebuilt** from F8's temporary stub into the real grouped list (§30.15): six
+  rows, each pushing its subpage; live SMS-derived On/Off subtitle + warning glyph (UI-064);
+  version footer.
+- **CR-5 (housekeeping, named back in F6.5's own entry)** — `review-queue.tsx` swapped its
+  older inline `getSmsPermissions` + `AppState`-subscription copy onto the shared
+  `usePermissionStatus` hook, and its banner-dismiss read from a one-time `useState` snapshot of
+  `getSetting` to the live `useSetting` (matching Home) — the second change is what actually made
+  the hook swap a real drop-in rather than leaving a second, differently-shaped duplication.
+
+**Test-tier decision (§34.0):** `clearAllData()` itself was already built and untested-by-this-
+screen in an earlier phase (§20.7's own transaction + reseed + vacuum) — not re-tested here, only
+that `data.tsx` calls it correctly. `export.ts` mocks `@/db/client` directly (three tables) with
+the same fluent-builder pattern `write-confirmed-transaction.test.ts` established, routed by
+table name via `getTableName`.
+
+**Tests added**, `npm test` 293 → 337:
+- `use-permission-status.test.ts` (3), `confirm-dialog.test.tsx` (6), `permission-card.test.tsx`
+  (7), `export.test.ts` (5), `payment-methods.test.tsx` (3), `about.test.tsx` (2),
+  `sms-notifications.test.tsx` (6, incl. the IMP-042 branch both ways), `data.test.tsx` (6, incl.
+  the two-step confirm gate and the E17 error path), `(tabs)/settings.test.tsx` (4). Two existing
+  `review-queue.test.tsx` permission-banner tests rewritten for the CR-5 hook swap, plus two new
+  ones (dismissed-while-still-denied stays hidden; Enable calls `refresh()`).
+
+**Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 337/337, plus a full
+`expo export --platform web` (18 static routes, all four new subpages included, unaffected
+bundle size pattern from the earlier F5 web-bundling fix). No on-device check yet for this pass —
+same standing gap as every recent feature; particularly worth an on-device look given this
+feature is the first place `Linking.openSettings()` and the two-step `ConfirmDialog` actually
+run on a real permission/database state.
+
+## F9 — Spending summary (Analytics)
+
+The first feature that needed real chart rendering — `react-native-svg`/`d3-shape`/`d3-scale`
+were installed since Phase 1 (§16) but completely unused until this pass. Structurally different
+from F7/F8/F8.5 (mostly screens/forms over data that already existed): this one builds new
+period math, new pure statistics, new SQL aggregates, and five new UI components, on top of a
+`(tabs)/analytics.tsx` stub that had been "Coming soon" since F6.5.
+
+**A real config gap found and fixed, not a spec ambiguity:** `d3-shape`/`d3-scale` ship pure ESM
+(`"type": "module"`, no CJS build) — the moment either was imported, Jest's default
+`transformIgnorePatterns` refused to parse them ("Unexpected token 'export'"). `jest.config.js`
+needed both packages **and their own transitive ESM-only deps** (`d3-array`, `d3-color`,
+`d3-format`, `d3-interpolate`, `d3-path`, `d3-time`, `d3-time-format`, `internmap`) added to the
+transform-inclusion list, same treatment already given to the RN/Expo packages there. Metro (the
+real app build) was never affected — only Jest's own transform config was missing this.
+
+**A real correctness hazard caught before it shipped:** the natural place to persist
+`analyticsPeriodMode` (§19.5, already a known `app_setting` key) was inside
+`useAnalyticsPeriod`'s Zustand `create()` initializer — but that store is pulled in through the
+`@/stores` barrel `_layout.tsx` imports at the very top of the app (via `SheetHost`), so its
+initializer runs at module-evaluation time, **before** `<MigrationGate>` has migrated the DB. A
+synchronous `db.select()` there would read an unmigrated table. Fixed by having the store always
+start on the current month/week, and moving the persisted-mode read into the Analytics screen's
+own mount `useEffect` instead — it only ever renders after the gate has passed.
+
+**Ambiguities found and resolved, recorded rather than guessed past silently:**
+
+- **§30.12's own navigation text is stale**, the same class of drift F7 already found and fixed
+  once: it says category rows link to `/transactions?category=<id>&period=…` and "Fix N" to
+  `?filter=uncategorized&period=…`, but the real params (built in F5/F7) are `categoryIds`
+  (comma-joined), `uncategorized=1`, and `from`/`to` (epoch-ms) — not those names. Wired to the
+  real, current param shape (`CategoryBreakdown`'s `openRow`), not the stale spec text.
+- **Custom categories have no assigned colour.** `CategoryPalette`'s 9 hues (§3.1/D33) are keyed
+  by the 9 default categories' own `key`; a custom category (`key: null`) has none. Resolved as
+  planned when this feature was scoped: `resolveCategoryColor` (`domain/analytics.ts`) cycles a
+  custom category through the same 9 hues by its `order` field — deterministic, an occasional hue
+  collision accepted for V1.
+- **UPI icon gap, again** — same missing-icon issue F8.5 already found and worked around
+  (`suggestion-card.tsx`'s undocumented `credit-card` reuse); not relevant to this feature's own
+  components directly, noted only because `resolveCategoryColor`'s docstring cross-references the
+  same class of "one exception the design spec's table doesn't cover" pattern.
+- **`StatTile`'s own header comment claims F9's Mean/Median tiles reuse it**, but `StatTile`'s
+  comparison line is a signed **percentage**; CR-1's actual wording needs the previous period's
+  **absolute amount** ("Last month ₹1,410"). Built `MeanMedianTile` as its own small component
+  instead of stretching `StatTile`'s prop surface to cover a data shape it wasn't designed for.
+- **Uncategorized in the donut** — "hatched, not coloured" (§6.10 item 4) implies a textured
+  slice; an actual SVG hatch-pattern fill is real extra complexity for the one deliberately-
+  uncoloured exception. Simplified: Uncategorized is excluded from the donut's slices entirely
+  and only appears in the ranked list below, with a dashed-outline swatch instead of a filled dot
+  — reusing the dashed-underline treatment `TransactionCard` already established for Uncategorized
+  (V-4), not a new visual language.
+- **`useUncategorizedCount(period)`'s own catalog listing is redundant.** `useCategoryBreakdown`'s
+  `categoryId: null` row already carries the exact count "Fix N" needs. Built the repo overload
+  anyway (symmetric with Home's unscoped call, cheap, may be useful later) but the screen doesn't
+  call it a second time for the same number.
+
+**Built this pass:**
+
+- **`domain/period.ts` extended** — `mode`/`label` added to `Period`; `isoWeekPeriod`,
+  `previousPeriod` (mode-aware, replacing the month-only `previousMonthPeriod`), `stepPeriod`
+  ("next" a no-op once the next period would start in the future), `startOfLocalDay`/
+  `endOfLocalDayExclusive`/`dayIndex`. The last three **consolidate a real pre-existing
+  duplication**: `transactions.tsx` and `transactions.ts` (the repo) each had an identical private
+  `localDayStart` — the repo copy's own comment already said "§27.3 period helper formalises this
+  in step 5." Both now import `startOfLocalDay` from here.
+- **`domain/analytics.ts` extended** — `buildDailySeries` (zero-filled, clamped to today),
+  `meanDailySpend`/`medianDailySpend`, `dailyChartYMax` (p95-based outlier clamp, §26.6),
+  `shareOf`, `resolveCategoryColor`. All pure — `CategoryPalette` itself (which imports
+  `react-native` via `theme.ts`) is passed in as a plain parameter rather than imported, keeping
+  this file free of RN/expo imports like every other domain file.
+- **`db/repositories/analytics.ts` extended** — `useCategoryBreakdown`, `useLargestExpenses`,
+  `useDailySeries` (raw rows + previous-period rows, feeding the domain math above; previous
+  mean/median `null` when the previous period has zero expense rows, not when the *derived* mean
+  happens to be zero — a cleaner signal than reusing `useMoMDeltas`' `previous === 0` convention),
+  `useUncategorizedCount` gained an optional `period` param (unscoped when omitted, Home
+  unaffected).
+- **`stores/analytics-period.ts`** — `useAnalyticsPeriod` (mode + stepped anchor); see the
+  module-load-time hazard above for why it doesn't read `getSetting` itself.
+- **Five new components** (`src/features/analytics/`): `PeriodControl` (Month/Week segmented +
+  `‹ label ›` stepper — the left chevron is the one `chevron-right` icon this app has, rotated
+  180°, not a second icon), `BalanceArcCard` (the "This month" half-ring arc — the first real use
+  of `d3-shape`'s `arc()`, which returns an SVG path `d` string directly when given no rendering
+  context), `MeanMedianTile`, `CategoryBreakdown` (donut via `pie()`+`arc()`, ranked list),
+  `DailyChart` (area+line via `d3-shape`'s `area()`/`line()` + `d3-scale`'s `scaleLinear`, dashed
+  mean line, inline outlier labels), `BiggestExpenses` (reuses `TransactionCard` as-is).
+- **`Skeleton` gained an `'analytics'` layout** (arc block + 2 tiles + 2 chart blocks + 3 rows).
+- **`(tabs)/analytics.tsx` rebuilt** from the F6.5 stub — period control → arc card → mean/median
+  tiles → category breakdown → daily chart → biggest expenses, with loading/error/empty-period
+  states matching Home's established pattern (`key`-bump retry, not a threaded refetch call).
+
+**Test-tier decision (§34.0):** the new SQL-layer hooks (`useCategoryBreakdown`,
+`useLargestExpenses`, `useDailySeries`, the period-scoped `useUncategorizedCount`) aren't
+directly unit tested — same established decision as `usePeriodSummary`/`useMoMDeltas`/
+`useRunningBalance` before them (no in-memory-SQLite harness exists here; correctness rests on
+matching §26.4/§26.5/§26.6's SQL as written). `useDailySeries`' own JS-side math (bucketing,
+mean/median, outlier clamp) is fully covered directly in `domain/analytics.test.ts`; the screen's
+own RNTL test verifies the wiring (loading/error/empty selection, props reaching each child,
+mode-hydration) with every child component stubbed, since each already has its own thorough test.
+SVG `<Text>` isn't queryable via RNTL's `getByText` (it doesn't traverse `Text`→`TSpan`
+the way host `Text` does) — `DailyChart`'s outlier-label tests use a `testID` + `getAllByTestId`
+instead, reading `.props.children.props.children` through the `TSpan` wrapper.
+
+**Tests added**, `npm test` 337 → 402:
+- `domain/period.test.ts` rewritten for the new API (18 cases, up from 4).
+- `domain/analytics.test.ts` extended (22 cases, up from 5) — `buildDailySeries` zero-fill/
+  clamping, mean vs. median under a rent-day spike, `dailyChartYMax`'s p95 clamp, `resolveCategoryColor`'s
+  default-vs-custom-cycling.
+- `period-control.test.tsx` (7), `mean-median-tile.test.tsx` (4), `balance-arc-card.test.tsx` (5,
+  incl. IMP-037's negative-balance leading `−` and the zero-income no-NaN guard),
+  `category-breakdown.test.tsx` (6, incl. the Fix-N navigation), `daily-chart.test.tsx` (5, incl.
+  the outlier-label assertions), `biggest-expenses.test.tsx` (3), `(tabs)/analytics.test.tsx` (6
+  — hydration, loading, error, empty, loaded, period-label wiring).
+
+**Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 402/402, plus a full
+`expo export --platform web` (still 18 static routes, `/analytics` and `/(tabs)/analytics`
+included, unaffected bundle size). No on-device check yet — same standing gap as every recent
+feature, but worth flagging harder here than usual: none of the SVG layout (arc geometry, donut
+proportions, chart scaling) has been visually confirmed on a real screen, only reasoned through
+and unit-tested for correctness of the underlying numbers — RNTL can't screenshot.

@@ -8,7 +8,11 @@ module.exports = {
   preset: 'jest-expo',
   resolver: 'react-native-worklets/jest/resolver',
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@gorhom/.*|@shopify/.*|drizzle-orm|drizzle-kit))',
+    // F9's chart libs (`d3-shape`/`d3-scale`) ship pure ESM with no CJS build (`"type":
+    // "module"`, no `lucide-react-native`-style CJS escape hatch to redirect to instead) — need
+    // transforming like the RN/Expo packages already listed here, not left for Jest to skip.
+    // Their own transitive deps (also ESM-only) are listed too.
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@gorhom/.*|@shopify/.*|drizzle-orm|drizzle-kit|d3-shape|d3-scale|d3-array|d3-color|d3-format|d3-interpolate|d3-path|d3-time|d3-time-format|internmap))',
   ],
   // `lucide-react-native`'s package.json "exports" maps a "react-native" condition straight to
   // its `.mjs` build, which Jest's transform (keyed by .js/.jsx/.ts/.tsx) never touches — force

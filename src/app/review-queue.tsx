@@ -3,22 +3,29 @@
  *
  * Root-relative navigation (this file lives directly under `src/app/`, not `(tabs)/`) since
  * the full route tree isn't built yet — see `SPEC/traceability.md`.
+ *
+ * Permission check (F8.5 / CR-5): used to be its own inline `getSmsPermissions` +
+ * `AppState`-subscription copy, predating the shared `usePermissionStatus` hook Home (F6.5)
+ * introduced. Swapped onto that hook here — the only other change needed to make the swap a
+ * real drop-in was the dismiss-state read: this screen used a one-time `useState` snapshot of
+ * `getSetting`, Home already used the live `useSetting`; now both do.
  */
 
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { AppState, FlatList, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
 import { getAccountRule } from '@/db/repositories/account-rules';
-import { getSetting, setSetting } from '@/db/repositories/settings';
+import { setSetting, useSetting } from '@/db/repositories/settings';
 import { dismissAllPending, usePendingSuggestions } from '@/db/repositories/suggestions';
 import type { Suggestion } from '@/db/schema';
 import { isKnownAccountRule } from '@/domain/categorize';
+import { usePermissionStatus } from '@/hooks/use-permission-status';
 import { cancelAllSuggestionNotifications } from '@/services/notifications/post';
 import { handleDiscard, handleSave } from '@/services/notifications/respond';
-import { getSmsPermissions, requestSmsPermissions } from '@/services/sms';
+import { requestSmsPermissions } from '@/services/sms';
 import { useSheetRegistry } from '@/stores';
 
 import { SuggestionCard } from '@/features/detection/suggestion-card';
@@ -50,40 +57,19 @@ export default function ReviewQueueScreen() {
   const rows = data ?? [];
   const loading = updatedAt === undefined;
 
-  const [smsGranted, setSmsGranted] = useState<boolean | null>(null);
-  const [bannerDismissed, setBannerDismissed] = useState(
-    () => getSetting<number | null>('smsBannerDismissedAt', null) !== null,
-  );
+  const permission = usePermissionStatus();
+  const smsBanner = useSetting<number | null>('smsBannerDismissedAt');
   const [confirmingDismissAll, setConfirmingDismissAll] = useState(false);
 
-  const checkPermission = useCallback(async () => {
-    const perm = await getSmsPermissions();
-    setSmsGranted(perm.granted);
-  }, []);
-
-  useEffect(() => {
-    // Initial check on mount, then re-checked live on foreground (§22.4) via the AppState
-    // subscription below — permission status is never stored. `checkPermission` awaits before
-    // setting state, so this isn't the synchronous-cascading-render shape the rule guards
-    // against; there's no simpler subscription source for "current OS permission state".
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    checkPermission();
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') checkPermission();
-    });
-    return () => sub.remove();
-  }, [checkPermission]);
-
-  const showBanner = smsGranted === false && !bannerDismissed;
+  const showBanner = permission.sms === 'denied' && smsBanner.value == null;
 
   const handleEnable = async () => {
     await requestSmsPermissions();
-    await checkPermission();
+    permission.refresh();
   };
 
   const handleDismissBanner = () => {
     setSetting('smsBannerDismissedAt', Date.now());
-    setBannerDismissed(true);
   };
 
   const handleDismissAll = async () => {
