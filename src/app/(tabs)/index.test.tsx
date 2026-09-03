@@ -157,7 +157,7 @@ describe('loaded, with data', () => {
     await fireEvent.press(getByText('3 to review'));
     expect(mockRouterPush).toHaveBeenCalledWith('/review-queue');
     await fireEvent.press(getByText('2 uncategorized'));
-    expect(mockRouterPush).toHaveBeenCalledWith('/transactions?filter=uncategorized');
+    expect(mockRouterPush).toHaveBeenCalledWith('/transactions?uncategorized=1');
   });
 
   it('renders the recent transaction and navigates to its Details on tap', async () => {
@@ -183,13 +183,13 @@ describe('permission banner', () => {
   it('shows the SMS banner when SMS permission is denied', async () => {
     mockPermission = { sms: 'denied', notifications: 'granted', refresh: mockRefreshPermission };
     const { getByText } = await render(<HomeScreen />);
-    expect(getByText(/SMS permission is off/)).toBeTruthy();
+    expect(getByText(/Need SMS permission/)).toBeTruthy();
   });
 
   it('prefers the SMS banner over the notifications one when both are denied', async () => {
     mockPermission = { sms: 'denied', notifications: 'denied', refresh: mockRefreshPermission };
     const { getByText, queryByText } = await render(<HomeScreen />);
-    expect(getByText(/SMS permission is off/)).toBeTruthy();
+    expect(getByText(/Need SMS permission/)).toBeTruthy();
     expect(queryByText(/Notifications are off/)).toBeNull();
   });
 
@@ -203,7 +203,7 @@ describe('permission banner', () => {
     mockPermission = { sms: 'denied', notifications: 'granted', refresh: mockRefreshPermission };
     mockSettings = { smsBannerDismissedAt: { value: 1_700_000_000_000 } };
     const { queryByText } = await render(<HomeScreen />);
-    expect(queryByText(/SMS permission is off/)).toBeNull();
+    expect(queryByText(/Need SMS permission/)).toBeNull();
   });
 
   it('dismissing the banner persists the dismissal', async () => {

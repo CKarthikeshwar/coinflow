@@ -73,6 +73,7 @@ export default function TransactionsScreen() {
   const { rows, daySubtotals, updatedAt } = useTransactionList({
     search: search.trim() || undefined,
     categoryIds: filter.categoryIds.length ? filter.categoryIds : undefined,
+    uncategorized: filter.uncategorized || undefined,
     type: filter.type,
     methods: filter.methods.length ? filter.methods : undefined,
     from: filter.from,
@@ -86,6 +87,9 @@ export default function TransactionsScreen() {
 
   const activeChips = useMemo(() => {
     const chips: { key: string; label: string; clear: () => void }[] = [];
+    if (filter.uncategorized) {
+      chips.push({ key: 'uncategorized', label: 'Uncategorized', clear: () => router.setParams({ uncategorized: '' }) });
+    }
     for (const id of filter.categoryIds) {
       const name = (categories ?? []).find((c) => c.id === id)?.name ?? 'Category';
       chips.push({
@@ -121,7 +125,7 @@ export default function TransactionsScreen() {
   }, [filter, categories]);
 
   const clearAllFilters = () =>
-    router.setParams({ categoryIds: '', type: '', methods: '', from: '', to: '' });
+    router.setParams({ categoryIds: '', uncategorized: '', type: '', methods: '', from: '', to: '' });
 
   const items = useMemo<ListItem[]>(() => {
     const subtotalByDay = new Map(daySubtotals.map((d) => [d.dayStartMs, d.spentMinor]));
@@ -154,6 +158,7 @@ export default function TransactionsScreen() {
             onPress={() =>
               openSheet('filter', {
                 categoryIds: filter.categoryIds,
+                uncategorized: filter.uncategorized,
                 type: filter.type,
                 methods: filter.methods,
                 from: filter.from,

@@ -4,11 +4,18 @@ describe('parseFilterParams', () => {
   it('returns empty/undefined defaults for no params', () => {
     expect(parseFilterParams({})).toEqual({
       categoryIds: [],
+      uncategorized: false,
       type: undefined,
       methods: [],
       from: undefined,
       to: undefined,
     });
+  });
+
+  it('parses uncategorized:"1" as true, anything else as false', () => {
+    expect(parseFilterParams({ uncategorized: '1' }).uncategorized).toBe(true);
+    expect(parseFilterParams({ uncategorized: '' }).uncategorized).toBe(false);
+    expect(parseFilterParams({}).uncategorized).toBe(false);
   });
 
   it('splits comma-joined categoryIds and methods', () => {
@@ -18,8 +25,22 @@ describe('parseFilterParams', () => {
   });
 
   it('treats an empty string as "no filter", not [""]', () => {
-    const parsed = parseFilterParams({ categoryIds: '', methods: '', type: '', from: '', to: '' });
-    expect(parsed).toEqual({ categoryIds: [], type: undefined, methods: [], from: undefined, to: undefined });
+    const parsed = parseFilterParams({
+      categoryIds: '',
+      uncategorized: '',
+      methods: '',
+      type: '',
+      from: '',
+      to: '',
+    });
+    expect(parsed).toEqual({
+      categoryIds: [],
+      uncategorized: false,
+      type: undefined,
+      methods: [],
+      from: undefined,
+      to: undefined,
+    });
   });
 
   it('unwraps expo-router array-form params to their first value', () => {

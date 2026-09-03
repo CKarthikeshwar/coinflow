@@ -9,7 +9,7 @@
  * income (IMP-011).
  */
 
-import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 
 import { normalizeAccount } from '@/domain/normalize';
@@ -45,6 +45,10 @@ export type InsertTransactionInput = {
 export type TransactionListQuery = {
   search?: string;
   categoryIds?: string[];
+  /** F7 — `categoryId IS NULL`, scoped to `type='expense'` (income is also uncategorized by
+   * construction, IMP-011, but isn't what "Uncategorized" means here — §26.8). ORed with
+   * `categoryIds` when both are set. Not a `category.id` (§25.3), so it's its own flag. */
+  uncategorized?: boolean;
   type?: TransactionType;
   methods?: PaymentMethod[];
   from?: number;
@@ -189,12 +193,22 @@ export type DaySubtotal = { dayStartMs: number; spentMinor: number };
  * day (the §27.3 helper refines the boundary in step 5).
  */
 export function useTransactionList(query: TransactionListQuery) {
-  const { search, categoryIds, type, methods, from, to, limit = 200 } = query;
+  const { search, categoryIds, uncategorized, type, methods, from, to, limit = 200 } = query;
   const conds = [isNull(transactions.deletedAt)];
   if (type) conds.push(eq(transactions.type, type));
   if (from != null) conds.push(sql`${transactions.occurredAt} >= ${from}`);
   if (to != null) conds.push(sql`${transactions.occurredAt} <= ${to}`);
-  if (categoryIds?.length) conds.push(inArray(transactions.categoryId, categoryIds));
+
+  const categoryCond =
+    categoryIds?.length && uncategorized
+      ? or(inArray(transactions.categoryId, categoryIds), and(isNull(transactions.categoryId), eq(transactions.type, 'expense')))
+      : categoryIds?.length
+        ? inArray(transactions.categoryId, categoryIds)
+        : uncategorized
+          ? and(isNull(transactions.categoryId), eq(transactions.type, 'expense'))
+          : undefined;
+  if (categoryCond) conds.push(categoryCond);
+
   if (methods?.length) conds.push(inArray(transactions.paymentMethod, methods));
 
   if (search?.trim()) {

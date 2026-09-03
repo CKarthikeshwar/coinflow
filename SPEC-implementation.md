@@ -208,6 +208,13 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
   Analytics row / slice, list styling, a filter option) so the user can clear them.
 - **Edge cases:** a large uncategorized backlog — Home shows the count; Analytics shows an
   "Uncategorized ₹X" entry with a shortcut to the filtered list.
+- **Split with F9 (2026-09-03):** everything above except the Analytics piece ships with F7 itself
+  — the count (Home, F6.5), never-guessed detection, counted-in-totals (structural), list styling
+  (V-4, pre-existing), and the Transactions filter option (new, this pass — `uncategorized` on
+  `TransactionListQuery` / `FilterSheet` / the Filter sheet's own chip). The **"Uncategorized ₹X"
+  row inside Analytics' "Where it went" breakdown + its "Fix N" shortcut** cannot exist before the
+  Analytics screen does — that piece is F9's, already specced there (§26.4/§26.8, `IMP-033`); see
+  F9's own note below for the reverse pointer.
 
 ### F8 — Account memory · P1
 - **Behavior:** when a transaction is saved with an **account**, upsert an `AccountRule` keyed by a
@@ -261,6 +268,13 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
   truncated; the "Day by day" chart scales to everyday spend and labels the outlier separately);
   no prior month → hide the "Last month" comparison values; current incomplete month → averages
   use days-elapsed; a **negative Balance** is shown with a leading `−` (the bar fills full).
+- **Owed from F7 (2026-09-03, do not lose this):** the **"Where it went" breakdown's Uncategorized
+  row** — hatched (not coloured, V-11), plus its **"Fix N" shortcut** into Transactions filtered to
+  Uncategorized — is F7's behavior, but can only be built once this screen exists. §26.4/§26.8 and
+  `IMP-033` already spec the row itself (`categoryId IS NULL` bucket, `SELECT COUNT(*) ... WHERE
+  type='expense' AND categoryId IS NULL`); the **"Fix N" tap target** should reuse the *same*
+  `uncategorized` query flag F7 already added to `TransactionListQuery` / route params
+  (`?uncategorized=1`, `src/features/transactions/filter-params.ts`) — not a second mechanism.
 
 ### F10 — Insights · P2 · **DEFERRED (not on the V1 Analytics screen)**
 - Auto-generated "Worth noting" sentences were planned for V1 but pulled from the screen. If
@@ -2897,3 +2911,12 @@ change in `SPEC-UI-UX.md` §9.
   swapping Review Queue onto the shared hook is folded into that pass, not deferred past it. No
   behavior change to either screen today; `SPEC/traceability.md`'s F6.5 entry records the finding.
   No linked `SPEC-UI-UX.md` change.
+
+- **CR-6** (2026-09-03, F7 — Uncategorized handling) — **F7's own bullet split explicitly, with a
+  matching pointer added to F9.** Building F7 surfaced that its "Analytics row / slice" clause
+  can't be built before F9's Analytics screen exists — not new information (F9 already specs the
+  row in §26.4/§26.8), but F7's text didn't say so itself, so the boundary lived only in a
+  session's memory. Both features now name the split directly and point at each other, per
+  `SPEC/PLAN.md` §9.1 point 3's "a deferral needs a trigger, not just an implicit later." No
+  behavior or visual change to either feature's already-frozen requirements — this CR only makes
+  an existing dependency explicit in the text. No linked `SPEC-UI-UX.md` change.

@@ -132,7 +132,7 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
           <ActionStripRow
             kind="uncat"
             count={uncategorized.count}
-            onPress={() => router.push('/transactions?filter=uncategorized')}
+            onPress={() => router.push('/transactions?uncategorized=1')}
           />
         </View>
       )}

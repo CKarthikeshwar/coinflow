@@ -119,7 +119,7 @@ describe('permission banner', () => {
     mockGetSmsPermissions.mockResolvedValue({ granted: false, canAskAgain: true });
     mockPendingData = { data: [], updatedAt: Date.now() };
     const { findByText } = await render(<ReviewQueueScreen />);
-    expect(await findByText(/SMS permission is off/)).toBeTruthy();
+    expect(await findByText(/Need SMS permission/)).toBeTruthy();
   });
 
   it('stays hidden once granted', async () => {
@@ -127,6 +127,6 @@ describe('permission banner', () => {
     mockPendingData = { data: [], updatedAt: Date.now() };
     const { findByText, queryByText } = await render(<ReviewQueueScreen />);
     await findByText(/all caught up/);
-    expect(queryByText(/SMS permission is off/)).toBeNull();
+    expect(queryByText(/Need SMS permission/)).toBeNull();
   });
 });

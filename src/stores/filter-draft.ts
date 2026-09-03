@@ -9,13 +9,23 @@ import type { PaymentMethod, TransactionType } from '@/db/schema';
 
 export type FilterDraft = {
   categoryIds: string[];
+  /** Uncategorized isn't a real `category.id` (§25.3 — `categoryId IS NULL`), so it's its own
+   * flag, not an entry in `categoryIds` (F7). */
+  uncategorized: boolean;
   type: TransactionType | null;
   methods: PaymentMethod[];
   from: number | null;
   to: number | null;
 };
 
-const EMPTY: FilterDraft = { categoryIds: [], type: null, methods: [], from: null, to: null };
+const EMPTY: FilterDraft = {
+  categoryIds: [],
+  uncategorized: false,
+  type: null,
+  methods: [],
+  from: null,
+  to: null,
+};
 
 type FilterDraftStore = FilterDraft & {
   set: (patch: Partial<FilterDraft>) => void;

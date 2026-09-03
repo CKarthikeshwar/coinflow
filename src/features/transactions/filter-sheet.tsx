@@ -57,6 +57,7 @@ function presetRange(preset: 'month' | '30d' | '3m'): { from: number; to: null }
 export function FilterSheet() {
   const params = useSheetRegistry((s) => s.params) as {
     categoryIds?: string[];
+    uncategorized?: boolean;
     type?: TransactionType;
     methods?: PaymentMethod[];
     from?: number;
@@ -77,6 +78,7 @@ export function FilterSheet() {
   useEffect(() => {
     useFilterDraft.getState().seed({
       categoryIds: params.categoryIds ?? [],
+      uncategorized: params.uncategorized ?? false,
       type: params.type ?? null,
       methods: params.methods ?? [],
       from: params.from ?? null,
@@ -86,7 +88,12 @@ export function FilterSheet() {
   }, []);
 
   const hasFilters =
-    draft.categoryIds.length > 0 || draft.type !== null || draft.methods.length > 0 || draft.from != null || draft.to != null;
+    draft.categoryIds.length > 0 ||
+    draft.uncategorized ||
+    draft.type !== null ||
+    draft.methods.length > 0 ||
+    draft.from != null ||
+    draft.to != null;
 
   const toggleCategory = (id: string) => {
     const next = draft.categoryIds.includes(id)
@@ -94,6 +101,8 @@ export function FilterSheet() {
       : [...draft.categoryIds, id];
     draft.set({ categoryIds: next });
   };
+
+  const toggleUncategorized = () => draft.set({ uncategorized: !draft.uncategorized });
 
   const toggleMethod = (m: PaymentMethod) => {
     const next = draft.methods.includes(m) ? draft.methods.filter((x) => x !== m) : [...draft.methods, m];
@@ -135,6 +144,7 @@ export function FilterSheet() {
 
     router.setParams({
       categoryIds: draft.categoryIds.join(','),
+      uncategorized: draft.uncategorized ? '1' : '',
       type: draft.type ?? '',
       methods: draft.methods.join(','),
       from: from != null ? String(from) : '',
@@ -154,6 +164,7 @@ export function FilterSheet() {
           Category
         </ThemedText>
         <View style={styles.chipRow}>
+          <Chip label="Uncategorized" selected={draft.uncategorized} onPress={toggleUncategorized} />
           {(categories ?? [])
             .filter((c) => c.key !== 'uncategorized')
             .map((c) => (

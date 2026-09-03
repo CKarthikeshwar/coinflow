@@ -607,10 +607,12 @@ the sitemap are gone too — a side benefit, not the fix's goal).
 
 ## F6.5 — App shell & Home
 
-**Status:** in progress (steps 1 and 3 of 5 done — step 2, moving the existing screens into the
-shell, turned out to be a byproduct of step 1 rather than its own pass; step 4, "connect it all to
-live data," likewise landed inside step 3 since Home couldn't be built without it — see the plan in
-the session that started this feature). Added `SPEC-implementation.md` CR-4 (2026-09-03) to close
+**Status:** ✅ Done (2026-09-03). Step 2 (moving the existing screens into the shell) turned out to
+be a byproduct of step 1 rather than its own pass; step 4 ("connect it all to live data") likewise
+landed inside step 3 since Home couldn't be built without it. Step 5 ("test it") closed with
+276/276 automated tests plus the user confirming the built app end-to-end on a physical device —
+tab bar, Home's hero/tiles/action-strip/recent list, and the permission banner all verified
+working. Added `SPEC-implementation.md` CR-4 (2026-09-03) to close
 the screen-ownership gap this feature fills; see that CR for why it exists.
 
 **Step 1 — the `(tabs)` navigation shell.** New `src/features/app-shell/tab-bar.tsx`
@@ -709,3 +711,86 @@ new `(tabs)/index.test.tsx` — loading / error+retry / empty-new-user / loaded-
 / both action-strip rows / recent-row navigation / See-all / the permission-banner priority and
 dismiss-persistence rules), plus a full `expo export` for both `--platform web` and
 `--platform android`. No on-device verification yet — still owed, same as step 1.
+
+**Follow-up, same day — `PermissionBanner` copy + emphasis (user request, post-review).** Two
+small changes to `src/ui/permission-banner.tsx`, made after the user actually looked at the built
+screen: (1) the SMS message reworded from "SMS permission is off — transactions won't be detected
+automatically." to "Need SMS permission to detect transactions automatically." (2) the user asked
+to make the alert glyph "more highlighted" and specifically proposed colouring it yellow — a direct
+conflict with V-11 (no colour anywhere outside the two already-sanctioned exceptions) and this
+component's own frozen description ("neutral inset... not tinted", `app.css`'s prototype comment:
+"neutral, hairline, no tint"). Flagged the conflict rather than applying it silently; built a
+side-by-side comparison (grey / yellow / a greyscale-emphasis alternative) as an Artifact so the
+call could be made by looking at it, not just reading about it. **Chosen: the greyscale option** —
+the glyph now sits in a filled `surface3` circle at full-brightness `text` (the same "quiet glyph
+in a circle" treatment `ConfirmDialog` already uses for its own warning glyph, §3.6/§29.4) instead
+of floating bare at `text3`, and the banner's own border moved from a plain `hairline` to `text3`
+for a touch more contrast. No colour introduced; V-11 and the component's own spec text both still
+hold exactly as written — this is a contrast/weight refinement within them, not a change to them,
+so no `SPEC-UI-UX.md` CR was needed. Verified: `npm test` still 276/276 (no test asserted the old
+styling), typecheck/lint clean.
+
+## F7 — Uncategorized handling
+
+**Split with F9, made explicit (`SPEC-implementation.md` CR-6):** the Analytics "Where it went"
+Uncategorized row + "Fix N" shortcut cannot exist before F9's Analytics screen does. Everything
+else below is F7's own, buildable now.
+
+**Already true before this pass** (built incidentally by earlier features, not re-verified with
+new tests here — each already had its own coverage): never-guessed detection (F1/F3's
+`resolveCategoryForAccount`); counted in spending totals (structural — `usePeriodSummary`/§26.1
+sum by `type`, not `categoryId`, so an Uncategorized expense was never excluded); Home's count
+(F6.5's `useUncategorizedCount`); the V-4 dashed-underline list styling on `TransactionCard`
+(pre-existing, before this session).
+
+**Built this pass — the filter option, plus a real bug found and fixed:**
+
+- **The bug:** F6.5's Home "N uncategorized" row linked to
+  `/transactions?filter=uncategorized` — a **dead link**. `transactions.tsx` never read a `filter`
+  param; tapping it opened Transactions showing everything, unfiltered. Found while scoping F7,
+  not reported by the user — the on-device pass that verified F6.5 apparently never had an
+  uncategorized transaction to tap through with.
+- **The fix, and why it's not a one-line patch:** Uncategorized isn't a real `category.id` — it's
+  `categoryId IS NULL` (§25.3) — so it can't go through the existing `categoryIds: string[]`
+  multi-select the same way a real category does. Added a parallel `uncategorized: boolean` flag
+  end to end: `FilterDraft` (`src/stores/filter-draft.ts`) → `RawFilterParams`/`ParsedFilter`
+  (`filter-params.ts`, route param `?uncategorized=1`) → `TransactionListQuery` →
+  `useTransactionList` (`src/db/repositories/transactions.ts`). `FilterSheet` gained a dedicated
+  **Uncategorized** chip in the Category section (the real system category row with
+  `key:'uncategorized'` stays excluded from the regular per-category chips, as before — it still
+  can't be matched by `categoryId` equality; the new chip is a flag, not that row). Home's link now
+  points at `?uncategorized=1`, which actually works.
+- **A correctness detail that would have been a second, quieter bug:** `categoryId IS NULL` alone
+  also matches every **income** transaction (income is always uncategorized too, IMP-011) — income
+  isn't what "Uncategorized" means anywhere else in the spec (§26.8 explicitly scopes its own count
+  to `type='expense'`). The query condition mirrors that scope exactly:
+  `categoryId IS NULL AND type='expense'`, ORed with any selected real `categoryIds` so
+  "Food + Uncategorized" still reads as one combined filter.
+- **Simplification (documented, not silent):** the Uncategorized chip renders as an ordinary
+  toggle chip (filled/selected), not the dashed-outline variant §3.6's catalog describes for it —
+  `Chip` doesn't have that variant yet and adding one wasn't required to make the feature work.
+  Same category of deferral as the tap-not-swipe delete simplifications elsewhere in this file.
+
+**Test-tier decision (§34.0):** the real branching logic here (the income-exclusion guard, the OR
+with `categoryIds`) is SQL condition construction inside a `useLiveQuery`-based hook — the same
+class of code this codebase has consistently *not* given a dedicated hook-level unit test anywhere
+(`usePeriodSummary`/`useMoMDeltas` in F6.5 for the identical reason: no in-memory-SQLite harness
+exists here to assert a query's real filtered output, and the existing hand-rolled `db` mock in
+`transactions.test.ts` doesn't support `.orderBy().limit()` chains `useTransactionList` needs).
+Correctness instead rests on: matching the already-frozen §26.8 SQL exactly (not inventing new
+scope), plus RNTL coverage of the params actually being written and read correctly end to end.
+
+**Tests added**, `npm test` 276 → 279:
+- `filter-params.test.ts` — `uncategorized:'1'` parses `true`, anything else `false`; updated the
+  two existing default/empty-string cases to include the new field.
+- `filter-sheet.test.tsx` — Uncategorized renders exactly once (not the excluded system category
+  row a second time); toggling it and Apply writes `uncategorized:'1'`; combining it with a real
+  category writes both. **Replaced** the old test asserting Uncategorized was *absent* — that was
+  the bug's own test coverage, asserting the wrong thing on purpose (a category-chip-only reading
+  of a spec line that was always meant to include a filter option).
+- `(tabs)/index.test.tsx` — updated the one assertion that still expected the dead `?filter=`
+  link.
+
+**Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 279/279. No on-device
+re-check yet for this specific pass (the fix is small and covered by the RNTL tests above; owed
+before F7 is called fully done, same standing gap as F6.5's "automated ≠ on-device" note).
