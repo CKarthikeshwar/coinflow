@@ -26,6 +26,7 @@ import { Spacing } from '@/constants/theme';
 import { getCategoryMap, useCategories } from '@/db/repositories/categories';
 import { useTransactionList } from '@/db/repositories/transactions';
 import type { PaymentMethod, Transaction } from '@/db/schema';
+import { startOfLocalDay } from '@/domain/period';
 import { parseFilterParams, type RawFilterParams } from '@/features/transactions/filter-params';
 import { useSheetRegistry } from '@/stores';
 
@@ -38,12 +39,6 @@ import { TextField } from '@/ui/text-field';
 import { TopBar } from '@/ui/top-bar';
 import { TransactionCard } from '@/ui/transaction-card';
 import { DayGroupHeader } from '@/ui/day-group-header';
-
-function localDayStart(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
 
 type ListItem =
   | { kind: 'header'; key: string; dayStartMs: number; subtotalMinor: number }
@@ -132,7 +127,7 @@ export default function TransactionsScreen() {
     const out: ListItem[] = [];
     let lastDay: number | null = null;
     for (const txn of rows) {
-      const day = localDayStart(txn.occurredAt);
+      const day = startOfLocalDay(txn.occurredAt);
       if (day !== lastDay) {
         out.push({ kind: 'header', key: `h-${day}`, dayStartMs: day, subtotalMinor: subtotalByDay.get(day) ?? 0 });
         lastDay = day;

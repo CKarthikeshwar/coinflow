@@ -6,26 +6,32 @@ import ReviewQueueScreen from './review-queue';
 
 const mockRouterBack = jest.fn();
 const mockGetAccountRule = jest.fn((..._args: unknown[]) => null as unknown);
-const mockGetSetting = jest.fn((..._args: unknown[]) => null as unknown);
 const mockSetSetting = jest.fn();
 const mockDismissAllPending = jest.fn();
 const mockCancelAllSuggestionNotifications = jest.fn(async (..._args: unknown[]) => {});
 const mockHandleDiscard = jest.fn((..._args: unknown[]) => undefined);
 const mockHandleSave = jest.fn((..._args: unknown[]) => undefined);
-const mockGetSmsPermissions = jest.fn(async (..._args: unknown[]) => ({ granted: true, canAskAgain: true }));
 const mockRequestSmsPermissions = jest.fn(async (..._args: unknown[]) => ({ granted: true, canAskAgain: true }));
+const mockRefreshPermission = jest.fn();
 
 let mockPendingData: { data: Suggestion[] | undefined; updatedAt: number | undefined };
+// Mirrors `(tabs)/index.test.tsx`'s shape for the same shared hook (CR-5 — this screen swapped
+// onto it from its own older inline SMS-only check).
+let mockPermission: { sms: 'unknown' | 'granted' | 'denied' };
+let mockSmsBannerValue: number | null;
 
 jest.mock('expo-router', () => ({ router: { back: (...args: unknown[]) => mockRouterBack(...args) } }));
 jest.mock('@/db/repositories/account-rules', () => ({ getAccountRule: (...args: unknown[]) => mockGetAccountRule(...args) }));
 jest.mock('@/db/repositories/settings', () => ({
-  getSetting: (...args: unknown[]) => mockGetSetting(...args),
+  useSetting: () => ({ value: mockSmsBannerValue }),
   setSetting: (...args: unknown[]) => mockSetSetting(...args),
 }));
 jest.mock('@/db/repositories/suggestions', () => ({
   dismissAllPending: (...args: unknown[]) => mockDismissAllPending(...args),
   usePendingSuggestions: () => mockPendingData,
+}));
+jest.mock('@/hooks/use-permission-status', () => ({
+  usePermissionStatus: () => ({ ...mockPermission, refresh: mockRefreshPermission }),
 }));
 jest.mock('@/services/notifications/post', () => ({
   cancelAllSuggestionNotifications: (...args: unknown[]) => mockCancelAllSuggestionNotifications(...args),
@@ -35,7 +41,6 @@ jest.mock('@/services/notifications/respond', () => ({
   handleSave: (...args: unknown[]) => mockHandleSave(...args),
 }));
 jest.mock('@/services/sms', () => ({
-  getSmsPermissions: (...args: unknown[]) => mockGetSmsPermissions(...args),
   requestSmsPermissions: (...args: unknown[]) => mockRequestSmsPermissions(...args),
 }));
 
@@ -61,15 +66,16 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
 beforeEach(() => {
   mockRouterBack.mockReset();
   mockGetAccountRule.mockReset().mockReturnValue(null);
-  mockGetSetting.mockReset().mockReturnValue(null);
   mockSetSetting.mockReset();
   mockDismissAllPending.mockReset();
   mockCancelAllSuggestionNotifications.mockReset().mockResolvedValue(undefined);
   mockHandleDiscard.mockReset();
   mockHandleSave.mockReset();
-  mockGetSmsPermissions.mockReset().mockResolvedValue({ granted: true, canAskAgain: true });
   mockRequestSmsPermissions.mockReset().mockResolvedValue({ granted: true, canAskAgain: true });
+  mockRefreshPermission.mockReset();
   mockPendingData = { data: undefined, updatedAt: undefined };
+  mockPermission = { sms: 'granted' };
+  mockSmsBannerValue = null;
 });
 
 describe('loading', () => {
@@ -116,17 +122,34 @@ describe('rows', () => {
 
 describe('permission banner', () => {
   it('shows when SMS permission is denied, not when granted', async () => {
-    mockGetSmsPermissions.mockResolvedValue({ granted: false, canAskAgain: true });
+    mockPermission = { sms: 'denied' };
     mockPendingData = { data: [], updatedAt: Date.now() };
-    const { findByText } = await render(<ReviewQueueScreen />);
-    expect(await findByText(/Need SMS permission/)).toBeTruthy();
+    const { getByText } = await render(<ReviewQueueScreen />);
+    expect(getByText(/Need SMS permission/)).toBeTruthy();
   });
 
   it('stays hidden once granted', async () => {
-    mockGetSmsPermissions.mockResolvedValue({ granted: true, canAskAgain: true });
+    mockPermission = { sms: 'granted' };
     mockPendingData = { data: [], updatedAt: Date.now() };
     const { findByText, queryByText } = await render(<ReviewQueueScreen />);
     await findByText(/all caught up/);
     expect(queryByText(/Need SMS permission/)).toBeNull();
+  });
+
+  it('stays hidden once dismissed, even while still denied', async () => {
+    mockPermission = { sms: 'denied' };
+    mockSmsBannerValue = Date.now();
+    mockPendingData = { data: [], updatedAt: Date.now() };
+    const { queryByText } = await render(<ReviewQueueScreen />);
+    expect(queryByText(/Need SMS permission/)).toBeNull();
+  });
+
+  it('Enable re-requests and refreshes the shared permission status', async () => {
+    mockPermission = { sms: 'denied' };
+    mockPendingData = { data: [], updatedAt: Date.now() };
+    const { getByText } = await render(<ReviewQueueScreen />);
+    await fireEvent.press(getByText('Enable'));
+    expect(mockRequestSmsPermissions).toHaveBeenCalled();
+    expect(mockRefreshPermission).toHaveBeenCalled();
   });
 });

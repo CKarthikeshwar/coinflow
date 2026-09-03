@@ -13,6 +13,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-
 import { randomUUID } from 'expo-crypto';
 
 import { normalizeAccount } from '@/domain/normalize';
+import { startOfLocalDay } from '@/domain/period';
 import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
@@ -62,12 +63,6 @@ function typeFromDirection(direction: Direction): TransactionType {
 
 function searchTextOf(note?: string | null, description?: string | null, account?: string | null): string {
   return `${note ?? ''} ${description ?? ''} ${account ?? ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
-function localDayStart(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0); // device-zone midnight; §27.3 period helper formalises this in step 5
-  return d.getTime();
 }
 
 export function insertTransaction(input: InsertTransactionInput): Transaction {
@@ -239,7 +234,7 @@ export function useTransactionList(query: TransactionListQuery) {
   const byDay = new Map<number, number>();
   for (const row of q.data) {
     if (row.type !== 'expense') continue;
-    const day = localDayStart(row.occurredAt);
+    const day = startOfLocalDay(row.occurredAt);
     byDay.set(day, (byDay.get(day) ?? 0) + row.amountMinor);
   }
   const daySubtotals: DaySubtotal[] = [...byDay.entries()]
