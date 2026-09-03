@@ -164,7 +164,8 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
 
 ### F5 — Transaction list · P0
 - **Behavior:** a reverse-chronological record grouped by day. Search matches note + description +
-  account. Filter by category, type, payment method, date range. Open a row → Details. Swipe →
+  account. Filter by category, type, payment method, date range. Open a row → Details, where every
+  field can be reviewed and edited (Edit sheet, §6.6 / §30.8). Swipe →
   delete (confirm + Undo, ~5 s window).
 - **Edge cases:** zero transactions (empty state); thousands (virtualized); same-second
   transactions (stable order by insertion); a day with only income.
@@ -175,12 +176,30 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
   state, not a user category, and is not editable.
 - **Behavior:** create / rename / re-icon / delete custom categories (no colour — D12). Deleting a
   category moves its transactions to **Uncategorized**.
-- **Icon set (decision deferred):** with no colour, the icon is the sole visual category
-  identifier in lists, so V1 needs a proper, consistent icon library covering the 9 defaults +
-  Uncategorized + income + the 5 payment methods + app chrome. Library TBD (Lucide / Phosphor /
-  SF Symbols / custom) — see `SPEC-UI-UX.md` §3. Blocking before the design system freezes.
+- **Icon set:** *Resolved (D33, `SPEC-UI-UX.md` §3.4) — **Lucide** (`lucide-react-native`), wrapped
+  by `src/ui/icon.tsx` at `strokeWidth 1.6`, covers the 9 defaults + Uncategorized + income + the 5
+  payment methods + app chrome (§29.2). No longer open.*
 - **Edge cases:** duplicate name → blocked; deleting a category used by many transactions →
   confirm names the count; name length capped (~24 chars).
+
+### F6.5 — App shell & Home · P0
+- **Behavior:** the piece every other screen assumes exists and, until now, no feature owned:
+  the `(tabs)` navigation shell — custom `CoinFlowTabBar` (D25/D32, §28.1/§29.4) with its raised
+  centre **Add** — and the real **Home** screen (§30.4), replacing the template's flat
+  `src/app/index.tsx` stub and F4's temporary bolted-on "Add transaction" button. Home shows: the
+  **balance hero** (all-time running balance, D2, §26.2); the **Income / Spending** stat tiles
+  (this month's totals + MoM delta, §26.3); the **action strip** (`N to review` → Review Queue,
+  F11; `N uncategorized` → Transactions filtered, F7); **Recent** (≤ 8 transaction cards, F5's
+  card component, "See all" → Transactions); the permission banner (V-9) when SMS or
+  notifications are off.
+- **Dependencies:** F3/F4 (the Add sheet the centre button opens), F5 (the transaction card
+  component Recent reuses), F11 (the pending count), the §21.5/§26 analytics aggregates (already
+  spec'd in Phase 2/3, consumed here regardless of whether F9's own Analytics screen has shipped
+  yet — the data-access layer isn't gated behind that screen).
+- **Edge cases:** per §30.4 — new-user zero state (`₹0` hero, `₹0` tiles + "no prior month", no
+  action strip, Recent → its own empty state); a lakh-scale balance must not wrap or shrink
+  illegibly; a negative balance shows a leading `−`; a tile with no previous-month figure shows
+  "—"; counts show `99+` past 99; long notes truncate; an all-income month is valid.
 
 ### F7 — Uncategorized handling · P1
 - **Behavior:** with no matching `AccountRule` (F8), a detected transaction's category =
@@ -206,6 +225,22 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
 - **Edge cases:** account strings that vary between messages ("swiggy@paytm", "SWIGGY LTD",
   "swiggy*order123") — V1 matches on the normalized key only; near-misses create separate rules
   (acceptable for V1); no fuzzy / partial matching, no ML.
+
+### F8.5 — Settings · P1
+- **Behavior:** the **Settings tab** (§30.15) — a grouped list (**Categories** · **Payment
+  methods** · **SMS & notifications** · **Account rules** · **Data** · **About**), each row
+  pushing its subpage, app version in the footer — plus the four subpages not already owned by
+  another feature (§30.16): **Payment methods** (static read-only list of the 5 methods);
+  **SMS & notifications** (live permission status for SMS and Notifications, each with
+  Enable / **Open system settings**, mirroring onboarding's permission card); **Data**
+  (**Export** → JSON + CSV via the OS share sheet, D17 / IMP-043; **Clear all data** → a two-step
+  `CONFIRM`-typed dialog → `clearAllData`, IMP-044 / IMP-065, then relaunch into onboarding);
+  **About** (version, "All your data stays on this device.", licenses / help links). *(Settings ›
+  Account rules is F8's own subpage, already specified there; the Settings › Categories row just
+  deep-links to F6's existing Categories screen — neither is rebuilt here.)*
+- **Edge cases:** SMS & notifications reflects **live** OS permission state, never a cached flag
+  (§22.4); Clear all data is irreversible and returns to onboarding (P-3); an export failure
+  (E17) shows a retry toast with nothing partially shared.
 
 ### F9 — Spending summary · P1
 - **Behavior (per period; default current calendar month; week view available):** for the period —
@@ -2813,3 +2848,34 @@ change in `SPEC-UI-UX.md` §9.
   seed (§17.3.1), domain parser (§23), transaction/ignore gate (§17.3.3), rule match
   (§17.3.6), notification post (§17.3.7 / §31) and self-heal (§17.3.8) remain step 5. No linked
   `SPEC-UI-UX.md` change.
+
+- **CR-4** (2026-09-03, structural audit — `SPEC/PLAN.md` §9.1's own definition-of-done pass
+  turned up two screen-ownership gaps in §3's feature list) — **added F6.5 and F8.5; fixed two
+  staleness/documentation bugs.** No behavioral or visual change — `SPEC-UI-UX.md` already fully
+  specs every screen touched here (§6.2 Home, §6.13/§6.14 Settings); this CR only assigns them an
+  owning `F#` on the implementation side, since neither had one:
+  1. **F6.5 — App shell & Home (new, P0).** The `(tabs)` navigation shell + the real Home screen
+     (§30.4) had a complete data/state-binding spec and `UI-010..014`/`IMP-020`/`D2` acceptance
+     criteria, but no feature in §3 claimed "build this screen" — every implementation pass
+     through F1–F11 correctly deferred it as "a much larger, separate feature" (see
+     `SPEC/traceability.md`'s F4/F11 notes) and it was never picked up. Slotted between F6 and F7
+     per the user's direction — it unblocks F7's Home-count surfacing and is a prerequisite for
+     any tab-hosted screen (F9's Analytics, F8.5's Settings).
+  2. **F8.5 — Settings (new, P1).** Same failure mode: the Settings hub + 4 of its 5 subpages
+     (Payment methods, SMS & notifications, Data, About — §30.15/§30.16) were fully specced with
+     `IMP-040..045` / `UI-064`/`UI-065` acceptance criteria but had no owning feature; only
+     Settings › Account rules was explicitly claimed, by F8. Given its own numbered slot rather
+     than folded into F8, keeping account-memory business logic separate from a mostly-static
+     config screen (user's call).
+  3. **F6's icon-library bullet was stale.** It still read "decision deferred... Library TBD...
+     Blocking before the design system freezes" — a leftover from before the icon library was
+     chosen. The choice was actually made and recorded elsewhere (D33, `SPEC-UI-UX.md` §3.4:
+     Lucide) months before this freeze; F6's own text just never got updated to match. Corrected
+     to point at the resolution instead of re-describing it as open.
+  4. **F5's behavior bullet undersold its own scope.** It said "Open a row → Details" without
+     mentioning that Details' primary action is Edit (§6.6/§30.8, and `SPEC/idea.md` #5's "open a
+     transaction and edit its details") — Edit Transaction is built and shipped, just not named in
+     F5's own one-line description. Added a clause; no scope change.
+
+  `SPEC/PLAN.md` §12 step 5's feature build order and §0's status table are updated in the same
+  pass to carry F6.5 / F8.5 and current progress.

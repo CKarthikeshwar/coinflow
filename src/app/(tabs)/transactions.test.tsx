@@ -19,6 +19,12 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockSearchParams,
 }));
 
+// Real value comes from `(tabs)/_layout.tsx`'s `<Tabs>` context (F6.5) — outside what this
+// screen-only render tree provides, so it's mocked flat like every other navigation hook here.
+jest.mock('expo-router/js-tabs', () => ({
+  useBottomTabBarHeight: () => 0,
+}));
+
 const mockCategories: Category[] = [
   { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
 ];

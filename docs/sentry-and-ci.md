@@ -1,16 +1,129 @@
-# Sentry & CI — a plain-language setup guide
+# Maestro, Sentry & CI — a plain-language setup guide
 
-This doc explains two pieces of the scaffolding pass that need a human to finish them:
+This doc explains three pieces of the project that need a human to finish or run them:
 
-1. **Sentry** — optional crash reporting. Installed but not wired to an account yet.
-2. **CI** — the automatic checker that runs every time you push code to GitHub. Already
+1. **Maestro** — optional end-to-end testing (drives the real app on a real device/emulator).
+   One flow written, never run yet.
+2. **Sentry** — optional crash reporting. Installed but not wired to an account yet.
+3. **CI** — the automatic checker that runs every time you push code to GitHub. Already
    working; this explains what it is and how to read it.
 
-Neither one blocks development. You can build every feature without touching either.
+None of the three block development. You can build every feature without touching any of them.
 
 ---
 
-## Part 1 — Sentry (crash reporting)
+## Part 1 — Maestro (a robot that taps through your app for you)
+
+### What Maestro is, in one paragraph
+
+You know how you've been testing the app by installing it and tapping around yourself? Maestro is
+a free tool that does that *for* you, automatically. You write down the steps once — "tap this
+button, type this number, check that this text shows up" — in a plain text file, and Maestro
+replays those exact steps on your phone or emulator, every time, without you touching anything.
+It's like a recording of your testing routine that plays itself back.
+
+### Why bother, when you already test by hand?
+
+Because a plain script like `adb` can only say "tap at this exact pixel spot on the screen" — it
+has no idea what a button *is*, and it can't check whether the app actually did the right thing
+afterward. It just taps blindly. Maestro is smarter: you tell it "tap the button that says Add",
+and it finds that button by its label, wherever it happens to be. It can also *check* things —
+"after I tap Add, does the word 'Added' show up?" — and tell you pass or fail. That's something
+plain `adb` simply can't do.
+
+A lot of the bugs found while building this app (a popup not closing, the phone's Back button not
+working, a fast double-tap breaking something) only show up when something is actually running on
+a real screen, with real animations and real timing — the kind of thing that's easy to miss when
+testing by hand once, but exactly what a repeatable automatic script is good at catching every
+time.
+
+### What's already done
+
+- One test script already exists: `e2e/j4-manual-add.yaml`. It walks through adding a transaction
+  by hand — open the Add screen, type in an amount, pick a category and a payment method, tap
+  Add, check that the "saved" message shows up.
+- **It has never actually been run, not even once.** It was written without Maestro installed and
+  without a phone/emulator connected, so think of it as a rough first draft. The very first time
+  you run it, something will probably not quite match (maybe a button's exact wording is slightly
+  off) and it'll need a small fix. That's normal and expected — not a sign anything is broken.
+
+### A couple of words you'll run into
+
+| Word | In plain terms |
+|---|---|
+| **Maestro CLI** | The actual program you install on your computer, similar to how you already have `adb`. "CLI" just means you type commands for it rather than clicking icons. |
+| **Flow** | One script — one text file listing the steps to run. `e2e/j4-manual-add.yaml` is one flow. |
+| **Step** | One instruction inside a flow, like "tap this" or "check that this text is visible." |
+
+### How to actually use it, step by step
+
+#### 1. Install Maestro (a one-time thing)
+
+This is separate from the app itself — you don't run `npm install` for it, same as you didn't for
+`adb`. The exact install instructions can change, so rather than copy a command from here that
+might go out of date, use the official page:
+
+<https://maestro.mobile.dev/getting-started/installing-maestro>
+
+After installing, check it worked by typing this in your terminal:
+
+```bash
+maestro --version
+```
+
+If it prints a version number, you're set.
+
+#### 2. Get the app running on your phone or emulator
+
+Nothing new here — use the exact same build you've already been testing with. Just make sure
+either your phone is plugged in and shows up when you run `adb devices`, or an Android emulator
+is open.
+
+#### 3. Run the script
+
+Type this:
+
+```bash
+maestro test e2e/j4-manual-add.yaml
+```
+
+Maestro will open the app by itself and start tapping through the steps, right in front of you.
+You'll see it happening live on the screen. If a step can't find what it's looking for, Maestro
+stops and prints exactly which step failed and why.
+
+#### 4. If (when) it fails the first time, fix it
+
+Since nobody has run this script before, expect the first attempt to trip up somewhere — usually
+because the text it's looking for doesn't exactly match what's on screen. Read the error message,
+open the `e2e/j4-manual-add.yaml` file, and adjust that one line. Then run it again. Repeat until
+it gets all the way through.
+
+#### 5. After that, it's done
+
+There's nothing ongoing to maintain. It's not hooked up to run automatically anywhere (see Part 3
+below on CI) — you just run the same command by hand whenever you want to double-check that flow
+still works, for example right before you plan to ship a build.
+
+### What it's not for
+
+- **You don't need this.** Everything still works fine without it — it's an extra safety net, not
+  a requirement. Skipping it entirely costs nothing.
+- It doesn't run automatically on GitHub (see Part 3) — it needs a real phone or emulator, which
+  GitHub's automatic checks don't have. You run it yourself, by hand, whenever you want to.
+- It's separate from the other automatic tests already in this project (the ones that run inside
+  `npm test`) — those check the code's logic quickly without needing a phone at all; Maestro
+  checks the real, finished app the way a person actually uses it, which is slower but closer to
+  the real experience.
+
+### Does it cost anything?
+
+No — the tool itself is free to install and run on your own computer/phone. (Maestro's company
+also sells a paid cloud service that runs your scripts on servers instead of your own device —
+this project doesn't use that, and you don't need it.)
+
+---
+
+## Part 2 — Sentry (crash reporting)
 
 ### What Sentry is, in one paragraph
 
@@ -146,7 +259,7 @@ or approve it explicitly with `npm install-scripts approve @sentry/cli`.
 
 ---
 
-## Part 2 — CI (the automatic checker)
+## Part 3 — CI (the automatic checker)
 
 ### Is it a GitHub feature? Yes.
 
@@ -207,9 +320,9 @@ Do this once you're working with pull requests. For solo direct-to-`master` work
 
 ### What CI here does NOT do
 
-- No app build, no Android emulator, no Maestro end-to-end tests. Those need the native SMS
-  module and a dev client, which are too heavy for CI (`SPEC-implementation.md` §34.0). They're
-  run by hand against an EAS `development` build before a release.
+- No app build, no Android emulator, no Maestro end-to-end tests (Part 1). Those need the native
+  SMS module and a dev client, which are too heavy for CI (`SPEC-implementation.md` §34.0).
+  They're run by hand against an EAS `development` build before a release.
 - It doesn't deploy or publish anything.
 
 ### Cost

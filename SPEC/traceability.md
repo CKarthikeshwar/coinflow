@@ -578,3 +578,71 @@ is a plain card with no `@gorhom`/`Modal` involvement.
 **Still not run, only written:** `e2e/j4-manual-add.yaml` — no Maestro CLI or device/emulator in
 this environment. First run will need selector fixes; don't trust it as passing until it's actually
 been run once.
+
+## Cross-cutting fix — Android bundling broke (found starting F6.5, 2026-09-03)
+
+Not tied to a single feature, and not introduced by F6.5's own work: `expo export --platform
+android` failed with `Unable to resolve module console from
+@testing-library/react-native/dist/helpers/logger.js`, tracing back to `src/app/categories.test.tsx`
+— a file untouched this session, so the bug predates F6.5. Root cause: every `*.test.tsx` file
+co-located with its screen under `src/app/` (the project's existing convention, e.g.
+`categories.test.tsx`, `review-queue.test.tsx`) is a valid route-file extension, so expo-router's
+file-based routing was sweeping them into the route table alongside the real screens. Metro then
+tried to bundle each as an app route for every platform; `@testing-library/react-native` pulls in
+Node's `console` module, which native (non-web) bundling can't resolve — web bundling didn't error
+on the same import (browser output tolerates it) which is why this was invisible in the one export
+check any earlier pass had run. Never caught before because no prior pass ran
+`expo export --platform android` (or an equivalent native bundling check) after test files started
+living under `src/app/`.
+
+Fixed in `metro.config.js`, not in any test or route file: added `/\.test\.[jt]sx?$/` to
+`config.resolver.blockList` (appended to Expo's own default block-list entries, not replacing
+them). Metro now never resolves a `*.test.*` file into any bundle or the route table, on any
+platform. `jest.config.js` is a wholly separate config, read by `jest`/`jest-expo` directly —
+Metro's `resolver.blockList` has no effect on it, so its own `testMatch`/`roots` still find and run
+every test file exactly as before; `npm test` is unaffected (247/247 both before and after).
+Verified with `expo export --platform android` (now produces a single 7.2MB `.hbc` bundle, no
+error) and `--platform web` (still 13 static routes, the `*.test` entries that used to leak into
+the sitemap are gone too — a side benefit, not the fix's goal).
+
+## F6.5 — App shell & Home
+
+**Status:** in progress (step 1 of 5 — see the plan in the session that started this feature).
+Added `SPEC-implementation.md` CR-4 (2026-09-03) to close the screen-ownership gap this feature
+fills; see that CR for why it exists.
+
+**Step 1 — the `(tabs)` navigation shell.** New `src/features/app-shell/tab-bar.tsx`
+(`CoinFlowTabBar`, D25/D32, §29.4) — a custom floating pill `tabBar` for `(tabs)/_layout.tsx`
+(new), not `NativeTabs`: 4 destinations (Home/Transactions/Analytics/Settings, active `text` /
+inactive `text3`) plus a raised centre **Add** button (`sheets.open('add')`), `Elevation.pop`.
+Existing `index.tsx` (Home) and `transactions.tsx` (+ their `.web.tsx` twins and
+`transactions.test.tsx`) moved from flat `src/app/` into `(tabs)/`, unchanged in behavior — the
+route paths (`/`, `/transactions`) are unaffected by the group rename. Two new stub tabs,
+`analytics.tsx` and `settings.tsx` (+ `.web.tsx` twins), placeholder "Coming soon" screens that F9
+and F8.5 will replace — added only so the shell has its real 4 destinations, per §28.1.
+
+**Simplification (documented, not silent):** the design calls the pill "blurred"
+(SPEC-UI-UX.md §3.6) — `expo-blur` isn't installed. Ships as a solid `surface` fill instead, same
+shape/elevation; swapping in a real `BlurView` later doesn't touch the layout.
+
+**Real bug found and fixed while building this:** the custom tab bar floats
+(`position:'absolute'`) rather than docking, so — unlike the library's default bar — it does
+**not** automatically reserve its own space in each screen's layout; `@react-navigation/bottom-tabs`
+only exposes its measured height via a context hook (`useBottomTabBarHeight`), which a screen must
+call itself. Without this, the floating pill would sit on top of Home's action-strip row and
+Transactions' last list row. Fixed by having both screens add `tabBarHeight` to their own bottom
+padding; `transactions.test.tsx` gained a mock for `expo-router/js-tabs`'s
+`useBottomTabBarHeight` (returns `0`) since RNTL doesn't render inside a real `<Tabs>` navigator.
+
+**Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 247/247 (unchanged count —
+no new tests were owed by this step; it's shell/layout work, not new business logic), plus a full
+`expo export` for both `--platform web` and `--platform android` (the latter also confirms the
+cross-cutting Metro fix above).
+
+**Not yet built (steps 2–5, per the plan):** relocating the rest of the flat routes
+(`review-queue.tsx`, `categories.tsx`, `transaction/[id].tsx`) is **not** planned — per §28.1 these
+stay pushed pages outside the tab shell, already correctly placed. What remains is the real Home
+screen itself (§30.4 — balance hero, Income/Spending tiles, MoM deltas, Recent activity), wiring it
+to live data, and the RNTL test(s) that pass will owe once Home is more than a stub. No manual
+on-device verification done yet — `expo export --platform android` bundling successfully is not
+the same as running on a device.

@@ -20,14 +20,13 @@ The next real work is feature implementation (§9).**
 | `SPEC-UI-UX.md` (repo root) | **Frozen (v1).** Screen inventory + priority (§1), visual direction (§2), design system (§3, all subsections frozen), navigation (§4), global rules (§5), per-screen specs (§6), visual acceptance `UI-0xx` (§7), resolved decisions (§8), post-freeze change log (§9 — CR-1). |
 | `SPEC-implementation.md` (repo root) | **Frozen (v1).** Part I §1–§15 (product / behavior, `IMP-0xx`, decisions D1–D17). Part II §16–§37 (technical: stack §16, architecture §17, project structure §18, data models §19, persistence §20, data-access §21, app state §22, SMS parsing §23, normalization §24, categorization §25, analytics §26, formatting/undo §27, navigation §28, components + `theme.ts` §29, screen specs §30, notifications §31, error handling §32, security §33, testing §34, build & release §35, freeze §36, change log §37; decisions D18–D35). |
 | `SPEC/IMPLEMENTATION-PLAN.md` + `SPEC/IMPLEMENTATION-PROGRESS.md` | **Done.** The meta-plan that produced Part II of `SPEC-implementation.md`. Phases 0–5 all complete; progress log kept per phase. |
-| Expo app (`src/app`, `src/components`) | **Untouched `expo-router` template** — `index.tsx`, `explore.tsx`, template tabs + `themed-*` components. **No CoinFlow code exists yet.** |
+| Expo app (`src/app`, `src/components`) | **In progress.** Scaffolding (deps, persistence, `theme.ts`, the native SMS module) is done. Features built per `SPEC/traceability.md`: **F1, F2, F11, F3, F4, F5, F6** — with an F2–F5 deferral-closing pass (2026-09-03) and a test-tier audit the same day. Template `explore.tsx` / "Welcome to Expo" home are gone. Remaining: **F6.5, F7, F8, F8.5, F9, F12** (§12 step 5). |
 
-**Conclusion:** Discovery, design, prototyping, and both specs are done and frozen. Nothing of the
-app itself is built. The next real work is **feature implementation (§9)** — one feature at a time
-against the frozen specs, starting with a scaffolding pass (dependencies, persistence, `theme.ts`,
-the native SMS module + a dev-client build). The design/implementation boundary in §1.2 is now
-**lifted**: work under `src/app` is expected from here. Post-freeze spec changes follow §10
-(`SPEC-UI-UX.md` §9 / `SPEC-implementation.md` §37 change logs).
+**Conclusion:** Discovery, design, prototyping, and both specs are done and frozen (`SPEC-implementation.md`
+amended post-freeze per its §37 change log — CR-1..CR-4 — under the §10 protocol below; still v1).
+Feature implementation (§9) is underway, one feature at a time against the frozen specs. The
+design/implementation boundary in §1.2 is **lifted**: work under `src/app` is expected. Post-freeze
+spec changes follow §10 (`SPEC-UI-UX.md` §9 / `SPEC-implementation.md` §37 change logs).
 
 ---
 
@@ -331,21 +330,23 @@ Never let the implementation quietly diverge from `SPEC-UI-UX.md` or `SPEC-imple
 Steps 1–7 of this plan (discovery → design → prototype → freeze both specs) are **done** (§0).
 Implementation (§9) is the current track. Do these in order:
 
-1. **Scaffolding pass.** `npx expo install` every dependency pinned in `SPEC-implementation.md`
-   §16 and re-verify against SDK 57 (the §16.7 risk list). Configure the test runner —
-   `jest-expo` + `@testing-library/react-native` (none exists yet). Apply the `app.json` changes
-   in §35.1 (Android package name, plugin list, `allowBackup=false`, `userInterfaceStyle:"dark"`,
-   Sentry DSN placeholder).
-2. **Theme + template teardown.** Write the real `src/constants/theme.ts` (§29.1) + `<AppBackground>`
-   + `src/ui/icon.tsx`; move `ThemedText` / `ThemedView` to `src/ui/`; delete the template
-   `explore.tsx` and the "Welcome to Expo" home (§18.4).
-3. **Persistence.** Drizzle schema (§19), `drizzle-kit` migrations + `<MigrationGate>` + the
-   idempotent seed (§20); the repository layer (§21); the Zustand stores (§22).
-4. **Native SMS pipeline.** Build `modules/coinflow-sms` (Kotlin receiver + headless task host)
-   and its config plugin (§17.6); produce an EAS `development` (dev-client) build. Expo Go no
-   longer runs the app from here.
-5. **Features, one at a time, in priority order** (§9): P0 first — F1 detection → F2 notification
-   → F11 review queue → F3 confirmation → F4 manual add → F5 list; then P1 (F6–F9, F12). For each:
+1. **Scaffolding pass.** ✅ Done. `npx expo install` every dependency pinned in
+   `SPEC-implementation.md` §16, re-verified against SDK 57 (§16.7); test runner configured
+   (`jest-expo` + `@testing-library/react-native`); `app.json` changes applied (§35.1).
+2. **Theme + template teardown.** ✅ Done. `src/constants/theme.ts` (§29.1) + `<AppBackground>` +
+   `src/ui/icon.tsx` built; `ThemedText` / `ThemedView` moved to `src/ui/`; template `explore.tsx`
+   and the "Welcome to Expo" home deleted (§18.4).
+3. **Persistence.** ✅ Done. Drizzle schema (§19), migrations + `<MigrationGate>` + the idempotent
+   seed (§20), the repository layer (§21), the Zustand stores (§22).
+4. **Native SMS pipeline.** ✅ Done. `modules/coinflow-sms` (Kotlin receiver + headless task host)
+   + its config plugin (§17.6) built; local dev now requires `expo run:android` / a dev-client
+   build (Expo Go no longer runs the app).
+5. **Features, one at a time, in priority order** (§9). P0: F1 detection → F2 notification →
+   F11 review queue → F3 confirmation → F4 manual add → F5 list — all **done**
+   (`SPEC/traceability.md`). Then, current order: **F6** (done) → **F6.5 app shell & Home** (P0,
+   **next** — added `SPEC-implementation.md` CR-4, 2026-09-03: the `(tabs)` shell + the real Home
+   screen had no owning feature until then) → F7 → F8 → **F8.5 Settings** (added, same CR) → F9 →
+   F12. For each:
    read the spec section → implement → write the tests §9.1 calls for → run tests → run the app →
    compare against `design-prototype/01-midnight/` → verify its `IMP-0xx` + `UI-0xx` against §9.1's
    definition of done → mark done. Keep a `SPEC/traceability.md` grid (`UI-0xx → IMP-0xx →

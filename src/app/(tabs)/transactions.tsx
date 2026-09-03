@@ -1,8 +1,6 @@
 /**
- * Transactions list — SPEC-UI-UX.md §6.7, SPEC-implementation.md §30.9. F5.
- *
- * Root-relative navigation (flat under `src/app/`, not `(tabs)/`) since the full route tree
- * isn't built yet — same pattern as `review-queue.tsx`.
+ * Transactions list — SPEC-UI-UX.md §6.7, SPEC-implementation.md §30.9. F5. Now a real tab
+ * under `(tabs)/` (F6.5) — no back button; the tab bar is the way out.
  *
  * Filter (§6.9): the applied filter lives in this route's own params (`filter-draft.ts`'s header
  * comment), read here via `useLocalSearchParams` and merged into `useTransactionList`'s query —
@@ -18,6 +16,7 @@
 
 import { format } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useBottomTabBarHeight } from 'expo-router/js-tabs';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -64,6 +63,9 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
 
 export default function TransactionsScreen() {
   const [search, setSearch] = useState('');
+  // The tab bar floats over content (F6.5's `CoinFlowTabBar`) rather than docking and
+  // reserving its own space, so the list's own bottom padding has to account for it.
+  const tabBarHeight = useBottomTabBarHeight();
   const rawParams = useLocalSearchParams<RawFilterParams>();
   const filter = useMemo(() => parseFilterParams(rawParams), [rawParams]);
   const { data: categories } = useCategories();
@@ -145,7 +147,6 @@ export default function TransactionsScreen() {
     <SafeAreaView style={styles.screen}>
       <TopBar
         title="Transactions"
-        onBack={() => router.back()}
         right={
           <Pressable
             accessibilityRole="button"
@@ -203,7 +204,7 @@ export default function TransactionsScreen() {
         <FlashList
           data={items}
           keyExtractor={(item) => item.key}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + Spacing.three }]}
           renderItem={({ item }) =>
             item.kind === 'header' ? (
               <DayGroupHeader dayStartMs={item.dayStartMs} subtotalMinor={item.subtotalMinor} />
