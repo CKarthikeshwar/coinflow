@@ -44,3 +44,6 @@ example
 # generated native folders
 /ios
 /android
+
+# on-device bug-report videos/screenshots (large binaries, not project source)
+/app-references/
