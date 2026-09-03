@@ -1079,3 +1079,111 @@ included, unaffected bundle size). No on-device check yet — same standing gap 
 feature, but worth flagging harder here than usual: none of the SVG layout (arc geometry, donut
 proportions, chart scaling) has been visually confirmed on a real screen, only reasoned through
 and unit-tested for correctness of the underlying numbers — RNTL can't screenshot.
+
+**Open follow-up (2026-09-03, unresolved) — empty-state layout fix not visually confirmed.**
+User flagged on-device that the empty-period state ("Nothing recorded for September" +
+**Add transaction**) rendered oddly — sitting right under the period control near the top, with a
+large dead gap below. Fixed in source: `PeriodControl` now joins the `EmptyState` inside one
+centered `flex:1` group (`analytics.tsx`'s `emptyWrap`) instead of sitting outside it — but this
+fix has **not been confirmed working on-device**. Across several rounds (Fast Refresh reload,
+full Metro restart, a full `expo run:android` native rebuild) the device kept showing the old,
+pre-fix layout. Root-caused to Metro's on-disk file-map cache
+(`%TEMP%\metro-file-map-expo-*`/`metro-cache`) not invalidating for this file — confirmed via
+`adb logcat` (bundle loads succeeded, no error) and by diffing the actual bundle Metro served
+against source (F8/F8.5/F9 strings were entirely absent from an `index.bundle` fetch, meaning
+something was stale at the Metro layer, not just the device). Killed the stale Metro process and
+deleted both cache directories — user reported the layout **still unchanged** after the next
+rebuild, so the cache-clear did not fully resolve it either. Left unresolved at user's request to
+move on; **owed:** re-verify the empty-state grouping on-device next time this screen is touched,
+and if still stuck, try a clean `git clean`-safe reinstall (uninstall the app first, not just
+`adb install -r`, in case Android's own APK-diffing is also involved) rather than another
+Metro-side cache clear.
+
+## F12 — Onboarding & permissions
+
+**The last feature in §9's priority list.** Mostly wiring together things that already existed —
+`useOnboarding` (Phase 2, unused until now), `PermissionCard` (built for Settings in F8.5, this
+is its second intended consumer), and `deleteCategory`/`reorderCategories` (F6) — rather than new
+infrastructure, unlike F9.
+
+**A real routing collision, not just stale spec text this time:** §28.1's own route tree names
+step 3 `(onboarding)/categories.tsx` — but `src/app/categories.tsx` already exists (F6, Category
+management, reached from Settings). `(onboarding)` is a route *group* (adds no URL segment), so
+both files would resolve to the same `/categories` path. Named it `category-review.tsx` instead —
+same screen the spec describes, no clash.
+
+**A second real correctness hazard caught before it shipped — the same class as F9's
+`analytics-period` store, but at the *app root* this time, so the blast radius would have been
+total.** The natural place for "first launch → redirect to onboarding" is a live check at the
+root layout: `useSetting('onboardingDone')`, redirecting via `<Redirect>` while `!value`. But
+`useLiveQuery`'s own `.web.ts` stub (§18.3) returns `updatedAt: undefined` **forever** on web — no
+query ever resolves there by design. A shared root layout gating render on that would have left
+the *entire* web build stuck rendering nothing, permanently, not just the individual DB-touching
+screens §18.3 already scoped that risk to. Fixed the same way every other web-specific behaviour
+in this app is fixed: `src/app/_layout.web.tsx`, a separate, simpler file with no onboarding
+redirect at all — the existing per-screen `.web.tsx` → `AndroidOnlyNotice` split already handles
+web correctly on its own.
+
+**A design-text ambiguity, resolved by an existing precedent, not invented fresh:** §6.1 lists the
+category-review step as showing "the 9 default categories" with checkboxes — but one of those 9
+`kind:'default'` rows is **Other**, which is `isProtected:true`. "Deselect = delete" (§30.3's own
+wording) can't apply to a category `deleteCategory` refuses to remove. Rather than invent a new
+rule, followed the one `categories.tsx` (F6) already established: protected categories get no
+delete affordance, silently, no lock icon, no explanation. This screen shows only the 8 real
+default categories (`kind:'default' && !isProtected`); Other doesn't appear in the toggle list at
+all, the same way it has no swipe-delete on the Categories management screen.
+
+**One deliberate scope trim, documented on the file itself:** §6.1's opening line calls for an
+abstract graphic on every step; `permissions.tsx` skips it — two full `PermissionCard`s plus
+heading/Continue/Skip already fill a content-dense screen with no scroll container, and adding a
+graphic risked overflow on shorter devices for no real gain on the one step that didn't need it.
+
+**Built this pass:**
+
+- **Three onboarding screens** (`src/app/(onboarding)/`, each + `.web.tsx` → `AndroidOnlyNotice`):
+  `welcome.tsx` (static), `permissions.tsx` (two `PermissionCard`s, the exact `canAskAgain`
+  branch `sms-notifications.tsx` established in F8.5 — this is IMP-042's second real
+  implementation, not a new one), `category-review.tsx` (toggleable list → `deleteCategory` on
+  Done, `setSetting('onboardingDone', true)`, explicit `router.replace('/')`).
+- **`(onboarding)/_layout.tsx`** — a plain `<Stack>` shell, headerShown false, matching every
+  other route group in this app.
+- **Root redirect** — `src/features/app-shell/root-navigator.tsx` (`RootNavigator`), live
+  `useSetting('onboardingDone')`-gated `<Redirect>` vs. `<Stack>`. Deliberately **not** inlined in
+  `_layout.tsx` itself — that file's own import tree (`MigrationGate` → `@/db/client` →
+  `SQLite.openDatabaseSync`) makes it untestable without mocking the whole provider stack; living
+  as its own file in `features/app-shell/` (where `SheetHost`/`NotificationRouter` already live)
+  keeps it unit-testable in isolation. `_layout.tsx` now just imports and renders it.
+- **`src/app/_layout.web.tsx`** — the web-only root layout split described above.
+- **Shared onboarding UI** (`src/features/onboarding/`): `OnboardingLayout` (back-button-optional
+  shell + step dots + footer), `StepDots` (3-dot progress), `OnboardingGraphic` (hand-rolled
+  `react-native-svg` abstract shapes — one composition per step, no commissioned illustration,
+  per §6.1's own instruction).
+
+**Test-tier decision (§34.0):** `OnboardingGraphic` has no test — pure decoration, no branching
+logic, same "display-only, no coverage warranted" call this codebase already makes for similarly
+decorative pieces. Everything else that has real logic (the three screens, `OnboardingLayout`,
+`StepDots`, `RootNavigator`) is covered directly.
+
+**Tests added**, `npm test` 402 → 430: `root-navigator.test.tsx` (4 — resolving/redirect/stack,
+each branch), `step-dots.test.tsx` (3), `onboarding-layout.test.tsx` (4), `welcome.test.tsx` (3),
+`permissions.test.tsx` (7, incl. the IMP-042 branch and the Skip-does-the-same-as-Continue
+check), `category-review.test.tsx` (7, incl. the protected-categories-excluded assertion and the
+full Done flow — delete toggled-off, setSetting, reset, replace nav).
+
+**Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 430/430, plus a full
+`expo export --platform web` (24 static routes now, up from 18 — the three onboarding screens
+each register both their group-stripped and group-prefixed alias, same pattern `(tabs)` routes
+already show; `/` unaffected at 30KB, confirming `_layout.web.tsx` correctly took over for web
+without pulling the onboarding redirect's live query along with it). No on-device check yet —
+same standing gap as every recent feature, and this one's the highest-stakes to skip: it's the
+very first screen a fresh install shows, and the redirect logic itself (never used anywhere in
+this app before) has only been exercised through a mocked `RootNavigator`, never against a real
+migrated database on a real device.
+
+---
+
+**F1–F12 are now all built.** Every feature in `SPEC/PLAN.md` §9's priority list has a
+`SPEC/traceability.md` entry. What's left before calling V1 done is the accumulated on-device
+verification debt this file has been tracking pass over pass (F8.5, F9, and now F12 most
+urgently — onboarding is the one every fresh install actually depends on), plus `SPEC/PLAN.md`
+§11's final quality review pass across Product / UX / UI / Technical / Specification.

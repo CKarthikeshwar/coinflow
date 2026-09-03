@@ -20,7 +20,7 @@ The next real work is feature implementation (§9).**
 | `SPEC-UI-UX.md` (repo root) | **Frozen (v1).** Screen inventory + priority (§1), visual direction (§2), design system (§3, all subsections frozen), navigation (§4), global rules (§5), per-screen specs (§6), visual acceptance `UI-0xx` (§7), resolved decisions (§8), post-freeze change log (§9 — CR-1). |
 | `SPEC-implementation.md` (repo root) | **Frozen (v1).** Part I §1–§15 (product / behavior, `IMP-0xx`, decisions D1–D17). Part II §16–§37 (technical: stack §16, architecture §17, project structure §18, data models §19, persistence §20, data-access §21, app state §22, SMS parsing §23, normalization §24, categorization §25, analytics §26, formatting/undo §27, navigation §28, components + `theme.ts` §29, screen specs §30, notifications §31, error handling §32, security §33, testing §34, build & release §35, freeze §36, change log §37; decisions D18–D35). |
 | `SPEC/IMPLEMENTATION-PLAN.md` + `SPEC/IMPLEMENTATION-PROGRESS.md` | **Done.** The meta-plan that produced Part II of `SPEC-implementation.md`. Phases 0–5 all complete; progress log kept per phase. |
-| Expo app (`src/app`, `src/components`) | **In progress.** Scaffolding (deps, persistence, `theme.ts`, the native SMS module) is done. Features built per `SPEC/traceability.md`: **F1, F2, F11, F3, F4, F5, F6, F6.5, F7, F8, F8.5, F9** — with an F2–F5 deferral-closing pass (2026-09-03), a test-tier audit the same day, F6.5/F7/F8 all verified on-device 2026-09-03. Template `explore.tsx` / "Welcome to Expo" home are gone. Remaining: **F12** (§12 step 5) — F8.5 and F9 both owe their own on-device check (F9 especially — its SVG chart layout has never been visually confirmed, only unit-tested). |
+| Expo app (`src/app`, `src/components`) | **Feature-complete (F1–F12 all built).** Scaffolding (deps, persistence, `theme.ts`, the native SMS module) is done. Every feature in `SPEC/traceability.md`'s priority list is built: **F1, F2, F11, F3, F4, F5, F6, F6.5, F7, F8, F8.5, F9, F12** — with an F2–F5 deferral-closing pass (2026-09-03), a test-tier audit the same day, F6.5/F7/F8 verified on-device 2026-09-03. Template `explore.tsx` / "Welcome to Expo" home are gone. Remaining before V1 is done: the accumulated on-device verification debt (**F8.5, F9, F12** all still owe theirs — F12 most urgently, it's onboarding, the very first thing a fresh install shows) and `SPEC/PLAN.md` §11's final quality review pass. |
 
 **Conclusion:** Discovery, design, prototyping, and both specs are done and frozen (`SPEC-implementation.md`
 amended post-freeze per its §37 change log — CR-1..CR-4 — under the §10 protocol below; still v1).
@@ -357,8 +357,16 @@ Implementation (§9) is the current track. Do these in order:
    real chart rendering: `d3-shape`/`d3-scale` installed since Phase 1, unused until now; built
    the arc gauge, category donut, and daily chart from scratch, plus `domain/period.ts`'s week
    mode/stepping and the daily-series math §26.6 calls for; on-device check owed harder than
-   usual — none of the SVG layout has been visually seen yet) is done too. Current order from
-   here: **F12** (**next**, last one). For each:
+   usual — none of the SVG layout has been visually seen yet) is done too. **F12 Onboarding &
+   permissions** (P1, done 2026-09-03, the last feature in this list — welcome/permissions/
+   category-review + the root `<Redirect>` that's the first thing a fresh install actually
+   shows; caught a second app-boot-scope hazard the same shape as F9's `analytics-period` one,
+   this time by giving the root layout its own `_layout.web.tsx` split rather than letting a
+   live query stuck-forever on web block the entire site; on-device check owed, and this is the
+   highest-priority one left to actually do) is done too. **All of F1–F12 are now built** — see
+   `SPEC/traceability.md`'s closing note. What's left: clearing the accumulated on-device debt
+   (§11 below can't really start until that's done) and then §11's own final review pass.
+   Per-feature loop, kept here for reference on any future spec change or fix:
    read the spec section → implement → write the tests §9.1 calls for → run tests → run the app →
    compare against `design-prototype/01-midnight/` → verify its `IMP-0xx` + `UI-0xx` against §9.1's
    definition of done → mark done. Keep a `SPEC/traceability.md` grid (`UI-0xx → IMP-0xx →
