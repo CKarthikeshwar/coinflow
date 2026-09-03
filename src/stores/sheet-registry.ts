@@ -14,7 +14,8 @@ export type SheetName =
   | 'filter'
   | 'categoryPicker'
   | 'createCategory'
-  | 'editCategory';
+  | 'editCategory'
+  | 'editAccountRule';
 
 type SheetRegistryStore = {
   current: SheetName | null;

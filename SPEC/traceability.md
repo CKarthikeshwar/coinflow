@@ -794,3 +794,63 @@ scope), plus RNTL coverage of the params actually being written and read correct
 **Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 279/279. No on-device
 re-check yet for this specific pass (the fix is small and covered by the RNTL tests above; owed
 before F7 is called fully done, same standing gap as F6.5's "automated ≠ on-device" note).
+
+**2026-09-03, later — on-device re-check.** User confirmed on a real device: filter works, the
+dead-link bug is fixed. F7 called done.
+
+## F8 — Account memory
+
+**Most of F8's own behaviour already existed before this pass** — built incidentally while F2
+(notification one-tap Save), F3 (Confirmation pre-fill), F4 (Add sheet account autocomplete), and
+F11 (Review Queue's inline Save) were wired up: `src/db/repositories/account-rules.ts`'s full
+`upsertFromTransaction`/`getAccountRule`/`searchByPrefix`/`updateAccountRule`/`deleteAccountRule`/
+`useAccountRules()`, already unit-tested (`account-rules.test.ts`, present before this pass). An
+earlier traceability entry (F5) even flags that a prior pass wrongly skipped the rule upsert as
+"F8 isn't built" when the function already existed and just wasn't called yet.
+
+**What this pass actually built — D16's one remaining piece:** the **Settings › Account rules**
+screen (§30.16, UI-UX §6.14) — "the only window into F8's behaviour; silent-only is frustrating
+when it learns wrong."
+
+- **`src/app/account-rules.tsx`** (+ `.web.tsx` → `AndroidOnlyNotice`, same split as
+  `categories.tsx`) — a pushed route, root-relative like `categories.tsx`/`review-queue.tsx`.
+  Lists `AccountRuleRow`s (`src/features/settings/account-rule-row.tsx`, per the §29.4 catalog:
+  account · note · category chip · hit count); empty state until the first rule is learned; row
+  tap opens the editor sheet; a trailing trash-icon tap deletes (**tap not swipe** — same
+  documented simplification as Categories/Review Queue/the transaction list, not a new one).
+- **`AccountRuleEditorSheet`** (`src/features/settings/account-rule-editor-sheet.tsx`), a new
+  `'editAccountRule'` `SheetName` wired into `SheetHost` alongside the existing sheets. Shaped
+  like `CategoryEditorSheet` (header Cancel/title, a dirty-tracked draft store —
+  `src/stores/account-rule-draft.ts`, discard + delete `ConfirmDialog`s) rather than reusing the
+  transaction-draft-coupled `CategoryPickerSheet` for category selection: an inline single-select
+  category list lives directly in this sheet instead of a second sheet hop, since account rules
+  aren't part of the Add/Confirm/Edit transaction draft. No "create" mode — rules only ever come
+  from `upsertFromTransaction`, so the sheet only ever edits an existing row (`params.normalizedKey`).
+- **Entry point, scoped deliberately:** the spec's real entry point — the Settings tab's grouped
+  list row — is F8.5's screen, not built yet (`settings.tsx` is still F6.5's "Coming soon" stub).
+  Rather than block F8 on F8.5 (wrong order per `SPEC/PLAN.md` §12), the stub gained **one
+  temporary row** ("Account rules" → `router.push('/account-rules')`). F8.5 will replace the stub
+  wholesale; its own Account rules row will point at this same already-built screen — not rebuilt
+  again then.
+- **Simplification (documented, not silent):** the delete affordance exists in *both* the list
+  row (tap-to-delete) and the editor sheet's footer Delete button — same duplication
+  `CategoryEditorSheet`/`categories.tsx` already established for categories, not a new pattern.
+
+**Test-tier decision (§34.0):** the data-layer logic (`upsertFromTransaction`'s last-write-wins /
+Uncategorized-keeps-learned-category / explicit-null-clears-note) was already covered by
+`account-rules.test.ts` before this pass — not re-tested here. This pass's own new logic is two
+RNTL-tier screens/sheets, both covered directly.
+
+**Tests added**, `npm test` 279 → 293:
+- `src/app/account-rules.test.tsx` (7) — empty state; row renders account/note/category
+  chip/usage count; "No note"/"Uncategorized" fallbacks; row tap opens `editAccountRule` with the
+  right `normalizedKey`; delete-confirm calls `deleteAccountRule`; back button.
+- `src/features/settings/account-rule-editor-sheet.test.tsx` (7) — pre-fills account/note/category
+  from the target rule; Save writes the trimmed note; an all-whitespace note saves an explicit
+  `null` (P-6); picking a different category and saving writes the new `categoryId`; Cancel with
+  no edits closes silently; Cancel after an edit shows the discard-confirm; Delete confirms then
+  calls `deleteAccountRule`.
+
+**Verified:** `npm run typecheck` clean, `npx eslint` clean, `npm test` 293/293. No on-device
+check yet for this pass — owed before F8 is called fully done, same standing gap noted on every
+recent feature.

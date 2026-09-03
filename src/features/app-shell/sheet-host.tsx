@@ -4,7 +4,8 @@
  *
  * Wires `'confirm'`, `'add'`, `'edit'` (all three routed to the one mode-aware
  * `TransactionSheetBody`), `'categoryPicker'` (F3/F4), `'createCategory'`/`'editCategory'` (F6,
- * both routed to the one mode-aware `CategoryEditorSheet`), and `'filter'` (F5, §6.9).
+ * both routed to the one mode-aware `CategoryEditorSheet`), `'filter'` (F5, §6.9), and
+ * `'editAccountRule'` (F8, §30.16 — Account rules screen's editor).
  *
  * V-6 discard-guard: rather than intercepting the swipe-down/scrim-tap gesture mid-flight (hard
  * to do cleanly with `@gorhom`'s gesture pipeline), this **disables** pan-down-to-close and
@@ -44,10 +45,11 @@ import { BackHandler } from 'react-native';
 import { Easing } from 'react-native-reanimated';
 
 import { Colors, Radius } from '@/constants/theme';
-import { useAddSheetDraft, useCategoryDraft, useSheetRegistry } from '@/stores';
+import { useAccountRuleDraft, useAddSheetDraft, useCategoryDraft, useSheetRegistry } from '@/stores';
 
 import { CategoryEditorSheet } from '@/features/categories/category-editor-sheet';
 import { CategoryPickerSheet } from '@/features/categories/category-picker-sheet';
+import { AccountRuleEditorSheet } from '@/features/settings/account-rule-editor-sheet';
 import { FilterSheet } from '@/features/transactions/filter-sheet';
 import { TransactionSheetBody } from '@/features/transactions/transaction-sheet';
 
@@ -73,13 +75,20 @@ export function SheetHost() {
   const { current, close } = useSheetRegistry();
   const addSheetDirty = useAddSheetDraft((s) => s.dirty);
   const categoryDirty = useCategoryDraft((s) => s.dirty);
+  const accountRuleDirty = useAccountRuleDraft((s) => s.dirty);
   const isCategoryEditor = current === 'createCategory' || current === 'editCategory';
   // `filter` shares neither draft store — falling through to `addSheetDirty` here used to mean
   // the Filter sheet's swipe/scrim-tap-to-close could be disabled by a stale `dirty:true` left
   // over from an unrelated Add/Confirm/Edit session, since that flag isn't cleared just because
   // a different sheet opened. Filter has no discard-guard of its own (worst case of an accidental
   // close is re-picking the same filters), so it's never dirty.
-  const dirty = isCategoryEditor ? categoryDirty : current === 'filter' ? false : addSheetDirty;
+  const dirty = isCategoryEditor
+    ? categoryDirty
+    : current === 'filter'
+      ? false
+      : current === 'editAccountRule'
+        ? accountRuleDirty
+        : addSheetDirty;
   const hasPresented = useRef(false);
   const dismissing = useRef(false);
 
@@ -156,6 +165,7 @@ export function SheetHost() {
       {current === 'categoryPicker' ? <CategoryPickerSheet /> : null}
       {isCategoryEditor ? <CategoryEditorSheet /> : null}
       {current === 'filter' ? <FilterSheet /> : null}
+      {current === 'editAccountRule' ? <AccountRuleEditorSheet /> : null}
     </BottomSheetModal>
   );
 }
