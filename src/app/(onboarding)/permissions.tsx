@@ -4,9 +4,15 @@
  * canAskAgain-branching pattern `sms-notifications.tsx` (F8.5) established — this is that
  * component's second intended consumer, not a new mechanism.
  *
- * "Continue" is always enabled (no permission is mandatory, §11); "Skip for now" does the exact
- * same thing with lighter-weight copy for someone who doesn't want to engage with the cards at
- * all (§6.1's own wording lists both as distinct affordances on this screen).
+ * "Continue" is always enabled (no permission is mandatory, §11) — but unlike "Skip for now" (which
+ * always just navigates), Continue first fires the OS request dialog for whichever permission(s)
+ * are still askable (not yet decided, or denied-but-not-permanently), same as tapping a card's own
+ * Allow button would. User-reported bug (2026-09-04): Continue used to behave identically to Skip,
+ * silently never prompting — someone who never touches the individual cards (the expected common
+ * path, not an edge case) would sail through onboarding with SMS detection never actually granted,
+ * discovering it later as "nothing's being detected" with no clear cause. A permanently-denied
+ * permission is left alone here — Continue never opens system settings on its own; that's still
+ * the card's own explicit action.
  *
  * Simplification (documented, not silent): skips the per-step abstract graphic §6.1's opening
  * line calls for on every screen — two full `PermissionCard`s plus heading/Continue/Skip already
@@ -54,7 +60,18 @@ export default function PermissionsScreen() {
     }
   };
 
-  const proceed = () => router.push('/category-review');
+  const continueAndRequest = async () => {
+    if (permission.sms !== 'granted' && permission.smsCanAskAgain) {
+      await requestSmsPermissions();
+    }
+    if (permission.notifications !== 'granted' && permission.notificationsCanAskAgain) {
+      await Notifications.requestPermissionsAsync();
+    }
+    permission.refresh();
+    router.push('/category-review');
+  };
+
+  const skip = () => router.push('/category-review');
 
   return (
     <OnboardingLayout
@@ -62,8 +79,8 @@ export default function PermissionsScreen() {
       onBack={() => router.back()}
       footer={
         <>
-          <Button onPress={proceed}>Continue</Button>
-          <Pressable accessibilityRole="button" onPress={proceed} style={styles.skip}>
+          <Button onPress={continueAndRequest}>Continue</Button>
+          <Pressable accessibilityRole="button" onPress={skip} style={styles.skip}>
             <ThemedText type="label" themeColor="text2">
               Skip for now
             </ThemedText>

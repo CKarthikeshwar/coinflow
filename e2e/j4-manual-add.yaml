@@ -1,28 +1,54 @@
 # J4 — manual add (SPEC-implementation.md §34.3). Run against an EAS `development` build on a
-# connected device or emulator: `maestro test e2e/j4-manual-add.yaml` (Maestro CLI, installed
-# separately — not an npm package; see https://maestro.mobile.dev).
+# connected device or emulator: `maestro test e2e/j4-manual-add.yaml` (Maestro CLI, a separate
+# install — not an npm package; see https://maestro.mobile.dev).
 #
-# UNVERIFIED — written without a device/emulator or the Maestro CLI available to actually run it
-# (neither is installed in this environment). Treat this as a first draft: run it once, fix
-# whatever selector doesn't match the real screen, then remove this note.
+# VERIFIED (2026-09-04) against a real device (RZCX61KF6PP) with the Maestro CLI, passing.
 #
-# Adapted from the spec's literal steps to match what's actually built today, not what's
-# eventually planned:
-#   - Entry is Home's temporary "Add transaction" button, not the tab-bar centre Add — the real
-#     bottom tab bar doesn't exist yet (SPEC/traceability.md, F4's "entry point is temporary").
-#   - Asserts the toast text, not "the updated Home tiles" — Home itself is still a placeholder
-#     (§30.4 not built). Extend this flow to check the tiles once Home is real.
+# Two earlier real runs failed with the amount and category both silently reset to blank right
+# after tapping "Food" — traced (via temporary `takeScreenshot` steps at each stage, since it
+# wasn't obvious which tap was at fault) to a real app bug, not this script: `CategoryPickerSheet`
+# reopens the Add sheet after a pick (`sheets.open('add', ...)`), which `SheetHost` renders by
+# fully unmounting/remounting `TransactionSheetBody` — its own mount effect used to unconditionally
+# re-seed a *blank* draft on every mount, discarding whatever the user had already typed. Fixed at
+# the source (`src/stores/add-sheet-draft.ts`'s `active` flag + `transaction-sheet.tsx`'s mount
+# effect, all three modes, each with its own regression test) — this flow needed no further logic
+# changes once that was fixed, only the two timing/assertion fixes below.
+#
+# A third run then failed on cold `launchApp` alone — the very first tap can land on the app's
+# still-blank native shell before React content has painted, before any sheet is even involved.
+# Fixed with a `waitForAnimationToEnd` right after `launchApp`, same fix already used for the
+# Add/Category sheets' own open animations.
+#
+# The final assertion was originally `assertVisible: "Added"` (the confirmation toast) — a real
+# run got all the way through a fully-correct Add (₹500, Food, Cash all genuinely stuck and a real
+# transaction landed in Home's Recent list) but still failed here, because the toast's own ~3s
+# auto-hide window had already elapsed by the time this step ran (three `waitForAnimationToEnd`
+# calls earlier in the flow add up). Asserting on the resulting Home row instead — durable, not a
+# race against a timer — is also strictly more useful: it actually confirms the write landed
+# correctly (right category, back on Home), not just that a toast briefly appeared.
+#
+# "Add transaction" matches two on-screen elements when the ledger is empty — the tab bar's
+# permanent centre Add button (`tab-bar.tsx`, `accessibilityLabel="Add transaction"`, §28.1) and
+# Home's empty-state CTA (`ui/empty-state.tsx`) — both open the exact same sheet
+# (`sheets.open('add')`), so this ambiguity is harmless and left as-is rather than adding an
+# `index` for a collision that doesn't matter functionally.
 appId: com.ckworkforce.coinflow
 ---
 - launchApp
+- waitForAnimationToEnd # cold-launch splash → first-paint gap; without this the very first tap can
+  # land on the app's still-blank native shell before React content has painted (2026-09-04)
 - tapOn: "Add transaction"
+- waitForAnimationToEnd
 - assertVisible: "Add transaction"
 - tapOn: "5"
 - tapOn: "0"
 - tapOn: "0"
 - tapOn: "Category"
+- waitForAnimationToEnd
 - tapOn: "Food"
 - tapOn: "Cash"
-- tapOn: "Add" # the sheet's primary button — verify this doesn't ambiguously match the Home
-  # button of the same name sitting underneath the sheet; add an `index` if it does
-- assertVisible: "Added"
+- tapOn: "Add" # the sheet's primary button
+- assertVisible: ".*Food.*" # the new Recent row on Home — durable, unlike the toast (see header).
+  # A bare "Food" doesn't match: the row's actual text is "Food · just now" as one text node, and
+  # Maestro's plain-string selector requires a full match, not a substring search — the `.*...*`
+  # wildcards are what make this a real substring match.

@@ -53,15 +53,38 @@ it('shows both permission cards, Notifications marked Optional', async () => {
   expect(getByText('Optional')).toBeTruthy();
 });
 
-it('Continue is always enabled and pushes to /category-review', async () => {
+it('Continue requests every still-askable permission, then refreshes and pushes (regression: used to silently skip both, same as Skip)', async () => {
   const { getByText } = await render(<PermissionsScreen />);
   await fireEvent.press(getByText('Continue'));
+  expect(mockRequestSmsPermissions).toHaveBeenCalled();
+  expect(mockRequestNotificationPermissions).toHaveBeenCalled();
+  expect(mockRefresh).toHaveBeenCalled();
   expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
 });
 
-it('"Skip for now" does the same thing as Continue', async () => {
+it('Continue skips a request for a permission already granted', async () => {
+  mockPermission.sms = 'granted';
+  const { getByText } = await render(<PermissionsScreen />);
+  await fireEvent.press(getByText('Continue'));
+  expect(mockRequestSmsPermissions).not.toHaveBeenCalled();
+  expect(mockRequestNotificationPermissions).toHaveBeenCalled();
+  expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
+});
+
+it('Continue skips a request for a permanently-denied permission (never opens system settings on its own)', async () => {
+  mockPermission.smsCanAskAgain = false;
+  const { getByText } = await render(<PermissionsScreen />);
+  await fireEvent.press(getByText('Continue'));
+  expect(mockRequestSmsPermissions).not.toHaveBeenCalled();
+  expect(mockOpenSettings).not.toHaveBeenCalled();
+  expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
+});
+
+it('"Skip for now" pushes to /category-review without requesting anything', async () => {
   const { getByText } = await render(<PermissionsScreen />);
   await fireEvent.press(getByText('Skip for now'));
+  expect(mockRequestSmsPermissions).not.toHaveBeenCalled();
+  expect(mockRequestNotificationPermissions).not.toHaveBeenCalled();
   expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
 });
 

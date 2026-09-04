@@ -84,7 +84,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   header: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
-  body: { flex: 1, paddingHorizontal: Spacing.three },
+  body: { flex: 1, paddingHorizontal: Spacing.three, paddingTop: Spacing.five },
   section: {
     borderRadius: 14,
     backgroundColor: Colors.dark.surface2,

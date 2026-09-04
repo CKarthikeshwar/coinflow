@@ -1,0 +1,35 @@
+diff --git a/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt b/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
+index 610d303..7333a1a 100644
+--- a/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
++++ b/node_modules/expo-notifications/android/src/main/java/expo/modules/notifications/notifications/presentation/builders/ExpoNotificationBuilder.kt
+@@ -97,6 +97,21 @@ open class ExpoNotificationBuilder(
+ 
+     val content = notificationContent
+ 
++    // CoinFlow patch: this library has no JS-level API for Android notification grouping (no
++    // `threadId`/group-key field on `NotificationContentInput`, and this function never called
++    // `setGroup()`/`setGroupSummary()`) — confirmed against the installed 57.0.16 typings and
++    // this file's own source before patching. CoinFlow posts every transaction notification
++    // under one categoryId (`txnKnown`/`txnNew`, see `src/services/notifications/categories.ts`)
++    // and its "N transactions to review" summary with no categoryId but `data.kind === "group"`
++    // (`src/services/notifications/post.ts`) — that's enough, already flowing through this same
++    // builder, to group them without any new JS-side field or plumbing.
++    if (content.categoryId == "txnKnown" || content.categoryId == "txnNew") {
++      builder.setGroup(COINFLOW_TXN_GROUP_KEY)
++    } else if (content.body?.optString("kind") == "group") {
++      builder.setGroup(COINFLOW_TXN_GROUP_KEY)
++      builder.setGroupSummary(true)
++    }
++
+     builder.setAutoCancel(content.isAutoDismiss)
+     builder.setOngoing(content.isSticky)
+ 
+@@ -405,5 +420,8 @@ open class ExpoNotificationBuilder(
+       "expo.modules.notifications.default_notification_color"
+     const val EXTRAS_MARSHALLED_NOTIFICATION_REQUEST_KEY: String = "expo.notification_request"
+     const val EXTRAS_BODY_KEY = "body"
++
++    // CoinFlow patch — see the grouping block in build() above.
++    const val COINFLOW_TXN_GROUP_KEY = "coinflow-txn-group"
+   }
+ }

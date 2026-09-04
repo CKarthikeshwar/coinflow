@@ -89,51 +89,49 @@ function AnalyticsContent({ onRetry }: { onRetry: () => void }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight + Spacing.three }]}>
+    <ScrollView
+      style={styles.flex}
+      contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight + Spacing.three }]}
+    >
+      {/* The period control always stays pinned at the top, regardless of state below it —
+          consistent with every other filter/selector control in the app (never floats to
+          re-position itself around empty content). */}
+      <PeriodControl period={period} onModeChange={(mode) => setMode(mode)} onStep={step} />
+
       {isEmptyPeriod ? (
-        // Nothing to show below it, so the period control joins the empty message as one
-        // centered group instead of sitting pinned at the top with a big gap underneath —
-        // reads as one composed "nothing here yet" moment, not two disconnected pieces.
-        <View style={styles.emptyWrap}>
-          <PeriodControl period={period} onModeChange={(mode) => setMode(mode)} onStep={step} />
-          <EmptyState
-            glyph="bar-chart-3"
-            line={`Nothing recorded for ${period.label}`}
-            cta={{ label: 'Add transaction', onPress: () => openSheet('add', {}) }}
-          />
-        </View>
+        // `EmptyState`'s own root is `flex: 1, justifyContent: 'center'` — as the sole remaining
+        // child after `PeriodControl` here, it naturally centers itself in whatever space is left.
+        <EmptyState
+          glyph="bar-chart-3"
+          line={`Nothing recorded for ${period.label}`}
+          cta={{ label: 'Add transaction', onPress: () => openSheet('add', {}) }}
+        />
+      ) : loading ? (
+        <Skeleton layout="analytics" />
       ) : (
         <>
-          <PeriodControl period={period} onModeChange={(mode) => setMode(mode)} onStep={step} />
+          <BalanceArcCard incomeMinor={summary.incomeMinor} spentMinor={summary.spentMinor} />
 
-          {loading ? (
-            <Skeleton layout="analytics" />
-          ) : (
-            <>
-              <BalanceArcCard incomeMinor={summary.incomeMinor} spentMinor={summary.spentMinor} />
+          <View style={styles.tileRow}>
+            <MeanMedianTile
+              label="Mean"
+              valueMinor={daily.mean}
+              previousValueMinor={daily.previousMean}
+              previousLabel={previousLabel}
+            />
+            <MeanMedianTile
+              label="Median"
+              valueMinor={daily.median}
+              previousValueMinor={daily.previousMedian}
+              previousLabel={previousLabel}
+            />
+          </View>
 
-              <View style={styles.tileRow}>
-                <MeanMedianTile
-                  label="Mean"
-                  valueMinor={daily.mean}
-                  previousValueMinor={daily.previousMean}
-                  previousLabel={previousLabel}
-                />
-                <MeanMedianTile
-                  label="Median"
-                  valueMinor={daily.median}
-                  previousValueMinor={daily.previousMedian}
-                  previousLabel={previousLabel}
-                />
-              </View>
+          <CategoryBreakdown rows={breakdown.rows} categoryById={categoryMap} period={period} />
 
-              <CategoryBreakdown rows={breakdown.rows} categoryById={categoryMap} period={period} />
+          <DailyChart series={daily.series} yMax={daily.yMax} mean={daily.mean} />
 
-              <DailyChart series={daily.series} yMax={daily.yMax} mean={daily.mean} />
-
-              <BiggestExpenses rows={largest.rows} categoryById={categoryMap} />
-            </>
-          )}
+          <BiggestExpenses rows={largest.rows} categoryById={categoryMap} />
         </>
       )}
     </ScrollView>
@@ -142,7 +140,10 @@ function AnalyticsContent({ onRetry }: { onRetry: () => void }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  // `contentContainerStyle`'s `flexGrow:1` only grows into the ScrollView's own bounds — without
+  // `style={styles.flex}` on the ScrollView itself, it has no bounded height to grow into, and
+  // `EmptyState`'s own `flex: 1` (below) would have nothing to fill/center within.
+  flex: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.three, gap: Spacing.three },
-  emptyWrap: { flex: 1, justifyContent: 'center', gap: Spacing.five },
   tileRow: { flexDirection: 'row', gap: Spacing.two },
 });

@@ -141,6 +141,28 @@ describe('Add mode', () => {
     await fireEvent.press(getByRole('button', { name: 'Add' }));
     expect(mockWriteConfirmedTransaction).toHaveBeenCalled();
   });
+
+  // Regression (2026-09-04, found via a Maestro E2E run of e2e/j4-manual-add.yaml): SheetHost
+  // fully unmounts/remounts this component whenever `current` swaps to a sub-picker (Category)
+  // and back — this component's own mount effect used to unconditionally re-seed a blank draft
+  // every time, silently discarding whatever the user had already typed the moment they picked
+  // a category. Simulates that round trip directly: unmount, then mount a fresh instance the
+  // same way SheetHost would on return, and assert the draft survived it.
+  it('preserves an in-progress amount across an unmount/remount (Category-picker round trip)', async () => {
+    const first = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent.press(first.getByText('5'));
+    expect(useAddSheetDraft.getState().amountMinor).toBe(500);
+    await first.unmount();
+
+    const second = await render(<TransactionSheetBody mode="add" />);
+    expect(useAddSheetDraft.getState().amountMinor).toBe(500);
+    // The keypad's own buffer must have survived too, in sync with the draft — not just the
+    // draft's numeric mirror — or the very next digit press corrupts it (see the store's own
+    // header comment for why the two must move together).
+    await fireEvent.press(second.getByText('3'));
+    expect(useAddSheetDraft.getState().amountMinor).toBe(5300);
+    await second.unmount();
+  });
 });
 
 describe('Confirm mode', () => {
@@ -160,6 +182,37 @@ describe('Confirm mode', () => {
     useSheetRegistry.setState({ current: 'confirm', params: { suggestionId: 'gone' } });
     await render(<TransactionSheetBody mode="confirm" />);
     expect(useSheetRegistry.getState().current).toBeNull();
+  });
+
+  // Regression (2026-09-04) — same class of bug as Add's own version below: a remount for the
+  // *same* suggestion (a Category-picker round trip) must not re-seed from the original
+  // Suggestion and discard an in-progress edit.
+  it('preserves an in-progress edit across a remount for the same Suggestion', async () => {
+    mockGetSuggestion.mockReturnValue(suggestion({ amountMinor: 45000, account: 'Swiggy' }));
+    useSheetRegistry.setState({ params: { suggestionId: 'sug-1' } });
+    const first = await render(<TransactionSheetBody mode="confirm" />);
+    useAddSheetDraft.getState().patch({ account: 'Edited Account' });
+    await first.unmount();
+
+    const second = await render(<TransactionSheetBody mode="confirm" />);
+    expect(useAddSheetDraft.getState().account).toBe('Edited Account');
+    await second.unmount();
+  });
+
+  // A remount for a genuinely *different* Suggestion (not the sub-picker return-trip case above)
+  // must still re-seed — the guard shouldn't over-fire and get stuck showing stale data forever.
+  it('still re-seeds on a remount for a different Suggestion', async () => {
+    mockGetSuggestion.mockReturnValue(suggestion({ amountMinor: 45000, account: 'Swiggy' }));
+    useSheetRegistry.setState({ params: { suggestionId: 'sug-1' } });
+    const first = await render(<TransactionSheetBody mode="confirm" />);
+    useAddSheetDraft.getState().patch({ account: 'Edited Account' });
+    await first.unmount();
+
+    mockGetSuggestion.mockReturnValue(suggestion({ id: 'sug-2', amountMinor: 10000, account: 'Uber' }));
+    useSheetRegistry.setState({ params: { suggestionId: 'sug-2' } });
+    const second = await render(<TransactionSheetBody mode="confirm" />);
+    expect(useAddSheetDraft.getState().account).toBe('Uber');
+    await second.unmount();
   });
 });
 
@@ -181,5 +234,20 @@ describe('Edit mode', () => {
     await fireEvent.press(getByText('Save'));
     expect(mockWriteEditedTransaction).toHaveBeenCalled();
     expect(mockWriteConfirmedTransaction).not.toHaveBeenCalled();
+  });
+
+  // Regression (2026-09-04) — a remount for the same transaction (Category-picker round trip)
+  // must not re-fetch and overwrite an in-progress edit with the original, unedited row.
+  it('preserves an in-progress note edit across a remount for the same transaction', async () => {
+    mockGetTransaction.mockReturnValue(transaction());
+    useSheetRegistry.setState({ params: { transactionId: 'txn-1' } });
+    const first = await render(<TransactionSheetBody mode="edit" />);
+    await fireEvent.changeText(first.getByPlaceholderText('Note'), 'Edited note');
+    await first.unmount();
+
+    const second = await render(<TransactionSheetBody mode="edit" />);
+    expect(second.getByDisplayValue('Edited note')).toBeTruthy();
+    expect(mockGetTransaction).toHaveBeenCalledTimes(1);
+    await second.unmount();
   });
 });
