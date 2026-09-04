@@ -19,7 +19,7 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { Icon, type IconName } from '@/ui/icon';
 import { ThemedText } from '@/ui/themed-text';
 
-export type PermissionCardKind = 'sms' | 'notif';
+export type PermissionCardKind = 'sms' | 'notif' | 'crash';
 
 export type PermissionCardProps = {
   kind: PermissionCardKind;
@@ -29,11 +29,16 @@ export type PermissionCardProps = {
   onRequest: () => void;
 };
 
-const ICON: Record<PermissionCardKind, IconName> = { sms: 'shield-check', notif: 'bell' };
-const TITLE: Record<PermissionCardKind, string> = { sms: 'Read transaction SMS', notif: 'Notifications' };
+const ICON: Record<PermissionCardKind, IconName> = { sms: 'shield-check', notif: 'bell', crash: 'triangle-alert' };
+const TITLE: Record<PermissionCardKind, string> = {
+  sms: 'Read transaction SMS',
+  notif: 'Notifications',
+  crash: 'Crash reports',
+};
 const WHY: Record<PermissionCardKind, string> = {
   sms: 'Reads bank & UPI messages on this device to detect payments. Nothing is uploaded.',
   notif: 'Act on a detection from the lock screen. Without it, detections just wait in the Review Queue.',
+  crash: 'Send anonymous crash reports (stack traces only — never your transactions or messages).',
 };
 
 export function PermissionCard({
@@ -43,7 +48,8 @@ export function PermissionCard({
   canAskAgain = true,
   onRequest,
 }: PermissionCardProps) {
-  const actionLabel = state === 'idle' ? 'Allow' : canAskAgain ? 'Enable' : 'Open system settings';
+  const actionLabel =
+    kind === 'crash' ? 'Turn on' : state === 'idle' ? 'Allow' : canAskAgain ? 'Enable' : 'Open system settings';
 
   return (
     <View style={styles.card}>
@@ -69,7 +75,7 @@ export function PermissionCard({
         <View style={styles.pill}>
           <Icon name="check" size={14} color="text" />
           <ThemedText type="caption" themeColor="text">
-            Granted
+            {kind === 'crash' ? 'Enabled' : 'Granted'}
           </ThemedText>
         </View>
       ) : (

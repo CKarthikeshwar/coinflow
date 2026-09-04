@@ -18,6 +18,7 @@ const SENDER_SEED: readonly string[] = [
   'AMZNPY',
   'CRED',
   'BOBTXN',
+  'CANBNK',
 ];
 
 /** Drop the `XX-` telco prefix and a trailing `-S`/`-T`, upper-case what remains. */

@@ -6,6 +6,7 @@
 
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { router } from 'expo-router';
+import { useCallback, useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Colors, Spacing } from '@/constants/theme';
@@ -24,14 +25,31 @@ export function CategoryPickerSheet() {
   const close = useSheetRegistry((s) => s.close);
   const params = useSheetRegistry((s) => s.params) as { returnTo?: SheetName };
 
+  const returnToParent = useCallback(() => open(params.returnTo ?? 'add', params), [open, params]);
+
   // Reopens whichever sheet actually opened the picker (Add/Confirm/Edit all pass their own
   // `mode` through as `returnTo`) — not hardcoded to Confirm, which used to silently turn an Add
   // or Edit sheet into a Confirm sheet (wrong title, wrong validation gate) the moment a category
   // was picked. Falls back to `add` only for the unreachable case of a missing `returnTo`.
   const pick = (id: string | null) => {
     patch({ categoryId: id });
-    open(params.returnTo ?? 'add', params);
+    returnToParent();
   };
+
+  // Regression (2026-09-04, found via a real-device Maestro back-navigation check): this sheet
+  // is always a *sub*-sheet of Add/Edit/Confirm, never a standalone one — but it never used to
+  // register a `requestClose` handler, so `SheetHost`'s hardware-back interceptor fell through
+  // to `sheet-registry.ts`'s plain-`close()` default (written for sheets with genuinely nothing
+  // to guard, e.g. Filter). Since the picker has no on-screen Cancel/back control of its own,
+  // hardware back was the *only* way to leave without picking a category — and it silently blew
+  // away the whole sheet stack, discarding whatever amount/fields the user had already typed
+  // into the parent Add/Edit/Confirm sheet, with no "Discard changes?" prompt. Registering this
+  // reuses the exact same reopen-the-parent path `pick()` already takes, just without touching
+  // `categoryId` — so back now behaves like "cancel out of the picker," not "cancel everything."
+  useEffect(() => {
+    useSheetRegistry.getState().setOnRequestClose(returnToParent);
+    return () => useSheetRegistry.getState().setOnRequestClose(null);
+  }, [returnToParent]);
 
   const manageCategories = () => {
     close();

@@ -6,9 +6,17 @@ const mockRouterBack = jest.fn();
 const mockClearAllData = jest.fn();
 const mockExportJson = jest.fn();
 const mockExportCsv = jest.fn();
+const mockSetSetting = jest.fn();
+const mockArmCrashReporting = jest.fn();
+let mockCrashReportingValue: boolean | undefined;
 
 jest.mock('expo-router', () => ({ router: { back: (...args: unknown[]) => mockRouterBack(...args) } }));
 jest.mock('@/db/maintenance', () => ({ clearAllData: (...args: unknown[]) => mockClearAllData(...args) }));
+jest.mock('@/db/repositories/settings', () => ({
+  useSetting: () => ({ value: mockCrashReportingValue }),
+  setSetting: (...args: unknown[]) => mockSetSetting(...args),
+}));
+jest.mock('@/services/crash', () => ({ armCrashReporting: (...args: unknown[]) => mockArmCrashReporting(...args) }));
 jest.mock('@/features/settings/export', () => ({
   exportJson: (...args: unknown[]) => mockExportJson(...args),
   exportCsv: (...args: unknown[]) => mockExportCsv(...args),
@@ -19,6 +27,9 @@ beforeEach(() => {
   mockClearAllData.mockReset();
   mockExportJson.mockReset().mockResolvedValue(undefined);
   mockExportCsv.mockReset().mockResolvedValue(undefined);
+  mockSetSetting.mockReset();
+  mockArmCrashReporting.mockReset();
+  mockCrashReportingValue = false;
 });
 
 it('Export JSON calls exportJson', async () => {
@@ -63,4 +74,19 @@ it('back button calls router.back', async () => {
   const { getByLabelText } = await render(<DataScreen />);
   await fireEvent.press(getByLabelText('Back'));
   expect(mockRouterBack).toHaveBeenCalled();
+});
+
+it('toggling crash reporting on writes the setting and arms Sentry', async () => {
+  const { getByRole } = await render(<DataScreen />);
+  await fireEvent(getByRole('switch'), 'valueChange', true);
+  expect(mockSetSetting).toHaveBeenCalledWith('crashReportingEnabled', true);
+  expect(mockArmCrashReporting).toHaveBeenCalledWith(true);
+});
+
+it('toggling crash reporting off disarms Sentry', async () => {
+  mockCrashReportingValue = true;
+  const { getByRole } = await render(<DataScreen />);
+  await fireEvent(getByRole('switch'), 'valueChange', false);
+  expect(mockSetSetting).toHaveBeenCalledWith('crashReportingEnabled', false);
+  expect(mockArmCrashReporting).toHaveBeenCalledWith(false);
 });

@@ -16,6 +16,11 @@ describe('isKnownSender', () => {
     expect(isKnownSender('CRED')).toBe(true);
   });
 
+  it('matches Canara Bank (regression: a real transaction SMS from sender CANBNK was silently dropped — the sender simply wasn\'t in the seed at all)', () => {
+    expect(isKnownSender('CANBNK')).toBe(true);
+    expect(isKnownSender('AD-CANBNK-S')).toBe(true);
+  });
+
   it('rejects an unrecognised sender', () => {
     expect(isKnownSender('AD-DELIVR-S')).toBe(false);
     expect(isKnownSender('RANDOM-CO')).toBe(false);
