@@ -12,6 +12,19 @@
  * exploring the sheet isn't something a user would want a "discard changes?" prompt over, even
  * on a forward (non-reverted) toggle. Only fields that represent actually-typed-or-chosen data
  * (amount, category, account, note, description) count toward dirty.
+ *
+ * `active` (2026-09-04 fix) exists so `transaction-sheet.tsx`'s own mount effect can tell "a
+ * genuinely new Add session is starting" apart from "the Add sheet just remounted because a
+ * sub-picker (Category, at minimum) returned control to it." `SheetHost` conditionally renders
+ * `<TransactionSheetBody mode="add"/>` only while `current === 'add'` — switching to
+ * `categoryPicker` and back is a real unmount/remount, not a re-render, so the mount effect has
+ * no component-local memory of "I already seeded this session." This store, being a persistent
+ * Zustand singleton, is the one thing that survives that remount. `open()` sets `active` true;
+ * `reset()` (called only on genuine session-end — discard or successful submit, never on a
+ * sub-picker round trip) sets it back false. The mount effect only re-seeds a blank draft when
+ * `!active`, so returning from Category no longer wipes whatever the user had already typed —
+ * found via a Maestro E2E run (`e2e/j4-manual-add.yaml`) that reproduced it exactly: amount and
+ * category both silently reset to blank right after picking a category.
  */
 
 import { create } from 'zustand';
@@ -69,6 +82,7 @@ function computeDirty(current: AddSheetDraft, initial: AddSheetDraft): boolean {
 
 type AddSheetDraftStore = AddSheetDraft & {
   _initial: AddSheetDraft;
+  active: boolean;
   open: (seed?: AddSheetDraftSeed) => void;
   patch: (fields: Partial<AddSheetDraft>) => void;
   setSubmitting: (submitting: boolean) => void;
@@ -79,9 +93,10 @@ type AddSheetDraftStore = AddSheetDraft & {
 export const useAddSheetDraft = create<AddSheetDraftStore>((set) => ({
   ...BLANK,
   _initial: BLANK,
+  active: false,
   open: (seed) => {
     const full: AddSheetDraft = { ...BLANK, occurredAt: Date.now(), ...seed, dirty: false };
-    set({ ...full, _initial: full });
+    set({ ...full, _initial: full, active: true });
   },
   patch: (fields) =>
     set((s) => {
@@ -90,5 +105,5 @@ export const useAddSheetDraft = create<AddSheetDraftStore>((set) => ({
     }),
   setSubmitting: (submitting) => set({ submitting }),
   setError: (error) => set({ error }),
-  reset: () => set({ ...BLANK, _initial: BLANK }),
+  reset: () => set({ ...BLANK, _initial: BLANK, active: false }),
 }));

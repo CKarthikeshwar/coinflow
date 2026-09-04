@@ -112,19 +112,29 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
 
   useEffect(() => {
     if (mode === 'add') {
-      useAddSheetDraft.getState().open({
-        mode: 'add',
-        amountMinor: 0,
-        direction: 'debit',
-        type: 'expense',
-        categoryId: null,
-        paymentMethod: 'upi',
-        account: '',
-        note: '',
-        description: '',
-        occurredAt: Date.now(),
-      });
-      useKeypad.getState().reset();
+      // Only seed a blank draft for a genuinely new Add session — SheetHost fully unmounts and
+      // remounts this component whenever `current` swaps away to a sub-picker (Category, at
+      // minimum) and back, so this effect re-runs on that return trip too, not just on a real
+      // fresh open. `active` (add-sheet-draft.ts) is what tells the two apart: without this
+      // guard, picking a category silently wiped whatever amount/fields the user had already
+      // entered (found via a Maestro E2E run, `e2e/j4-manual-add.yaml`, 2026-09-04). The keypad
+      // reset is gated the same way — it holds its own separate digit buffer that must stay in
+      // sync with the (now preserved) draft, not get wiped out from under it.
+      if (!useAddSheetDraft.getState().active) {
+        useAddSheetDraft.getState().open({
+          mode: 'add',
+          amountMinor: 0,
+          direction: 'debit',
+          type: 'expense',
+          categoryId: null,
+          paymentMethod: 'upi',
+          account: '',
+          note: '',
+          description: '',
+          occurredAt: Date.now(),
+        });
+        useKeypad.getState().reset();
+      }
       smsRefRef.current = null;
       return;
     }
@@ -132,6 +142,16 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
     if (mode === 'edit') {
       const transactionId = params.transactionId;
       if (!transactionId) return;
+      // Same "returning from a sub-picker shouldn't discard in-progress edits" guard as 'add'
+      // above — re-seeding here re-reads the *original, on-disk* transaction, which would
+      // silently throw away anything the user had already changed. Only re-fetch when this is
+      // genuinely a new edit session (inactive, or a different transaction than the one already
+      // being edited) — same source, still active, means preserve what's there.
+      const draftNow = useAddSheetDraft.getState();
+      if (draftNow.active && draftNow.sourceId === transactionId) {
+        smsRefRef.current = null;
+        return;
+      }
       const txn = getTransaction(transactionId);
       if (!txn) {
         close();
@@ -156,6 +176,12 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
     }
 
     if (!suggestionId) return;
+    // Same guard again for Confirm — returning from Category shouldn't re-seed from the original
+    // Suggestion and discard whatever the user already edited in this confirm session.
+    const draftNow = useAddSheetDraft.getState();
+    if (draftNow.active && draftNow.sourceId === suggestionId) {
+      return;
+    }
     const suggestion = getSuggestion(suggestionId);
     if (!suggestion) {
       close();

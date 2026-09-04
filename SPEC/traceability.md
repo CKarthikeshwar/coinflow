@@ -95,6 +95,22 @@ without native code beyond the "SMS bridge only" module surface (D24). Individua
 notifications post correctly (right content, right count) but appear as separate entries, not a
 collapsed stack. Documented in `src/services/notifications/post.ts`.
 
+**Patched (2026-09-03/04), on-device stacking behavior not yet visually confirmed.** Rather than
+leave this as a permanent library limitation, patched `expo-notifications`' Android source directly
+(`ExpoNotificationBuilder.kt`'s `build()`) to call `setGroup()`/`setGroupSummary()` — grouping is
+inferred entirely from data already flowing through the pipeline (`categoryId` of `txnKnown`/
+`txnNew` for individual notifications, `data.kind === "group"` for the summary), no new JS-side
+field needed. Saved via `patches/expo-notifications+57.0.16.patch` (`patch-package`, wired into
+`postinstall` already), so it survives `npm install`; needs re-checking if `expo-notifications` is
+ever upgraded. Confirmed the patched code actually compiles into the app (this module ships as a
+**precompiled AAR from a local Maven repo** by default per its own `expo-module.config.json`, not
+autolinked from source — editing the Kotlin file alone silently does nothing; had to add
+`expo.autolinking.android.buildFromSource: ["expo-notifications"]` to `package.json` to force a
+real source build, then verified the new `coinflow-txn-group` string constant landed in the built
+APK's dex). What's **not yet done**: actually triggering 2+ pending Suggestions on-device and
+visually confirming Android collapses them under the summary — this session got the patch built
+and proven-compiled but got pulled into two other on-device bugs before testing the visual result.
+
 **Category identifiers changed from spec:** `txn-known`/`txn-new` → `txnKnown`/`txnNew` (no
 hyphen) — `expo-notifications`' own `setNotificationCategoryAsync` docs warn that `:`/`-` in a
 category id "might not work as expected". Pure identifier-string change, no behavior difference.
@@ -1080,24 +1096,48 @@ feature, but worth flagging harder here than usual: none of the SVG layout (arc 
 proportions, chart scaling) has been visually confirmed on a real screen, only reasoned through
 and unit-tested for correctness of the underlying numbers — RNTL can't screenshot.
 
-**Open follow-up (2026-09-03, unresolved) — empty-state layout fix not visually confirmed.**
+**Resolved (2026-09-04) — empty-state layout, two stacked bugs, both real.**
 User flagged on-device that the empty-period state ("Nothing recorded for September" +
 **Add transaction**) rendered oddly — sitting right under the period control near the top, with a
-large dead gap below. Fixed in source: `PeriodControl` now joins the `EmptyState` inside one
-centered `flex:1` group (`analytics.tsx`'s `emptyWrap`) instead of sitting outside it — but this
-fix has **not been confirmed working on-device**. Across several rounds (Fast Refresh reload,
-full Metro restart, a full `expo run:android` native rebuild) the device kept showing the old,
-pre-fix layout. Root-caused to Metro's on-disk file-map cache
-(`%TEMP%\metro-file-map-expo-*`/`metro-cache`) not invalidating for this file — confirmed via
-`adb logcat` (bundle loads succeeded, no error) and by diffing the actual bundle Metro served
-against source (F8/F8.5/F9 strings were entirely absent from an `index.bundle` fetch, meaning
-something was stale at the Metro layer, not just the device). Killed the stale Metro process and
-deleted both cache directories — user reported the layout **still unchanged** after the next
-rebuild, so the cache-clear did not fully resolve it either. Left unresolved at user's request to
-move on; **owed:** re-verify the empty-state grouping on-device next time this screen is touched,
-and if still stuck, try a clean `git clean`-safe reinstall (uninstall the app first, not just
-`adb install -r`, in case Android's own APK-diffing is also involved) rather than another
-Metro-side cache clear.
+large dead gap below. The 2026-09-03 pass's fix (grouping `PeriodControl` + `EmptyState` inside one
+centered `flex:1` `emptyWrap`) never visibly changed anything on-device across many rebuilds, which
+was wrongly diagnosed at the time as a Metro cache problem. It wasn't (or wasn't only that) —
+two separate, genuine bugs were stacked on top of each other:
+
+1. **The `ScrollView` itself had no `style` prop, only `contentContainerStyle`.**
+   `contentContainerStyle`'s `flexGrow: 1` only stretches the inner content view to fill the
+   ScrollView's *own* bounds — without `style={{flex: 1}}` on the ScrollView itself, it has no
+   bounded height to grow into, so `emptyWrap`'s `flex: 1`/`justifyContent: 'center'` had nothing
+   to center within. This alone made the whole grouping fix inert from the day it was written.
+2. **`EmptyState`'s own root style is `flex: 1, justifyContent: 'center'`** — correct for its other
+   three call sites (Home, Transactions, Review Queue), where it's the *sole* content filling an
+   entire screen area. Nested as the second child of `emptyWrap` alongside `PeriodControl`, that
+   internal `flex: 1` made `EmptyState` greedily claim all of `emptyWrap`'s remaining space for
+   itself — `PeriodControl` stayed pinned at the top (its natural size), then `EmptyState` centered
+   *its own* content within the large remaining area, independently. From the outside this looked
+   identical to "centering isn't happening at all," which is what made bug 1 look like the whole
+   story until bug 2 was found underneath it.
+
+Fix: `ScrollView` in `analytics.tsx` now takes `style={styles.flex}` (`{flex: 1}`). `EmptyState`
+(`src/ui/empty-state.tsx`) gained an optional `style?: StyleProp<ViewStyle>` prop, merged onto its
+root (`[styles.wrap, style]`) — additive, its three other call sites are unaffected since they pass
+nothing. `analytics.tsx` passes `style={styles.emptyState}` (`{flex: 0}`) to opt out of the
+greedy-fill behavior only in this one nested usage.
+
+**Why the original Metro-cache diagnosis was a red herring, for the record:** a long-lived Metro
+process (10.8GB resident, alive since early in the session across many rebuilds) turned out to be
+part of the confusion — `expo run:android` was silently reattaching to it rather than starting
+fresh, and even after killing it, wiping `%TEMP%\metro-cache`/`metro-file-map-expo-*`, and a full
+app uninstall + clean reinstall, the layout still looked unchanged. That *was* real staleness, but
+fixing it only got as far as proving edits reach the device (via a temporary literal string swapped
+into the empty-state message and confirmed rendering) — the layout itself was still broken after
+that, because the actual bug (above) hadn't been touched yet. Lesson for next time: when a visual
+fix "doesn't take" across reboots/cache-clears, verify with an unmissable literal marker (not just
+re-reading the diff) before spending more effort on the build pipeline than the code.
+
+**Verified on-device (2026-09-04):** period control and empty message now render as one visually
+grouped, vertically-centered cluster with even space above and below, confirmed via screenshot on
+the physical test device. `npm run typecheck`, `npx eslint`, `npm test` (436/436) all clean.
 
 ## F12 — Onboarding & permissions
 
@@ -1180,6 +1220,28 @@ very first screen a fresh install shows, and the redirect logic itself (never us
 this app before) has only been exercised through a mocked `RootNavigator`, never against a real
 migrated database on a real device.
 
+**Post-freeze fix (2026-09-04) — Continue silently never requested anything.** On-device testing
+(finally possible once the flicker bug was fixed) surfaced a real behavioral bug, not just a
+missing verification: `permissions.tsx`'s **Continue** button was wired to the exact same handler
+as **"Skip for now"** — both just called `router.push('/category-review')`. §6.1's own text ("two
+stacked permission cards ... **Continue** (always enabled)") reads that as intentional — permission
+requests happen only via each card's own **Allow**/**Enable** button — but that's not how a user
+actually uses this screen: someone who taps the big primary **Continue** button (the expected,
+common path) sailed through onboarding with SMS access never actually granted, with no indication
+anything was skipped. Fixed by splitting the two buttons: **Continue** now requests every
+still-askable permission (`sms !== 'granted' && smsCanAskAgain`, same for notifications) via the
+same `requestSmsPermissions()`/`Notifications.requestPermissionsAsync()` calls each card's own
+button already used, `refresh()`es status, then navigates; **Skip for now** goes back to being a
+plain `skip()` that only navigates. A permanently-denied permission is left alone by Continue —
+it never opens system settings on its own, only the card's explicit action does that.
+
+**Verified on-device (2026-09-04):** fresh install, tapped Continue on the permissions step —
+both the real Android "Allow coinflow to send and view SMS messages?" and "send you notifications?"
+dialogs fired in sequence, both grants took, onboarding completed normally with SMS access
+actually active (no permission banner on Home afterward). `permissions.test.tsx` rewritten (9
+tests, up from 6) to cover Continue requesting/skipping per permission state and Skip requesting
+nothing. `npm test` 434 → 436 (combined with the migration-gate fix below), typecheck/lint clean.
+
 ---
 
 **F1–F12 are now all built.** Every feature in `SPEC/PLAN.md` §9's priority list has a
@@ -1187,3 +1249,38 @@ migrated database on a real device.
 verification debt this file has been tracking pass over pass (F8.5, F9, and now F12 most
 urgently — onboarding is the one every fresh install actually depends on), plus `SPEC/PLAN.md`
 §11's final quality review pass across Product / UX / UI / Technical / Specification.
+
+## Post-freeze fix — E7's "Try again" button was a no-op in production (2026-09-03)
+
+Found during a post-completion codebase sweep, not a feature pass: `src/db/migration-gate.tsx`'s
+`MigrationErrorScreen` (E7/E8, §32.2) wired its **Try again** button to `DevSettings.reload()`,
+which only works while the JS bundle is served by a dev Metro server. In a real installed build
+there is no dev server, so for an actual user who ever hit this screen, the one recovery action
+offered would have silently done nothing — worse than no button, since it looks actionable.
+
+**Fix isn't `expo-updates`' `reloadAsync()`** as the removed TODO comment (and §32.3's own prose)
+assumed — checked the SDK 57 docs before touching this (per `AGENTS.md`), and `expo-updates`'
+`reloadAsync()` actively rejects (`ERR_UPDATES_DISABLED`) unless a real OTA update channel/URL is
+configured, which this app deliberately doesn't have (§12 step 6 / D20: direct-install APK, no
+Play Store, no auto-update channel). Installing `expo-updates` just to get a restart button would
+also have meant a new native dependency and another `expo run:android` rebuild for something that
+doesn't need one: `reloadAppAsync()` (from the base `expo` package, re-exported from
+`expo-modules-core`, already installed, no new native code) does exactly this — "reloads the app
+... using the same JavaScript bundle that is currently running," explicitly documented to work in
+both release and debug builds, unlike `DevSettings.reload()`. Swapped it in; `§32.3`'s own prose
+("`expo-updates` `reloadAsync` in release") is now stale against this and worth a pass if that
+section is ever revisited, but not edited here since this fix only touched the one screen.
+
+The two other TODOs on this file are still open, on purpose: Sentry crash reporting isn't wired up
+yet anywhere in the app (D34, Phase 5), and the "Export a copy" escape hatch is unbuilt since it'd
+need a raw-file export path distinct from `export.ts`'s live-rows JSON/CSV (§20.8) — a corrupt DB
+can't be read through the normal repository layer at all.
+
+**Test added** (no test existed for this file before): `src/db/migration-gate.test.tsx` (4 cases —
+resolving/renders-children, error screen blocks children, and a named regression test for this
+exact bug: Try again calls the production-safe reload, not a dev-only API). `npm test` 430 → 434,
+typecheck and `expo lint` clean.
+
+**Not yet verified on-device** — same standing gap as everything else in this list; this path only
+triggers on a genuine migration/DB-open failure, which hasn't been reproduced on a real device in
+this project.

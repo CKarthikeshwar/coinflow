@@ -49,7 +49,14 @@
         }
       ],
       "expo-sharing",
-      "@sentry/react-native",
+      [
+        "@sentry/react-native",
+        {
+          "organization": "ck",
+          "project": "coinflow",
+          "url": "https://sentry.io/"
+        }
+      ],
       "expo-image"
     ],
     "experiments": {
@@ -58,7 +65,7 @@
     },
     "extra": {
       "router": {},
-      "sentryDsn": "",
+      "sentryDsn": "https://1d33a0704f01e73edea24b567f1f2e76@o4512026358644736.ingest.de.sentry.io/4512026371096656",
       "eas": {
         "projectId": "0e6d47a3-fd84-4e49-b09b-0c911040a284"
       }

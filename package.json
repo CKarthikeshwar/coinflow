@@ -2,6 +2,13 @@
   "name": "coinflow",
   "main": "index.js",
   "version": "1.0.0",
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-notifications"]
+      }
+    }
+  },
   "dependencies": {
     "@expo-google-fonts/geist": "^0.4.2",
     "@expo-google-fonts/manrope": "^0.4.2",

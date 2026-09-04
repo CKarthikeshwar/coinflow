@@ -6,7 +6,8 @@
  */
 
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
-import { DevSettings, StyleSheet, View } from 'react-native';
+import { reloadAppAsync } from 'expo';
+import { StyleSheet, View } from 'react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Colors, Spacing } from '@/constants/theme';
@@ -48,8 +49,8 @@ export function MigrationGate({ children }: { children: ReactNode }) {
 }
 
 function MigrationErrorScreen() {
-  // TODO(step 5 / §32): production Retry via expo-updates `reloadAsync`, plus the
-  // "Export a copy" escape hatch once §20.8 export lands. Reported to Sentry with no row data.
+  // TODO(step 5 / §32): the "Export a copy" escape hatch once §20.8 export lands, plus
+  // reporting this to Sentry (no row data) once D34's crash reporting is wired up.
   return (
     <View style={styles.error}>
       <Icon name="triangle-alert" size={28} color="text2" />
@@ -57,7 +58,13 @@ function MigrationErrorScreen() {
       <ThemedText type="body" style={styles.errorBody}>
         Something went wrong reading the database on this device. Your data has not been changed.
       </ThemedText>
-      <ThemedText type="label" onPress={() => DevSettings.reload()} style={styles.retry}>
+      <ThemedText
+        type="label"
+        onPress={() => {
+          reloadAppAsync('Migration error — user tapped Try again');
+        }}
+        style={styles.retry}
+      >
         Try again
       </ThemedText>
     </View>
