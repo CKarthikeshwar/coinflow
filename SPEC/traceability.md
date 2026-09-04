@@ -1271,10 +1271,10 @@ both release and debug builds, unlike `DevSettings.reload()`. Swapped it in; `§
 ("`expo-updates` `reloadAsync` in release") is now stale against this and worth a pass if that
 section is ever revisited, but not edited here since this fix only touched the one screen.
 
-The two other TODOs on this file are still open, on purpose: Sentry crash reporting isn't wired up
-yet anywhere in the app (D34, Phase 5), and the "Export a copy" escape hatch is unbuilt since it'd
-need a raw-file export path distinct from `export.ts`'s live-rows JSON/CSV (§20.8) — a corrupt DB
-can't be read through the normal repository layer at all.
+**Update (2026-09-04):** the Sentry TODO on this file is now resolved — see "Sentry crash
+reporting wired up" below. The "Export a copy" TODO is still open, on purpose: it'd need a
+raw-file export path distinct from `export.ts`'s live-rows JSON/CSV (§20.8) — a corrupt DB can't
+be read through the normal repository layer at all.
 
 **Test added** (no test existed for this file before): `src/db/migration-gate.test.tsx` (4 cases —
 resolving/renders-children, error screen blocks children, and a named regression test for this
@@ -1284,3 +1284,160 @@ typecheck and `expo lint` clean.
 **Not yet verified on-device** — same standing gap as everything else in this list; this path only
 triggers on a genuine migration/DB-open failure, which hasn't been reproduced on a real device in
 this project.
+
+## Sentry crash reporting wired up (D34, 2026-09-04)
+
+D34 (§33.4) specced crash reporting but it was never actually implemented — `app.json`'s plugin
+config, DSN, and native Gradle/`sentry.properties` scaffolding existed (from `expo prebuild`), but
+no code anywhere called `Sentry.init()`, so nothing could ever transmit regardless of the setting.
+Built the missing pieces:
+
+- **`src/lib/log.ts`** (new) — the `log.debug/info/warn/error` facade + `redactError()` /
+  `scrubText()` from §32.1 (currency, VPA, long-digit-run stripping; >40-char literal collapse).
+  `warn`/`error` forward to a pluggable crash sink only outside `__DEV__` and only while armed.
+- **`src/services/crash/index.ts`** (new) — `armCrashReporting(enabled)`: calls `Sentry.init()`
+  (DSN from `extra.sentryDsn`, `tracesSampleRate: 0`, `enableAutoSessionTracking: false`,
+  `sendDefaultPii: false`) or `Sentry.close()`; `beforeSend`/`beforeBreadcrumb` implement the full
+  §33.4 table, including the fail-closed drop (an event whose `exception.value` still matches a
+  currency/VPA/digit pattern after scrubbing is dropped, not partially sent).
+- **`src/db/migration-gate.tsx`** — reads `crashReportingEnabled` once at startup (§22.4) in the
+  existing post-migration effect and arms/disarms accordingly; both TODO comments replaced with
+  real `log.warn`/`log.error` calls.
+- **`src/app/data.tsx`** (Settings › Data) — a "Crash reporting" toggle, the exact copy from
+  §33.4 ("Send anonymous crash reports…"), calling `armCrashReporting()` immediately on flip.
+
+**Deviation from D34's "no onboarding step" line, at the user's explicit request:** a third
+`PermissionCard` (kind `'crash'`) was added to onboarding step 2
+(`src/app/(onboarding)/permissions.tsx`) alongside SMS and Notifications, so crash reporting can
+be turned on during onboarding, not only from Settings › Data later. D34's original reasoning for
+skipping an onboarding step — "nothing transmits by default, so no disclosure is needed" — still
+holds as a *default*; this doesn't weaken it, it just offers the opt-in earlier. The card has no
+OS dialog, no denied/permanently-denied state (it's an app-level setting, not an OS permission):
+`onRequest` just writes the setting and arms Sentry, labelled "Turn on" instead of "Allow"/"Enable"
+to avoid implying an OS prompt and to avoid a duplicate-label collision with the SMS card's own
+"Enable" state. "Continue" does **not** auto-enable it — that stays an explicit tap on its own
+card, same as every other opt-in in this app.
+
+**`@sentry/react-native` version left at `~7.11.0`, not bumped to D34's originally-pinned
+`~8.24.0`** — CR-2 (above, §37 in `SPEC-implementation.md`) already corrected this at scaffolding
+time; `7.11.0` is the SDK 57-compatible, Expo-vetted version. Re-verified via
+`npx expo install @sentry/react-native`, which re-resolved the same `~7.11.0`.
+
+**Explicitly not built in this pass:** the §32.3 error-boundary system (root `ErrorBoundary`,
+per-screen `ScreenErrorBoundary`) doesn't exist anywhere in the codebase yet — out of scope here,
+flagged for a future pass. The §33.2(b) no-network grep test (CI check that `fetch`/`XHR`/
+`WebSocket` only appear inside `src/services/crash/`) was also left for later.
+
+**Tests added:** `src/lib/log.test.ts`, `src/services/crash/index.test.ts` (scrub rules, the
+fail-closed drop, breadcrumb filtering, arm/disarm idempotency), plus new cases in
+`data.test.tsx`, `permissions.test.tsx`, `migration-gate.test.tsx` for the toggle/card/startup
+wiring. `npm test` 446 → 469, typecheck and `expo lint` clean.
+
+**Not yet verified on-device** — USB was disconnected before this pass; the toggle, the
+onboarding card, and an actual scrubbed event reaching Sentry all still need a real-device check
+next session.
+
+## Root error boundary built (§32.3 / E20, 2026-09-04)
+
+Follow-up to the Sentry pass above, which flagged this as explicitly not built. Designed first —
+three tonal/information-density options prototyped in
+`design-prototype/01-midnight/recovery-screens.html` (Quiet / Reassurance + details / Illustrated,
+none yet in `SPEC-UI-UX.md`), reviewed, and **Option B (reassurance + details) chosen**, with the
+prototype's reassurance footer line ("Scrubbed before it's ever shown…") dropped per the user's
+call — the disclosure box's own presence already implies that, the extra line was redundant.
+
+- **`src/features/app-shell/root-error-boundary.tsx`** (new) — the class component §32.3 calls
+  for (still the only way to implement `componentDidCatch`/`getDerivedStateFromError` — no hook
+  equivalent as of React 19). Mounted in `_layout.tsx` just inside the providers, wrapping
+  `MigrationGate` and everything below it, so it catches a crash from `MigrationGate` itself, the
+  navigator, or any sheet. On catch, renders `RecoveryScreen` and calls `reloadAppAsync()` (from
+  `expo`, not `expo-updates`) on "Reload app" — the same already-tested choice from
+  `migration-gate.tsx`'s "Try again" fix (`expo-updates`' `reloadAsync()` rejects on this app,
+  which has no OTA channel, D20). This also finally closes the stale prose §32.3 itself flagged
+  ("`expo-updates` reloadAsync in release") back when that migration-screen fix was made.
+- **`src/features/app-shell/recovery-screen.tsx`** (new) — the presentational Option B screen:
+  shield icon, "Your data is safe.", a collapsed "Technical details" disclosure (exception name +
+  op, `redactError`-scrubbed) that only ever shows a "Ref" line when there's a **real** Sentry
+  event id to show — never a placeholder. Reporting off → no event was sent → no Ref, by
+  construction, not by a UI toggle. "Copy details" (`expo-clipboard`, newly installed — needs a
+  native rebuild before it works on-device, same as every native module added this session) puts
+  the same scrubbed text on the clipboard for pasting into a note or cross-referencing the Sentry
+  dashboard.
+- **`src/services/crash/index.ts`** — added `captureBoundaryError(error)`, a dedicated path
+  (not `log.error`) because the boundary needs the real Sentry event id back and must send the
+  crash exactly once. Refactored the shared send logic into `sendToSentry()` so both this and the
+  existing generic `capture()` (used by `log.ts`'s sink) go through the same scrub +
+  `beforeSend`/`beforeBreadcrumb` pipeline. Returns `null` whenever reporting is off, by design.
+
+**Tests added:** `root-error-boundary.test.tsx`, `recovery-screen.test.tsx`, plus new
+`captureBoundaryError` cases in `crash/index.test.ts` (off → null + no Sentry call; armed → tagged
+`op: boundary`, real event id returned; never double-reports). `npm test` 469 → 482, typecheck and
+`expo lint` clean.
+
+**Test-suite flakiness noticed while verifying, unrelated to this change:** a handful of RNTL
+suites (`confirm-dialog.test.tsx` among them — untouched by this pass) intermittently time out on
+their *first* test (`Exceeded timeout of 5000 ms`) when the full suite runs, with a different set
+of files failing each run and passing individually every time. Reads as Jest worker cold-start
+contention on this machine under the full 58-suite parallel run, not a real regression — worth a
+look eventually (raising the default timeout, or `--maxWorkers`), not fixed here.
+
+**Not yet verified on-device** — same standing gap as the rest of this session's Sentry work, plus
+`expo-clipboard` specifically needs a native rebuild (`expo run:android`) before "Copy details"
+does anything on a real device; it's a no-op today only because nothing has crashed yet.
+
+## Closing the remaining §32/§33 deferrals (2026-09-04, third pass)
+
+Closed the three items the two entries above explicitly deferred, minus the screen/sheet-level
+error-boundary system (user said leave that one). No design step needed — none of the three touch
+UI.
+
+**1. "Export a copy" escape hatch (§32.3), the one `TODO` left in the codebase.** New
+`exportRawDatabaseCopy()` in `src/features/settings/export.ts` — unlike `exportJson`/`exportCsv`,
+which read rows through the Drizzle repository layer (impossible against a DB that won't even
+open), this copies the raw `coinflow.db` file straight off the filesystem
+(`expo-file-system`'s `File`/`Directory`, same current-SDK API `export.ts` already uses) to
+`Paths.cache`, then hands it to the OS share sheet exactly like the other two. Wired into
+`migration-gate.tsx`'s `MigrationErrorScreen` as a second, de-emphasized text action below "Try
+again" — matching that screen's existing plain-text-link style rather than introducing a full
+`Button`. Throws (caught, shown as an inline "Couldn't export a copy" line, logged via
+`log.warn`) if there's no `coinflow.db` file to find. Does **not** bundle the `-wal`/`-shm`
+sidecar files — a documented simplification; the main file is the one overwhelmingly likely to
+hold the recoverable data, and zip-bundling three files for a rare escape hatch wasn't worth a
+new dependency.
+
+**2. The §33.2(b) no-network grep test.** New `src/__tests__/no-network.test.ts` — walks
+`src/domain`, `src/db`, `src/features`, `src/services` (excluding `src/services/crash/`) and
+fails on a real `fetch(`/`XMLHttpRequest`/`WebSocket`/`axios` call in any of them (a
+`describe.each` over every file found — 74 files scanned tonight — so a future violation names
+the exact file, not just "somewhere"). Patterns are call-shaped (`\bfetch\s*\(`, not bare
+`fetch`) specifically so the test doesn't false-positive on `beforeBreadcrumb`'s own `'fetch'`
+category-name string literal or comment prose like "re-fetch" — verified against the existing
+codebase, which has zero hits outside `crash/`.
+
+**Unplanned side effect: `@types/node` was missing from the project entirely.** The no-network
+test's `fs`/`path` imports don't typecheck without it (TS2591 — Node's ambient module
+declarations, `declare module "fs"`, only exist once `@types/node` is installed). Added it as a
+devDependency, and added an explicit `"types": ["node", "jest"]` to `tsconfig.json`'s
+`compilerOptions` — plain `npm install` alone didn't make `tsc` pick it up (worth a look
+eventually, not chased down further tonight since the explicit `types` field is itself a normal,
+supported fix, not a workaround). Re-ran the **full** project typecheck after adding it — clean,
+so nothing that depended on TypeScript's old implicit global-`@types` scan (JSX, `__DEV__`, etc.)
+broke.
+
+**3. Left alone, per explicit instruction:** the §32.3 screen- and sheet-level error boundaries
+(`<ScreenErrorBoundary>`, the sheet-throw-closes-with-a-toast behavior) — only the root boundary
+exists, from the previous entry.
+
+**Tests added:** cases in `export.test.ts` (raw copy + share, throws cleanly with no file) and
+`migration-gate.test.tsx` (button press → export call; failure → inline error, not a crash;
+never touches seed/purge), plus `no-network.test.ts` itself. `npm test` 482 → 561 (482 + 74
+no-network cases + 5 new), typecheck and `expo lint` clean.
+
+**Test-suite flakiness, re-checked:** still present, and confirmed **not** caused by anything in
+this pass — reproduced with `no-network.test.ts` explicitly excluded (6 unrelated files timed out
+that run, none of them touched tonight). Machine-load flakiness, not a regression; same
+conclusion as the entry above, now double-verified.
+
+**Not yet verified on-device** — "Export a copy" specifically needs a real corrupt-or-unmigratable
+database to trigger the screen at all, which is awkward to fake without device access; the no-network
+test is a static check and has no on-device component.

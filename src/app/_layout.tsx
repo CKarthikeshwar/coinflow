@@ -11,6 +11,7 @@ import { MigrationGate } from '@/db/migration-gate';
 import { AppBackground } from '@/ui/app-background';
 
 import { NotificationRouter } from '@/features/app-shell/notification-router';
+import { RootErrorBoundary } from '@/features/app-shell/root-error-boundary';
 import { RootNavigator } from '@/features/app-shell/root-navigator';
 import { SheetHost } from '@/features/app-shell/sheet-host';
 import { ToastHost } from '@/features/app-shell/toast-host';
@@ -30,18 +31,20 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider value={DarkTheme}>
           <StatusBar style="light" />
-          <MigrationGate>
-            <AppBackground>
-              <BottomSheetModalProvider>
-                <RootNavigator />
-                <SheetHost />
-                <UndoHost />
-                <ToastHost />
-                <NotificationRouter />
-              </BottomSheetModalProvider>
-            </AppBackground>
-            <AnimatedSplashOverlay />
-          </MigrationGate>
+          <RootErrorBoundary>
+            <MigrationGate>
+              <AppBackground>
+                <BottomSheetModalProvider>
+                  <RootNavigator />
+                  <SheetHost />
+                  <UndoHost />
+                  <ToastHost />
+                  <NotificationRouter />
+                </BottomSheetModalProvider>
+              </AppBackground>
+              <AnimatedSplashOverlay />
+            </MigrationGate>
+          </RootErrorBoundary>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

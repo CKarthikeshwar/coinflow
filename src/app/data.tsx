@@ -12,11 +12,13 @@
 
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { clearAllData } from '@/db/maintenance';
+import { setSetting, useSetting } from '@/db/repositories/settings';
+import { armCrashReporting } from '@/services/crash';
 
 import { exportCsv, exportJson } from '@/features/settings/export';
 import { Button } from '@/ui/button';
@@ -28,6 +30,13 @@ export default function DataScreen() {
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [exportError, setExportError] = useState<'json' | 'csv' | null>(null);
   const [cleared, setCleared] = useState(false);
+  const crashReporting = useSetting<boolean>('crashReportingEnabled');
+  const crashReportingOn = crashReporting.value ?? false;
+
+  const handleCrashReportingToggle = (next: boolean) => {
+    setSetting('crashReportingEnabled', next);
+    armCrashReporting(next);
+  };
 
   const handleExport = async (kind: 'json' | 'csv') => {
     setExportError(null);
@@ -68,6 +77,22 @@ export default function DataScreen() {
         ) : null}
 
         <ThemedText type="label" themeColor="text3" style={styles.sectionLabel}>
+          Crash reporting
+        </ThemedText>
+        <View style={styles.crashRow}>
+          <ThemedText type="caption" themeColor="text3" style={styles.crashCopy}>
+            Send anonymous crash reports (stack traces only — never your transactions or
+            messages).
+          </ThemedText>
+          <Switch
+            value={crashReportingOn}
+            onValueChange={handleCrashReportingToggle}
+            trackColor={{ false: Colors.dark.surface3, true: Colors.dark.text }}
+            thumbColor={Colors.dark.bg}
+          />
+        </View>
+
+        <ThemedText type="label" themeColor="text3" style={styles.sectionLabel}>
           Danger zone
         </ThemedText>
         {cleared ? (
@@ -102,6 +127,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: Spacing.two },
   exportButton: { flex: 1 },
   error: { paddingTop: Spacing.two },
+  crashRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  crashCopy: { flex: 1 },
   clearButton: {},
   clearedNote: { paddingTop: Spacing.one },
 });

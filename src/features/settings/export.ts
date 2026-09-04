@@ -10,7 +10,7 @@
  */
 
 import Constants from 'expo-constants';
-import { File, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { getCategoryMap } from '@/db/repositories/categories';
@@ -91,4 +91,22 @@ export async function exportCsv(): Promise<void> {
   const file = ensureFile('coinflow-transactions.csv');
   file.write(csv);
   await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Export CoinFlow transactions' });
+}
+
+/**
+ * §32.3's "Export a copy" escape hatch (`migration-gate.tsx`'s error screen, E7/E8) — a raw copy
+ * of the SQLite file itself, for when the database won't even open and the row-level exports
+ * above can't run at all (they both read through the repository layer, which needs a working
+ * DB connection). `db/client.ts` opens `coinflow.db` at the `expo-sqlite` default location —
+ * `<document dir>/SQLite/coinflow.db`.
+ */
+export async function exportRawDatabaseCopy(): Promise<void> {
+  const source = new File(new Directory(Paths.document, 'SQLite'), 'coinflow.db');
+  if (!source.exists) throw new Error('no database file found to export');
+  const dest = new File(Paths.cache, 'coinflow-raw-backup.db');
+  await source.copy(dest, { overwrite: true });
+  await Sharing.shareAsync(dest.uri, {
+    mimeType: 'application/octet-stream',
+    dialogTitle: 'Export a raw copy of your database',
+  });
 }

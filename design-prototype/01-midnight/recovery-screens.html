@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Midnight · Recovery screens</title>
+    <link rel="stylesheet" href="../shared/frame.css" />
+    <link rel="stylesheet" href="app.css" />
+    <style>
+      .wrap { max-width: 1200px; margin: 0 auto; padding: 56px 28px 8px; }
+      .wrap h1 { font-size: 28px; letter-spacing: -0.03em; margin: 0 0 6px; }
+      .wrap p { font-size: 14px; color: #4b4c52; line-height: 1.6; max-width: 68ch; margin: 0 0 4px; }
+      .wrap a { color: #55565b; font-weight: 600; text-decoration: none; font-size: 13px; }
+      .contact-sheet figcaption b { display: block; font-size: 13px; letter-spacing: -0.01em; text-transform: none; }
+      .contact-sheet figcaption span { display: block; text-transform: none; letter-spacing: 0; color: #7a7b82; font-weight: 500; max-width: 34ch; margin: 2px auto 0; }
+      .group-label { width: 100%; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a8b91; margin: 26px 0 -22px; }
+
+      .compare { border-collapse: collapse; width: 100%; max-width: 900px; font-size: 13px; background: #fff; border: 1px solid #e4e5ea; border-radius: 12px; overflow: hidden; margin: 18px 0 32px; }
+      .compare th, .compare td { text-align: left; padding: 11px 14px; border-bottom: 1px solid #edeef1; vertical-align: top; }
+      .compare th { background: #f6f6f8; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #6a6b71; }
+      .compare tr:last-child td { border-bottom: 0; }
+
+      /* --- page-scoped recovery-screen components (unreviewed, not in app.css yet) --- */
+      .rec-mid { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 0; padding: 0 6px; }
+      .rec-ic { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--text); margin-bottom: 18px; flex: none; }
+      .rec-title { font-family: "Manrope", system-ui, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.015em; color: var(--text); }
+      .rec-title--lg { font-size: 25px; }
+      .rec-body { margin-top: 10px; max-width: 29ch; font-size: 14px; color: var(--text-2); line-height: 1.55; }
+      .rec-safe { margin-top: 16px; font-size: 12.5px; color: var(--text-3); }
+      .rec-disc { width: 100%; max-width: 260px; margin-top: 22px; border-top: 1px solid var(--hairline); padding-top: 14px; }
+      .rec-disc__row { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+      .rec-disc__row .ic { width: 15px; height: 15px; transform: rotate(90deg); }
+      .rec-disc__body { margin-top: 10px; padding: 12px 14px; border-radius: var(--r-ctl); background: var(--surface-2); font-size: 12px; color: var(--text-2); text-align: left; line-height: 1.6; }
+      .rec-disc__body b { color: var(--text); font-weight: 600; }
+      .rec-disc__ref { font-variant-numeric: tabular-nums; }
+      .rec-disc__foot { margin-top: 10px; display: flex; justify-content: center; }
+      .rec-copy { border: 1px solid var(--text-3); background: none; color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 16px; border-radius: var(--r-pill); cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true" width="0" height="0">
+      <defs>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.6 12 3l9 7.6" /><path d="M5.2 9.3V21h13.6V9.3" /></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4" /><path d="M12 7.4V12l3.2 2" /></symbol>
+        <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3.5 20.5h17" /><path d="M6.5 20v-7M12 20V5.5M17.5 20v-4.5" /></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17.5 7H20M4 17h3M11.5 17H20" /><circle cx="15" cy="7" r="2.5" /><circle cx="9" cy="17" r="2.5" /></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+        <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6 18 18M18 6 6 18" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 6.5" /></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.3 20.5h19.4Z" /><path d="M12 10v4.6M12 17.4h.01" /></symbol>
+        <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7M8 12h12" /></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.2c0 4.4 2.9 7.9 7 9.8 4.1-1.9 7-5.4 7-9.8V6l-7-3Z" /><path d="m8.8 12 2.2 2.2 4.2-4.6" /></symbol>
+        <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></symbol>
+      </defs>
+    </svg>
+
+    <div class="wrap">
+      <p><a href="index.html">&larr; Midnight</a></p>
+      <h1>Recovery screens</h1>
+      <p>
+        A screen that doesn&rsquo;t exist yet anywhere &mdash; not in code, not in
+        <code>SPEC-UI-UX.md</code>. The root error boundary (&sect;32.3 / E20): what a user sees if
+        CoinFlow hits an uncaught render crash. It pairs with this session&rsquo;s Sentry work &mdash;
+        once <code>armCrashReporting</code> is on, a real crash now actually reports somewhere, so
+        it&rsquo;s worth deciding what the recovery moment itself looks like. Three tonal/information
+        variants below, not yet chosen. Same copy baseline as &sect;32.4&rsquo;s existing table
+        (&ldquo;Something went wrong.&rdquo; &rarr; Reload app), stretched three different ways.
+      </p>
+      <table class="compare">
+        <tr><th>Option</th><th>Tone</th><th>Technical disclosure</th><th>Best for</th></tr>
+        <tr><td><b>A &middot; Quiet</b></td><td>Neutral, minimal</td><td>None</td><td>Matches the already-coded migration-error screen almost exactly &mdash; cheapest, most consistent, least new visual language.</td></tr>
+        <tr><td><b>B &middot; Reassurance + details</b></td><td>Leads with &ldquo;your data is safe&rdquo;, not the failure</td><td>Collapsible &mdash; scrubbed exception name + a short ref, a Copy details button</td><td>Solo-dev field testing: something to cross-reference against the Sentry dashboard without exposing anything private.</td></tr>
+        <tr><td><b>C &middot; Illustrated</b></td><td>Warm, on-brand</td><td>None</td><td>Matches onboarding&rsquo;s abstract line-art language &mdash; the most &ldquo;designed&rdquo; of the three, least utilitarian.</td></tr>
+      </table>
+    </div>
+
+    <div class="contact-sheet">
+      <!-- ============ OPTION A · QUIET ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="ob">
+              <div class="rec-mid">
+                <span class="rec-ic"><svg class="ic ic--lg" aria-hidden="true"><use href="#i-alert" /></svg></span>
+                <div class="rec-title">Something went wrong.</div>
+                <p class="rec-body">CoinFlow ran into a problem and needs to restart. Your data hasn&rsquo;t been touched.</p>
+              </div>
+              <div class="ob__foot">
+                <button class="btn btn--primary">Reload app</button>
+              </div>
+            </div>
+          </main>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Option A &middot; Quiet</b><span>Icon-in-circle, one line, one button &mdash; the same shape as the already-coded migration-error screen. No new visual language.</span></figcaption>
+      </figure>
+
+      <!-- ============ OPTION B · REASSURANCE + DETAILS ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="ob">
+              <div class="rec-mid">
+                <span class="rec-ic"><svg class="ic ic--lg" aria-hidden="true"><use href="#i-shield" /></svg></span>
+                <div class="rec-title rec-title--lg">Your data is safe.</div>
+                <p class="rec-body">CoinFlow hit an unexpected error and needs to restart. Nothing on this device was changed.</p>
+
+                <div class="rec-disc">
+                  <div class="rec-disc__row"><svg class="ic" aria-hidden="true"><use href="#i-chev" /></svg>Technical details</div>
+                  <div class="rec-disc__body">
+                    <div><b>TypeError</b> &middot; render</div>
+                    <div class="rec-disc__ref">Ref a91f&ndash;20c4</div>
+                  </div>
+                  <div class="rec-disc__foot"><button class="rec-copy">Copy details</button></div>
+                </div>
+              </div>
+              <div class="ob__foot">
+                <button class="btn btn--primary">Reload app</button>
+                <div class="rec-safe" style="text-align: center">Scrubbed before it&rsquo;s ever shown &mdash; never your amounts or messages.</div>
+              </div>
+            </div>
+          </main>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Option B &middot; Reassurance + details</b><span>Leads with &ldquo;safe&rdquo;, not the failure. A collapsed technical row (exception name + short ref, already-scrubbed) for cross-referencing the Sentry dashboard.</span></figcaption>
+      </figure>
+
+      <!-- ============ OPTION C · ILLUSTRATED ============ -->
+      <figure>
+        <div class="device device--dark">
+          <div class="statusbar"><span class="statusbar__time">9:41</span><span class="statusbar__right"><svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="6" width="3" height="5" rx="1" /><rect x="5" y="4" width="3" height="7" rx="1" /><rect x="10" y="2" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg><svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4c2.2 0 4.2.85 5.7 2.25l1.3-1.35C13.3 1.5 10.8.5 8 .5S2.7 1.5.9 3.3l1.3 1.35C3.8 3.25 5.8 2.4 8 2.4Z" /></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4" /><rect x="2.4" y="2.4" width="16" height="7.2" rx="1.6" /><path d="M23.2 4v4c1-.35 1.6-1 1.6-2s-.6-1.65-1.6-2Z" /></svg></span></div>
+
+          <main class="screen">
+            <div class="ob">
+              <div class="ob__art">
+                <svg viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="100" cy="100" r="72" stroke-opacity="0.16" />
+                  <circle cx="100" cy="100" r="50" stroke-opacity="0.35" stroke-dasharray="10 9" />
+                  <path d="M74 66 92 96 78 104 122 140" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                  <circle cx="140" cy="70" r="4" fill="currentColor" stroke="none" />
+                </svg>
+              </div>
+              <div style="text-align: center">
+                <h1 class="ob__heading">Something tripped up CoinFlow.</h1>
+                <p class="ob__sub">Give it a moment to restart &mdash; your transactions are exactly where you left them.</p>
+              </div>
+              <div class="ob__foot">
+                <button class="btn btn--primary">Reload app</button>
+                <div class="rec-safe" style="text-align: center">Nothing was sent anywhere.</div>
+              </div>
+            </div>
+          </main>
+          <div class="homebar"></div>
+        </div>
+        <figcaption><b>Option C &middot; Illustrated</b><span>Broken-ring line art matching onboarding&rsquo;s visual language. Warmest tone, no technical disclosure &mdash; the most &ldquo;designed&rdquo; of the three.</span></figcaption>
+      </figure>
+    </div>
+  </body>
+</html>

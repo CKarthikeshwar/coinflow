@@ -2,7 +2,7 @@ import { getTableName, type Table } from 'drizzle-orm';
 
 import type { Category } from '@/db/schema';
 
-import { exportCsv, exportJson } from './export';
+import { exportCsv, exportJson, exportRawDatabaseCopy } from './export';
 
 const mockTransactionRows: Record<string, unknown>[] = [];
 const mockCategoryRows: Category[] = [];
@@ -11,6 +11,8 @@ const mockAccountRuleRows: Record<string, unknown>[] = [];
 const mockWrite = jest.fn();
 const mockCreate = jest.fn();
 const mockShareAsync = jest.fn();
+const mockCopy = jest.fn();
+let mockSourceExists = true;
 
 const TABLE_ROWS: Record<string, () => unknown[]> = {
   transaction: () => mockTransactionRows,
@@ -42,20 +44,27 @@ jest.mock('@/db/repositories/categories', () => ({
 
 jest.mock('expo-constants', () => ({ expoConfig: { version: '1.2.3' } }));
 
-// The mock `File` class is defined inside the factory (not hoisted above it) so it can't be
-// referenced out-of-scope — babel-plugin-jest-hoist only allows `mock`-prefixed outer
-// identifiers inside a `jest.mock` factory.
+// The mock `File`/`Directory` classes are defined inside the factory (not hoisted above it) so
+// they can't be referenced out-of-scope — babel-plugin-jest-hoist only allows `mock`-prefixed
+// outer identifiers inside a `jest.mock` factory.
 jest.mock('expo-file-system', () => {
+  class MockDirectory {}
   class MockFile {
     uri = 'file:///cache/mock';
+    get exists() {
+      return mockSourceExists;
+    }
     create(...args: unknown[]) {
       mockCreate(...args);
     }
     write(...args: unknown[]) {
       mockWrite(...args);
     }
+    copy(...args: unknown[]) {
+      return mockCopy(...args);
+    }
   }
-  return { File: MockFile, Paths: { cache: {} } };
+  return { File: MockFile, Directory: MockDirectory, Paths: { cache: {}, document: {} } };
 });
 
 jest.mock('expo-sharing', () => ({ shareAsync: (...args: unknown[]) => mockShareAsync(...args) }));
@@ -79,6 +88,8 @@ beforeEach(() => {
   mockWrite.mockReset();
   mockCreate.mockReset();
   mockShareAsync.mockReset();
+  mockCopy.mockReset().mockResolvedValue(undefined);
+  mockSourceExists = true;
   mockTransactionRows.length = 0;
   mockCategoryRows.length = 0;
   mockAccountRuleRows.length = 0;
@@ -155,5 +166,23 @@ describe('exportCsv', () => {
   it('hands the written file to the OS share sheet as CSV', async () => {
     await exportCsv();
     expect(mockShareAsync).toHaveBeenCalledWith('file:///cache/mock', expect.objectContaining({ mimeType: 'text/csv' }));
+  });
+});
+
+describe('exportRawDatabaseCopy (§32.3 "Export a copy" escape hatch)', () => {
+  it('copies the raw SQLite file to cache, overwriting, then hands it to the share sheet', async () => {
+    await exportRawDatabaseCopy();
+    expect(mockCopy).toHaveBeenCalledWith(expect.anything(), { overwrite: true });
+    expect(mockShareAsync).toHaveBeenCalledWith(
+      'file:///cache/mock',
+      expect.objectContaining({ mimeType: 'application/octet-stream' }),
+    );
+  });
+
+  it('throws without touching the share sheet when there is no database file to copy', async () => {
+    mockSourceExists = false;
+    await expect(exportRawDatabaseCopy()).rejects.toThrow();
+    expect(mockCopy).not.toHaveBeenCalled();
+    expect(mockShareAsync).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,9 @@ import { StyleSheet, View } from 'react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Colors, Spacing } from '@/constants/theme';
+import { exportRawDatabaseCopy } from '@/features/settings/export';
+import { log } from '@/lib/log';
+import { armCrashReporting } from '@/services/crash';
 import { Icon } from '@/ui/icon';
 import { ThemedText } from '@/ui/themed-text';
 
@@ -18,6 +21,7 @@ import { db } from './client';
 import { isFtsAvailable } from './fts';
 import migrationsBundle from './migrations/migrations';
 import { purge } from './maintenance';
+import { getSetting } from './repositories/settings';
 import { seedDatabase } from './seed';
 
 const migrations = migrationsBundle as unknown as Parameters<typeof useMigrations>[1];
@@ -36,21 +40,37 @@ export function MigrationGate({ children }: { children: ReactNode }) {
       isFtsAvailable(); // warm the probe before the first search query
     } catch (e) {
       // Seed / purge are not migrations — a hiccup here must not brick the app.
-      // TODO(step 5 / §32): report to Sentry (no row data).
-      console.warn('[MigrationGate] post-migration maintenance failed', e);
+      log.warn(e, 'migration-gate/post-migrate');
     }
+    // §22.4: read once at startup to arm/disarm Sentry; §33.4 default is off.
+    armCrashReporting(getSetting('crashReportingEnabled', false));
     setPostMigrateDone(true);
   }, [success]);
 
-  if (error) return <MigrationErrorScreen />;
+  if (error) return <MigrationErrorScreen error={error} />;
   if (!success || !postMigrateDone) return null; // native splash stays up
 
   return <>{children}</>;
 }
 
-function MigrationErrorScreen() {
-  // TODO(step 5 / §32): the "Export a copy" escape hatch once §20.8 export lands, plus
-  // reporting this to Sentry (no row data) once D34's crash reporting is wired up.
+function MigrationErrorScreen({ error }: { error: Error }) {
+  const [exportState, setExportState] = useState<'idle' | 'exporting' | 'error'>('idle');
+
+  useEffect(() => {
+    log.error(error, 'migration-gate/migration');
+  }, [error]);
+
+  const handleExport = async () => {
+    setExportState('exporting');
+    try {
+      await exportRawDatabaseCopy();
+      setExportState('idle');
+    } catch (e) {
+      log.warn(e, 'migration-gate/export-raw');
+      setExportState('error');
+    }
+  };
+
   return (
     <View style={styles.error}>
       <Icon name="triangle-alert" size={28} color="text2" />
@@ -67,6 +87,19 @@ function MigrationErrorScreen() {
       >
         Try again
       </ThemedText>
+      <ThemedText
+        type="label"
+        themeColor="text2"
+        onPress={exportState === 'exporting' ? undefined : handleExport}
+        style={styles.exportLink}
+      >
+        {exportState === 'exporting' ? 'Exporting…' : 'Export a copy'}
+      </ThemedText>
+      {exportState === 'error' ? (
+        <ThemedText type="caption" themeColor="text3" style={styles.exportError}>
+          Couldn’t export a copy — try again.
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -82,4 +115,6 @@ const styles = StyleSheet.create({
   },
   errorBody: { textAlign: 'center' },
   retry: { color: Colors.dark.text, paddingVertical: Spacing.two },
+  exportLink: { paddingVertical: Spacing.one },
+  exportError: { marginTop: -Spacing.two, textAlign: 'center' },
 });

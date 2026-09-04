@@ -1293,8 +1293,10 @@ The root layout (§18.2) mounts `<MigrationGate>`, which calls `useMigrations(db
 §20.5 (seed) and §20.6 (purge) once, synchronously, before children mount.
 
 - **On migration `error`:** a non-dismissible screen — "CoinFlow can't open your data" + **Retry**
-  + a **Export a copy** escape hatch if the DB is readable (P-4); **no raw SQL shown, no auto-wipe.**
-  Reported to Sentry with **no row data** (§33).
+  + a **Export a copy** escape hatch if the DB is readable (P-4) — built (`exportRawDatabaseCopy()`
+  in `src/features/settings/export.ts`, CR-9): a raw filesystem copy of `coinflow.db`, independent
+  of whether SQLite itself can open it, handed to the OS share sheet; **no raw SQL shown, no
+  auto-wipe.** Reported to Sentry with **no row data** (§33).
 - **Headless task hits a pending migration** (Phase 1 open item — **resolved**): every task calls
   a shared `ensureMigrated()` that runs `migrate(db, migrations)` **before any read / write**.
   Migrations are small; running them from the task is safe and prevents a silently-dropped
@@ -2471,10 +2473,14 @@ live in `src/services/tasks/` (§17.2) and call into `respond.ts`.
 
 ### 32.3 Error boundaries
 
-- **Root boundary** — a class component just inside the providers in `_layout.tsx`, above the
-  navigator. Catches render/lifecycle throws, shows the E20 screen, offers **Reload app**
-  (`expo-updates` `reloadAsync` in release; a state-bump remount in dev). Forwards to Sentry per
-  §33.4.
+- **Root boundary** (built — `src/features/app-shell/root-error-boundary.tsx`, CR-8) — a class
+  component just inside the providers in `_layout.tsx`, above the navigator. Catches
+  render/lifecycle throws, shows the E20 screen (`RecoveryScreen`), offers **Reload app** via
+  `reloadAppAsync()` (base `expo` package — **not** `expo-updates`' `reloadAsync()`, which rejects
+  on this app; same fix already made for `migration-gate.tsx`'s "Try again", §37 post-freeze log).
+  Forwards to Sentry per §33.4 via `captureBoundaryError()`, a dedicated path that returns the
+  real event id so the screen can show a reference — never a placeholder, and never when
+  reporting is off.
 - **Screen-level** — each tab screen and each pushed page wraps its content in
   `<ScreenErrorBoundary fallback={<ErrorState …/>}>` so one screen's failure doesn't blank the
   shell. `ErrorState` (§29.4) provides **Try again**.
@@ -2529,11 +2535,12 @@ lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — o
 - The **only** code path that can open a socket is `@sentry/react-native`, and only after
   `Sentry.init()` — which CoinFlow calls **only** when `crashReportingEnabled === true` (§33.4).
   Default state: `init` is never called, the transport is never constructed.
-- **Verified by:** (a) a manifest review checklist item in §35.7; (b) a unit test that greps the
-  built `src/domain`, `src/db`, `src/features`, `src/services` trees for `fetch(`,
-  `XMLHttpRequest`, `WebSocket`, `axios` and fails on a hit outside `src/services/crash/`;
-  (c) IMP-045 (manual: run the core loop with a network monitor, assert zero egress with crash
-  reporting off).
+- **Verified by:** (a) a manifest review checklist item in §35.7; (b) built —
+  `src/__tests__/no-network.test.ts` (CR-9), a unit test that greps the `src/domain`, `src/db`,
+  `src/features`, `src/services` trees for `fetch(`, `XMLHttpRequest`, `WebSocket`, `axios` and
+  fails on a hit outside `src/services/crash/`, one assertion per file so a violation names the
+  exact file; (c) IMP-045 (manual: run the core loop with a network monitor, assert zero egress
+  with crash reporting off).
 
 ### 33.3 SMS handling (P-9)
 
@@ -2920,3 +2927,50 @@ change in `SPEC-UI-UX.md` §9.
   `SPEC/PLAN.md` §9.1 point 3's "a deferral needs a trigger, not just an implicit later." No
   behavior or visual change to either feature's already-frozen requirements — this CR only makes
   an existing dependency explicit in the text. No linked `SPEC-UI-UX.md` change.
+
+- **CR-7** (2026-09-04, closing the D34 implementation gap) — **Sentry crash reporting actually
+  wired up** (`src/lib/log.ts`, `src/services/crash/index.ts`, `migration-gate.tsx` startup
+  arm/disarm, the Settings › Data toggle) — the native/config-plugin scaffolding from CR-2 existed
+  but `Sentry.init()` was never called anywhere, so nothing transmitted regardless of the setting.
+  §33.4's `beforeSend`/`beforeBreadcrumb` table implemented as specced, fail-closed. **Behavioural
+  deviation, at the user's explicit request:** §33.4's Disclosure row said crash reporting needs
+  **no onboarding step** because nothing transmits by default; a third onboarding `PermissionCard`
+  (`permissions.tsx`, step 2) was added anyway, offering the same opt-in earlier rather than only
+  from Settings › Data. This doesn't weaken the default-OFF guarantee — the card just writes the
+  same setting a Settings toggle would, no OS dialog, not auto-fired by "Continue". Full detail,
+  including what was deliberately left out (the §32.3 error-boundary system; the §33.2(b)
+  no-network grep test), in `SPEC/traceability.md`'s "Sentry crash reporting wired up" entry. No
+  linked `SPEC-UI-UX.md` change — §6.1's spec doesn't enumerate the permission cards by name or
+  count.
+
+- **CR-8** (2026-09-04, closing the §32.3 gap CR-7 flagged) — **the root error boundary built**
+  (`src/features/app-shell/root-error-boundary.tsx` + `recovery-screen.tsx`). Designed first as
+  three options in `design-prototype/01-midnight/recovery-screens.html` (not yet a
+  `SPEC-UI-UX.md` screen); user picked **Option B** (reassurance headline + a collapsible
+  technical-details disclosure carrying the real Sentry event id, never a placeholder — dropped
+  only the prototype's redundant reassurance footer line). §32.3's own "Root boundary" bullet
+  rewritten in place to match what actually shipped and to drop its stale `expo-updates
+  reloadAsync` prose (superseded by the same `reloadAppAsync()` fix already made for
+  `migration-gate.tsx`, noted as stale back in that post-freeze fix). `src/services/crash/index.ts`
+  gained `captureBoundaryError()`, sharing its scrub/send pipeline with the existing generic
+  `capture()` via a new internal `sendToSentry()`. New dependency: `expo-clipboard` (Copy
+  details) — needs a native rebuild before it works on a real device. Full detail in
+  `SPEC/traceability.md`'s "Root error boundary built" entry, including a test-suite flakiness
+  note unrelated to this change. No linked `SPEC-UI-UX.md` change — the screen isn't in it yet;
+  worth a follow-up CR there if/when it's folded in.
+
+- **CR-9** (2026-09-04, closing the remaining §32/§33 deferrals CR-7/CR-8 flagged, minus the
+  screen/sheet-level error boundaries, left alone per explicit instruction) — three items built:
+  (1) **§32.3's "Export a copy" escape hatch** — `exportRawDatabaseCopy()` in
+  `src/features/settings/export.ts`, a raw filesystem copy of `coinflow.db` (not a row-level
+  export, since a DB that won't open can't be read through Drizzle at all), wired into
+  `migration-gate.tsx`'s error screen as a second text action; doesn't bundle the `-wal`/`-shm`
+  sidecars (documented simplification). (2) **§33.2(b)'s no-network grep test** —
+  `src/__tests__/no-network.test.ts`, scanning `src/domain`/`db`/`features`/`services` (excluding
+  `src/services/crash/`) for a real `fetch(`/`XMLHttpRequest`/`WebSocket`/`axios` call, one
+  assertion per file. (3) **`@types/node` added as a devDependency** plus an explicit
+  `"types": ["node", "jest"]` in `tsconfig.json` — the no-network test's `fs`/`path` imports
+  didn't typecheck without it; verified with a full-project typecheck afterward, clean. Full
+  detail, including a re-check of the test-suite flakiness (reproduced with the new test
+  excluded — confirmed unrelated), in `SPEC/traceability.md`'s "Closing the remaining §32/§33
+  deferrals" entry. No linked `SPEC-UI-UX.md` change — none of the three touch UI.
