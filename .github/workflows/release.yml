@@ -1,0 +1,79 @@
+# Cuts a GitHub Release with a downloadable, signed Android APK attached — fully automatic.
+#
+# Trigger: pushing a version tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`).
+#
+# What happens:
+#   1. Generates a fresh `android/` native project (`expo prebuild`) — that folder is never
+#      committed to git, so CI always builds it from scratch, the same as a clean local checkout.
+#   2. `plugins/with-android-signing.js` (registered in app.json) injects a release signing
+#      config into the generated `android/app/build.gradle`, reading the keystore/passwords from
+#      the environment variables set below — see that file's own header comment for why this
+#      step exists at all (the short version: without it, a fresh `android/` folder has no idea
+#      how to sign a release build).
+#   3. Builds the actual signed APK with Gradle directly (no external build service involved).
+#   4. Publishes a GitHub Release for the pushed tag with the APK attached, always under the same
+#      filename (`coinflow.apk`) — that's what makes
+#      https://github.com/<owner>/<repo>/releases/latest/download/coinflow.apk a permanent link
+#      that always serves the newest release, with nothing to update by hand.
+#
+# One-time setup this file depends on (see the repo README's APK section):
+#   4 repository secrets — ANDROID_KEYSTORE_BASE64 (the release keystore, base64-encoded),
+#   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
+name: Release Android APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # needed to create the GitHub Release
+
+jobs:
+  build-and-release:
+    name: Build a signed APK with Gradle and publish a GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate the native android/ project
+        run: npx expo prebuild --platform android
+
+      - name: Decode the release keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+
+      - name: Build the signed release APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      # Fixed filename on purpose — see the file header above.
+      - name: Rename the build output
+        run: cp android/app/build/outputs/apk/release/app-release.apk coinflow.apk
+
+      - name: Publish the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: coinflow.apk
+          generate_release_notes: true

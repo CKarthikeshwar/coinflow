@@ -39,6 +39,7 @@
       "expo-sqlite",
       "expo-notifications",
       "./modules/coinflow-sms/app.plugin.js",
+      "./plugins/with-android-signing.js",
       [
         "expo-build-properties",
         {
