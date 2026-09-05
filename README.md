@@ -119,11 +119,12 @@ npm run test:ci        # jest --ci --coverage
 
 ## 3. APK — download link
 
-**There is no hosted APK download link anywhere in this repository or its docs.** The only
-APK-related instructions here are for *building one yourself* (`docs/local-android-build.md`,
-or `eas build`). If you want a "Download APK" link in this README, you'll need to give me the
-actual URL (e.g. a GitHub Release asset, a Play Store internal-testing link, or a direct file
-host) — I won't invent one.
+**[Download the latest APK](https://github.com/CKarthikeshwar/coinflow/releases/latest/download/coinflow.apk)**
+
+That link always points to whichever release is newest — it never needs updating by hand. A new
+signed APK is built and published automatically every time a version tag (`v1.2.3`) is pushed;
+see `.github/workflows/release.yml` and the "Cutting a release" section in
+`docs/sentry-and-ci.md` for exactly how that pipeline works and what one-time setup it needs.
 
 ---
 

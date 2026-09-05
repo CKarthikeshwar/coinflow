@@ -1,14 +1,16 @@
-# Maestro, Sentry & CI — a plain-language setup guide
+# Maestro, Sentry, CI & Releases — a plain-language setup guide
 
-This doc explains three pieces of the project that need a human to finish or run them:
+This doc explains four pieces of the project that need a human to finish or run them:
 
 1. **Maestro** — optional end-to-end testing (drives the real app on a real device/emulator).
    One flow written, never run yet.
 2. **Sentry** — optional crash reporting. Installed but not wired to an account yet.
 3. **CI** — the automatic checker that runs every time you push code to GitHub. Already
    working; this explains what it is and how to read it.
+4. **Releases** — the automatic pipeline that builds a signed APK and publishes it to GitHub
+   whenever you push a version tag. Already working (first real release: `v1.0.0`).
 
-None of the three block development. You can build every feature without touching any of them.
+None of the four block development. You can build every feature without touching any of them.
 
 ---
 
@@ -323,9 +325,113 @@ Do this once you're working with pull requests. For solo direct-to-`master` work
 - No app build, no Android emulator, no Maestro end-to-end tests (Part 1). Those need the native
   SMS module and a dev client, which are too heavy for CI (`SPEC-implementation.md` §34.0).
   They're run by hand against an EAS `development` build before a release.
-- It doesn't deploy or publish anything.
+- It doesn't deploy or publish anything — that's a separate workflow, Part 4 below.
 
 ### Cost
 
 GitHub Actions is free for public repos. For a private repo you get 2,000 free minutes/month;
 this job takes ~2–3 minutes per run, so a normal week is well under the limit.
+
+---
+
+## Part 4 — Releases (the automatic APK builder)
+
+### What it is, in one paragraph
+
+A second, separate GitHub Actions workflow — `.github/workflows/release.yml` — that does the
+opposite of a routine check. Instead of running on every push, it only wakes up when you push a
+**version tag** (`v1.0.0`, `v1.0.1`, ...), and when it does, it actually builds a real, signed
+Android APK on GitHub's own servers and publishes it as a **GitHub Release**, with the APK
+attached as a downloadable file. Nothing runs on your own machine.
+
+### Why this exists
+
+Building a signed release APK by hand means: run `expo prebuild`, decode/point at your keystore,
+run Gradle, find the output file, rename it, upload it somewhere, tell people the new link. This
+workflow does all of that in one push. The download link never changes between releases either
+— see below.
+
+### The one link that always works
+
+**https://github.com/CKarthikeshwar/coinflow/releases/latest/download/coinflow.apk**
+
+GitHub resolves `/releases/latest/download/<filename>` to whichever release is newest, as long
+as every release uses the same asset filename — which this workflow always does
+(`coinflow.apk`, on purpose). Put this link anywhere (your website, a README, a chat message)
+and it never goes stale.
+
+### How to cut a release
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+That's the entire manual step. Pushing the tag is what triggers everything else.
+
+### What actually happens, step by step
+
+> Whenever a tag matching `v*` is pushed:
+> spin up a clean Ubuntu machine, install Node 22 and Java 17, run `npm ci`, then —
+>
+> 1. `npx expo prebuild --platform android` — generates a fresh native `android/` project.
+>    That folder is never committed to git, so this always starts from scratch, same as a clean
+>    checkout on any machine.
+> 2. A local Expo config plugin (`plugins/with-android-signing.js`) runs automatically during
+>    that prebuild step and adds a real release-signing config to the generated
+>    `android/app/build.gradle` — without it, a freshly generated project has no idea how to
+>    sign a release build at all.
+> 3. The actual release keystore is decoded from a GitHub secret
+>    (`ANDROID_KEYSTORE_BASE64`) into a real file, and its password/alias/key-password are read
+>    from three more secrets — see "One-time setup" below.
+> 4. `./gradlew assembleRelease` builds the real, signed APK.
+> 5. The output file is renamed to the fixed name `coinflow.apk` (see "The one link" above for
+>    why the name has to stay fixed).
+> 6. The APK is published as a GitHub Release, tagged with whatever version tag you pushed.
+
+### One-time setup (already done for this repo)
+
+Four repository secrets, added once under **GitHub repo → Settings → Secrets and variables →
+Actions**:
+
+| Secret | What it is |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | The release keystore file (`coinflow-release.jks`), base64-encoded |
+| `ANDROID_KEYSTORE_PASSWORD` | The keystore's store password |
+| `ANDROID_KEY_ALIAS` | The key's alias inside the keystore |
+| `ANDROID_KEY_PASSWORD` | The key's own password |
+
+To turn a `.jks` file into the base64 text a secret needs (PowerShell):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("coinflow-release.jks")) | Set-Clipboard
+```
+
+### A real bug this pipeline hit on its first run (and the fix)
+
+The very first attempt failed with `error: Auth token is required for this request. Please run
+'sentry-cli login' and try again!` — `@sentry/react-native`'s Gradle hook tries to upload this
+build's source maps to Sentry automatically, and CI has no Sentry auth token to do that with
+(see Part 2, step 5, above — that token setup was written for EAS builds, not this pipeline).
+Rather than wire up a token for a feature (crash-report symbolication) that isn't fully turned
+on yet anyway, `release.yml` sets `SENTRY_DISABLE_AUTO_UPLOAD=true` for the build step, which
+skips that upload cleanly. Crash reporting itself is unaffected — it's still opt-in at runtime
+(Settings › Data) regardless of this.
+
+If you later want properly symbolicated crash reports from these exact release builds, the real
+fix is adding a fifth repository secret, `SENTRY_AUTH_TOKEN` (created the same way Part 2 step 5
+describes), passing it through to the Gradle step's `env:` block in `release.yml`, and removing
+the `SENTRY_DISABLE_AUTO_UPLOAD` line.
+
+### When a release run fails
+
+Same recipe as CI: **Actions tab → click the red run → click the failed step → read the log.**
+The most likely failure mode is a wrong/expired secret (Gradle will say something about the
+keystore or a bad password) — double-check the four secrets above rather than assuming the
+workflow file itself is broken.
+
+### Cost
+
+Same GitHub Actions free tier as CI (Part 3) — but a real Gradle build is much heavier than a
+typecheck/lint/test run. Expect roughly 15–25 minutes of runner time per release, not 2–3
+minutes. Still comfortably inside the free-tier minutes for occasional releases.
