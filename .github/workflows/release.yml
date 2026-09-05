@@ -19,6 +19,13 @@
 # One-time setup this file depends on (see the repo README's APK section):
 #   4 repository secrets — ANDROID_KEYSTORE_BASE64 (the release keystore, base64-encoded),
 #   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
+#
+# SENTRY_DISABLE_AUTO_UPLOAD=true below skips @sentry/react-native's Gradle step that otherwise
+# tries to upload this build's source maps to Sentry — that upload needs its own Sentry auth
+# token, which isn't set up here, and without it the upload step fails loudly enough to fail the
+# whole Gradle build (found the hard way on this workflow's first real run). Crash reporting
+# itself is unaffected by this — it's opt-in at runtime (Settings › Data) regardless; this only
+# skips CI from also trying to upload symbolication data for crashes on this specific build.
 name: Release Android APK
 
 on:
@@ -66,6 +73,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SENTRY_DISABLE_AUTO_UPLOAD: 'true'
         run: ./gradlew assembleRelease
 
       # Fixed filename on purpose — see the file header above.
