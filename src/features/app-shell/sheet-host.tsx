@@ -1,6 +1,20 @@
 /**
- * `SheetHost` — SPEC-implementation.md §28.2 (D25). One `BottomSheetModal`, mounted once at
- * the app root, that switches its child on `useSheetRegistry().current`.
+ * FILE PURPOSE
+ * ------------
+ * The actual bottom-sheet modal that renders whichever sheet is currently open (Add/Edit/
+ * Confirm transaction, category picker/editor, filter, account rule editor). There is exactly
+ * ONE `BottomSheetModal` for the whole app, mounted once at the root — it just swaps its
+ * content based on `useSheetRegistry().current` (`src/stores/sheet-registry.ts`) rather than
+ * each sheet being its own separately-mounted modal.
+ *
+ * WHERE IT FITS
+ * -------------
+ * Mounted once in `src/app/_layout.tsx`. Anywhere in the app that wants to show a sheet just
+ * calls `useSheetRegistry.getState().open('add', {...})` — this component is what actually
+ * notices that change and presents the right content. This file is dense with fixes for subtle
+ * timing bugs around opening/closing sheets in quick succession — see the specific notes below
+ * for each one; they're the kind of thing worth reading before changing how sheets present or
+ * dismiss.
  *
  * Wires `'confirm'`, `'add'`, `'edit'` (all three routed to the one mode-aware
  * `TransactionSheetBody`), `'categoryPicker'` (F3/F4), `'createCategory'`/`'editCategory'` (F6,

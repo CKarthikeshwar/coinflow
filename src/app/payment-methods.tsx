@@ -1,11 +1,15 @@
 /**
- * Payment methods — SPEC-UI-UX.md §6.14, SPEC-implementation.md §30.16. F8.5. Static, read-only.
+ * FILE PURPOSE
+ * ------------
+ * A static, read-only reference screen listing the payment methods the app recognizes (UPI,
+ * Card, Cash, Bank transfer, Wallet) with their icons — purely informational, no editing.
+ * Reached from Settings' "Payment methods" row.
  *
- * Root-relative route, same pattern as `categories.tsx`/`account-rules.tsx`. UPI has no icon of
- * its own in §3.4's payment-method mapping (only Card/Cash/Bank transfer/Wallet are listed) — the
- * prototype's hand-drawn UPI glyph has no direct Lucide equivalent. Reuses `credit-card` for UPI,
- * the same undocumented choice `suggestion-card.tsx`'s `METHOD_ICON` already made; recorded here
- * rather than repeating it silently a second time.
+ * IMPORTANT
+ * ---------
+ * UPI reuses the `credit-card` icon rather than having a UPI-specific glyph — there's no direct
+ * Lucide icon for it, and this is the same choice `src/features/detection/suggestion-card.tsx`'s
+ * `METHOD_ICON` map already makes for the same reason.
  */
 
 import { router } from 'expo-router';

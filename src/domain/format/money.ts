@@ -1,6 +1,33 @@
 /**
- * Money formatter — SPEC-implementation.md §27.1. Hand-rolled Indian grouping on the integer
- * rupee string (Hermes `Intl` is partial — D31). Pure TS, no react-native / expo imports.
+ * FILE PURPOSE
+ * ------------
+ * Turns a raw money amount into the exact string shown on screen: "+ ₹1,15,000",
+ * "− ₹842.50", a percent-change like "+12%", or a capped badge count like "99+".
+ *
+ * WHERE IT FITS
+ * ------------
+ * This is the single place that knows how money should *look*. It's used everywhere an amount
+ * is displayed — transaction rows, the Home balance hero, Analytics tiles, notifications — so
+ * every screen in the app shows amounts the same way. It's pure formatting only: it never reads
+ * from the database, never does money math beyond simple sign/rounding, and has no
+ * react-native/expo imports.
+ *
+ * USED BY
+ * -------
+ * 14 files across `src/features/`, `src/app/`, and `src/services/notifications/` — essentially
+ * anywhere a rupee amount reaches the UI or a notification.
+ *
+ * IMPORTANT
+ * ---------
+ * `amountMinor` is always an integer count of **paise** (1 rupee = 100 paise), never a
+ * fractional rupee number like `12.5`. This matters: money is stored and passed around as
+ * whole-number paise throughout the app specifically to avoid floating-point rounding bugs
+ * (`0.1 + 0.2 !== 0.3` in JS) — if you're about to write `amount / 100.0` somewhere else in the
+ * app, check whether this file's helpers already do what you need instead.
+ *
+ * The Indian-style digit grouping ("1,15,000" not "115,000") is hand-written here rather than
+ * using `Intl.NumberFormat('en-IN')`, because the JS engine this app runs on (Hermes) only has
+ * partial `Intl` support and can't be relied on for this.
  */
 
 export type FormatMoneyOptions = {

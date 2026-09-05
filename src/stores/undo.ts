@@ -1,8 +1,25 @@
 /**
- * Undo snackbar state (SPEC-implementation.md §22.2 / §27.4). The row data is already safe
- * via soft-delete, so this never holds row content — just the id and the auto-hide timer.
- * Undo calls `restoreTransaction`; timeout just clears the snackbar (purge happens on
- * launch).
+ * FILE PURPOSE
+ * ------------
+ * Tracks the "Deleted · Undo" snackbar shown after deleting a transaction, and the 5-second
+ * window during which the user can tap Undo to bring it back.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `src/ui/undo-snackbar.tsx` renders the snackbar based on this store; `undo-host.tsx`
+ * (`src/features/transactions/`) wires the actual "Undo" tap to
+ * `restoreTransaction(transactionId)` (`src/db/repositories/transactions.ts`).
+ *
+ * IMPORTANT
+ * ---------
+ * This store only ever holds the deleted transaction's ID, never any of its actual data (amount,
+ * account, etc.) — that's not an accident. The transaction row is already safe: deleting it is a
+ * soft-delete (`deletedAt` set, not actually removed from the database — see `schema.ts`), so
+ * "undo" just means clearing that timestamp back to `null`. There's no need for this store to
+ * carry a copy of the row's data, which also means there's nothing sensitive sitting in memory
+ * here for longer than necessary. If the 5-second window expires without the user tapping Undo,
+ * this store simply clears itself — the actual permanent deletion happens later and separately,
+ * via `src/db/maintenance.ts`'s `purge()` at the next app launch, not from a timeout here.
  */
 
 import { create } from 'zustand';

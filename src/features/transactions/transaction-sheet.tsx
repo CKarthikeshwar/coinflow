@@ -1,8 +1,38 @@
 /**
- * Transaction Confirmation (F3, §6.4/§30.6) and Add Transaction (F4, §6.5/§30.7) sheets. One
- * component, mode-aware — the two screens share every field, the keypad, the write path, and
- * the discard-guard; they only differ in how the draft is seeded and how the amount gate
- * behaves on submit. Kept as one file rather than duplicating ~200 lines across two.
+ * FILE PURPOSE
+ * ------------
+ * The single form used for THREE different jobs: confirming an SMS-detected suggestion, adding
+ * a brand-new manual transaction, and editing an existing one. `mode` (`'confirm' | 'add' |
+ * 'edit'`) picks which of the three it's acting as. This is one of the most important, most
+ * frequently-used screens in the whole app — nearly every transaction that ends up in the
+ * database passes through here at some point.
+ *
+ * WHERE IT FITS
+ * -------------
+ * Rendered by `src/features/app-shell/sheet-host.tsx` whenever `useSheetRegistry`'s `current` is
+ * `'confirm'`, `'add'`, or `'edit'`. Reads/writes its in-progress values through
+ * `src/stores/add-sheet-draft.ts` (the form state) and `src/stores/keypad.ts` (the amount).
+ * When the user hits the primary button, it hands off to `write-confirmed-transaction.ts` in
+ * this same folder, which does the actual database write.
+ *
+ * DATA FLOW
+ * ---------
+ *   sheet opens (mode + optional suggestionId/transactionId in useSheetRegistry's params)
+ *     ↓
+ *   draft is seeded: blank (add), from a Suggestion row (confirm), or from a Transaction row (edit)
+ *     ↓
+ *   user edits fields — every change goes through useAddSheetDraft's patch()
+ *     ↓
+ *   user taps Add/Save → write-confirmed-transaction.ts writes to the database
+ *     ↓
+ *   sheet closes, a toast confirms the save, the screen behind it re-renders live (useLiveQuery)
+ *
+ * IMPORTANT
+ * ---------
+ * The three modes are kept in ONE component rather than three separate ones because they share
+ * essentially everything — every field, the keypad, the write path, the discard-guard — and only
+ * differ in how the draft is seeded and how strictly the amount is validated on submit. Splitting
+ * them would mean keeping ~200 lines of near-duplicate logic in sync across three files.
  *
  * Date & time is editable via two plain `yyyy-MM-dd`/`HH:mm` text fields revealed on tap, not a
  * calendar/clock picker — same simplification as the Filter sheet's custom date range (no

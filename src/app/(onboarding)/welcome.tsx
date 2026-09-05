@@ -1,6 +1,10 @@
 /**
- * Onboarding — Welcome — SPEC-UI-UX.md §6.1, SPEC-implementation.md §30.1. F12. Static, no
- * reads. Entered by the root `<Redirect>` on first launch (see `src/app/_layout.tsx`).
+ * FILE PURPOSE
+ * ------------
+ * The first screen of onboarding — a static welcome message with a "Get started" button. No
+ * database reads here. Shown automatically on first launch (before `onboardingDone` is set) by
+ * `src/features/app-shell/root-navigator.tsx`'s `Stack.Protected` guard, which makes the whole
+ * `(onboarding)` route group the only thing reachable until onboarding finishes.
  */
 
 import { router } from 'expo-router';

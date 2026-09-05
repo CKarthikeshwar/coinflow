@@ -1,8 +1,20 @@
+// FILE PURPOSE: configures the TypeScript compiler (`tsc`) — this is what `npm run typecheck`
+// runs, and what your editor uses for autocomplete/type errors. Builds on Expo's own base
+// config (`expo/tsconfig.base`) and layers a few project-specific choices on top.
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    // Expo's base config already enables most strict checks; this turns on the full strict-mode
+    // family explicitly so the project's type safety doesn't silently loosen if the base config
+    // ever changes.
     "strict": true,
+    // Makes Node's built-in module types (`fs`, `path`, used by src/__tests__/no-network.test.ts)
+    // and Jest's globals (`describe`/`it`/`expect`) available project-wide. Needed as an explicit
+    // "types" array because once @types/node was added as a dependency, a plain `npm install`
+    // alone didn't make tsc pick it up automatically — listing both here is what actually did.
     "types": ["node", "jest"],
+    // The path aliases used everywhere in this codebase instead of relative `../../` imports:
+    // `@/foo` resolves to `src/foo`, `@/assets/foo` resolves to `assets/foo`.
     "paths": {
       "@/*": [
         "./src/*"
@@ -16,6 +28,8 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
+    // expo-env.d.ts and jest.d.ts are ambient type declarations (Expo's own types, Jest's
+    // globals) — see those files themselves for why each exists.
     "expo-env.d.ts",
     "jest.d.ts",
     "types/**/*.d.ts"

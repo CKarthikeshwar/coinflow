@@ -1,6 +1,10 @@
 /**
- * Settings — SPEC-UI-UX.md §6.13, SPEC-implementation.md §30.15 (UI-064). F8.5. A grouped,
- * static list; each row pushes its subpage; app version in the footer.
+ * FILE PURPOSE
+ * ------------
+ * The Settings tab — a static, grouped list of links (Categories, Account rules, Payment
+ * methods, SMS & notifications, Data, About), each pushing its own subpage route under
+ * `src/app/`. This screen itself has almost no logic beyond the row list and the one live
+ * permission-status subtitle described below.
  *
  * §30.15's own text says the SMS & notifications subtitle reads `useSetting` — but §22.4's
  * architecture principle is that permission status is "read live from the OS, never stored",

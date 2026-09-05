@@ -1,7 +1,25 @@
 /**
- * The in-app numeric keypad buffer (SPEC-implementation.md §22.2 / §6.4). Amount entry
- * only. `mode` is the full-height amount vs the collapsed summary bar. The buffer is a
- * string of digits + at most one '.'; `amountMinor` is the paise value it resolves to.
+ * FILE PURPOSE
+ * ------------
+ * Backs the custom on-screen numeric keypad used for amount entry in the Add/Confirm sheet
+ * (`src/ui/numeric-keypad.tsx` for the buttons, `src/ui/amount-input.tsx` for the display).
+ * Tracks what's been typed as a raw text buffer (e.g. `"12.5"`) and keeps the paise-integer
+ * value (`amountMinor`, e.g. `1250`) in sync with it on every keypress.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `mode` distinguishes whether the keypad is shown full-height (actively entering an amount) or
+ * collapsed into a summary bar (amount already entered, other fields being filled in) —
+ * `transaction-sheet.tsx` reads this to decide which layout to render.
+ *
+ * IMPORTANT
+ * ---------
+ * `buffer` (the text the user has typed) and `amountMinor` (the resulting paise integer) are
+ * two different representations of the same value, kept in sync by this store rather than
+ * computed from each other on every render. This matters because the raw text buffer can hold
+ * states an integer can't cleanly represent mid-typing — e.g. `"12."` with a trailing decimal
+ * point and no digits after it yet — so the text buffer is the source of truth while typing,
+ * and `amountMinor` (via `bufferToMinor`) is derived from it after every keypress.
  */
 
 import { create } from 'zustand';

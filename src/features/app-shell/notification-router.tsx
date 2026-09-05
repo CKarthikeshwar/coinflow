@@ -1,8 +1,16 @@
 /**
- * `NotificationRouter` — SPEC-implementation.md §28.3 / §31.5 / §31.6. Routes a
- * foreground-opening notification tap (the `ADD` action or a plain body tap — the only two
- * actions configured `opensAppToForeground:true`, see `categories.ts`) to the right screen or
- * sheet, on both cold start and while the app is already running.
+ * FILE PURPOSE
+ * ------------
+ * Handles what happens when the user taps a notification IN A WAY THAT OPENS THE APP — either
+ * the "Add" button or tapping the notification body itself. Reads
+ * `src/services/notifications/deep-link.ts`'s decision about where to go, then actually
+ * performs the navigation (pushing a route, or opening a sheet via `useSheetRegistry`).
+ *
+ * WHERE IT FITS
+ * -------------
+ * Routes a foreground-opening notification tap (the `ADD` action or a plain body tap — the only
+ * two actions configured `opensAppToForeground:true`, see `categories.ts`) to the right screen
+ * or sheet, on both cold start and while the app is already running.
  *
  * `SAVE`/`DISCARD` never reach here — they're `opensAppToForeground:false` and always handled
  * headless by `NOTIFICATION_RESPONSE_TASK` (`src/services/tasks/index.ts`), whether the app is

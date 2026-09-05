@@ -7,9 +7,19 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 /**
- * Minimal bridge surface (SPEC-implementation.md §17.6 / D24). No custom events — the
- * app-killed wake path goes entirely through [SmsReceiver] + the headless service, not
- * through this module. This module exists only for capability + permission checks.
+ * FILE PURPOSE
+ * ------------
+ * The one native module CoinFlow's JS code can call directly and synchronously — but ONLY for
+ * checking/requesting the `RECEIVE_SMS`/`READ_SMS` permissions and checking whether SMS capture
+ * is supported at all. It deliberately does NOT do anything related to actually receiving or
+ * processing SMS — that entire flow runs through `SmsReceiver` + `CoinflowSmsHeadlessTaskService`
+ * (this same folder) instead, triggered by Android itself, not by a JS call into this module.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `modules/coinflow-sms/src/index.ts` is the JS wrapper that calls into this module's three
+ * functions (`isSupported`, `getPermissionsAsync`, `requestPermissionsAsync`); `src/services/sms.ts`
+ * is the one place in the app's own `src/` code allowed to import that JS wrapper.
  */
 class CoinflowSmsModule : Module() {
   override fun definition() = ModuleDefinition {

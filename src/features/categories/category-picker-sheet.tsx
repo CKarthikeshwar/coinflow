@@ -1,7 +1,10 @@
 /**
- * `CategoryPickerSheet` — SPEC-UI-UX.md §3.6 / SPEC-implementation.md §29.4. Uncategorized +
- * the category rows; current = check. "Manage categories →" closes the sheet and pushes the
- * Categories screen (F6).
+ * The category-selection list shown when the user taps the category field inside the
+ * Add/Confirm/Edit sheet. Writes the chosen category straight into `useAddSheetDraft` (the
+ * same draft the transaction sheet is editing), then re-opens whichever sheet opened this
+ * picker (`params.returnTo`) — this picker itself never touches a transaction directly, it's
+ * always a temporary detour from one of the transaction sheets. "Manage categories →" instead
+ * closes everything and navigates to the full Categories screen (`src/app/categories.tsx`).
  */
 
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';

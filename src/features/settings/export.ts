@@ -1,12 +1,27 @@
 /**
- * `exportJson`/`exportCsv` — SPEC-implementation.md §20.8 (D17 / §12 / IMP-043). Read-only, no
- * import in V1. Live rows only (soft-deleted transactions excluded); writes to
- * `Paths.cache` then hands off to `Sharing.shareAsync` — nothing leaves the device except
- * through that user-initiated share sheet (P-9 / IMP-045).
+ * FILE PURPOSE
+ * ------------
+ * The three ways a user can get their data OFF the device: a full JSON backup, a
+ * spreadsheet-friendly CSV of transactions, or (as a last resort) a raw copy of the SQLite file
+ * itself. This is export-only — there is no matching "import" in this version of the app.
  *
- * Uses the SDK 57 `File`/`Paths` API (not the legacy `FileSystem.writeAsStringAsync`), per
- * `AGENTS.md`'s "read the versioned docs, don't rely on memory of older SDKs" — v57's
- * `expo-file-system` ships `File`/`Directory`/`Paths` as the current API.
+ * WHERE IT FITS
+ * -------------
+ * `exportJson`/`exportCsv` are called from `src/app/data.tsx` (Settings › Data). This app never
+ * makes network requests on its own (see `src/services/crash/index.ts` for the broader
+ * no-network policy) — export is the ONE deliberate way data can leave the device, and even
+ * then only through the OS's own native share sheet (`Sharing.shareAsync`), which the user
+ * explicitly drives (choosing where to send the file) — nothing is uploaded automatically by
+ * this app itself. `exportRawDatabaseCopy` is called from `src/db/migration-gate.tsx`'s error
+ * screen — a fallback for the rare case where the database won't even open, so the normal
+ * exports (which query through the database) can't run at all.
+ *
+ * IMPORTANT
+ * ---------
+ * All three functions read/copy from `Paths.cache`/`Paths.document` using the current
+ * `expo-file-system` `File`/`Directory`/`Paths` API — not the older
+ * `FileSystem.writeAsStringAsync` style API from earlier Expo SDKs. If you're adding to this
+ * file, keep using the same `File`/`Directory` classes rather than mixing API styles.
  */
 
 import Constants from 'expo-constants';

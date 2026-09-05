@@ -1,5 +1,8 @@
 /**
- * About — SPEC-UI-UX.md §6.14, SPEC-implementation.md §30.16. F8.5.
+ * FILE PURPOSE
+ * ------------
+ * The simplest Settings subpage — just shows the installed app version and a short on-device
+ * privacy statement. Reached from Settings' "About" row.
  *
  * Deferral (documented, not silent): the spec also calls for "licenses / help links", but no
  * real URL for either exists anywhere in the repo's specs, and URLs aren't something to invent —

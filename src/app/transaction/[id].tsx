@@ -1,6 +1,15 @@
 /**
- * Transaction Details — SPEC-UI-UX.md §6.8, SPEC-implementation.md §30.10. Part of F5 ("Open a
- * row → Details").
+ * FILE PURPOSE
+ * ------------
+ * The full-detail view of one transaction — reached by tapping a row in the Transactions list,
+ * Home's recent activity, or a "transaction" notification tap
+ * (`src/services/notifications/deep-link.ts`). `[id]` in the filename means expo-router treats
+ * this as a dynamic route — the transaction's id comes from the URL (`useLocalSearchParams`).
+ *
+ * Edit (bottom-anchored primary button) opens the Edit sheet (§6.6), pre-filled from this row.
+ * The Uncategorized "Set category" control (meta row) also opens the Edit sheet rather than a
+ * standalone one-tap category picker — same underlying capability, documented simplification (no
+ * separate write path outside the normal draft/sheet system for what's otherwise a one-off).
  *
  * Edit (bottom-anchored primary button) opens the Edit sheet (§6.6), pre-filled from this row.
  * The Uncategorized "Set category" control (meta row) also opens the Edit sheet rather than a

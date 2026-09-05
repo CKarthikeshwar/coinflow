@@ -1,6 +1,17 @@
 /**
- * The one icon component (SPEC-UI-UX.md §3.4 / §29.2). Wraps `lucide-react-native`,
- * forces `strokeWidth={1.6}` app-wide, and resolves `color` from the theme.
+ * FILE PURPOSE
+ * ------------
+ * The one place every icon in the app comes from. Wraps the `lucide-react-native` icon library
+ * behind a stable, app-specific name (`IconName`, e.g. `'utensils'`, `'home'`) rather than
+ * letting every screen import Lucide's own React component names directly — which is what
+ * keeps stroke width and color theming consistent everywhere, and insulates the rest of the app
+ * from Lucide's own naming changes (see below).
+ *
+ * WHERE IT FITS
+ * -------------
+ * Used throughout `src/ui/`, `src/features/`, and `src/app/` wherever an icon is needed —
+ * category glyphs (paired with `constants/category-icons.ts`), payment method icons, and every
+ * chrome/navigation icon (back arrows, search, filter, etc.).
  *
  * `IconName`s use Lucide's canonical kebab-case names from §3.4. Lucide 1.x renamed a
  * few export identifiers (help-circle → CircleQuestionMark, home → House, bar-chart-3 →

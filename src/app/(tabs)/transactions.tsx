@@ -1,6 +1,10 @@
 /**
- * Transactions list — SPEC-UI-UX.md §6.7, SPEC-implementation.md §30.9. F5. Now a real tab
- * under `(tabs)/` (F6.5) — no back button; the tab bar is the way out.
+ * FILE PURPOSE
+ * ------------
+ * The full transaction ledger — search, filter, and a scrollable, day-grouped list of every
+ * transaction. This is the screen backing the "Transactions" tab. Row taps navigate to
+ * `src/app/transaction/[id].tsx` (Details); the Filter button opens
+ * `src/features/transactions/filter-sheet.tsx`.
  *
  * Filter (§6.9): the applied filter lives in this route's own params (`filter-draft.ts`'s header
  * comment), read here via `useLocalSearchParams` and merged into `useTransactionList`'s query —

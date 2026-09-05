@@ -1,6 +1,24 @@
 /**
- * Ignore gate — SPEC-implementation.md §23.3. Ordered checks on the whitespace-collapsed body;
- * first hit wins. Runs before extraction so a promo mentioning `₹500` never becomes a Suggestion.
+ * FILE PURPOSE
+ * ------------
+ * Decides whether an SMS should be thrown out entirely before any attempt is made to read a
+ * transaction out of it — OTPs, marketing/promo texts, "your balance is..." messages, someone
+ * *requesting* money from you (not a completed payment), foreign-currency messages this app
+ * doesn't handle, and "this will be credited later" pending messages.
+ *
+ * WHERE IT FITS
+ * -------------
+ * Called by `parse-sms.ts` as step 2 of the pipeline, right after the sender check and before
+ * any amount/account extraction runs. Checks run in a fixed order and the first match wins —
+ * order matters here (e.g. an OTP check runs before the promo check, since some OTP messages
+ * could otherwise also look vaguely promotional).
+ *
+ * IMPORTANT
+ * ---------
+ * This gate runs BEFORE field extraction on purpose. A promo text that happens to mention
+ * "₹500 cashback" would otherwise get its ₹500 extracted as if it were a real transaction
+ * amount — running the ignore checks first means a message never becomes a database
+ * `Suggestion` row just because it happens to contain a rupee figure.
  */
 
 import { AMOUNT_SOURCE, CREDIT_KEYWORDS_SOURCE, DEBIT_KEYWORDS_SOURCE } from './extract';

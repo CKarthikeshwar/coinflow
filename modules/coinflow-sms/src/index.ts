@@ -1,5 +1,11 @@
 /**
- * `coinflow-sms` — thin JS interface over the Kotlin module (SPEC-implementation.md §17.6).
+ * FILE PURPOSE
+ * ------------
+ * The JavaScript side of this custom native module — a thin wrapper around the Kotlin code in
+ * `modules/coinflow-sms/android/` (`CoinflowSmsModule.kt`). This is where the native/JS boundary
+ * actually is: everything below this file is Kotlin, everything above it (starting with
+ * `src/services/sms.ts`, the only file in `src/` allowed to import from here) is plain
+ * TypeScript.
  *
  * The Kotlin side does **only** the wake trigger: a manifest `<receiver>` for `SMS_RECEIVED`
  * that coalesces the PDUs and starts a bounded headless-JS task. No parsing, no SQLite, no

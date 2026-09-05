@@ -1,9 +1,19 @@
 /**
- * Live SMS + notification permission status (SPEC-implementation.md §22.4) — read from the OS,
- * never stored, re-checked on `AppState → active`. Shared by every screen that shows a
- * `PermissionBanner` or a permission card (Home first, §30.4; Review Queue / onboarding /
- * Settings › SMS & notifications reuse it as they're built).
+ * FILE PURPOSE
+ * ------------
+ * The single shared way any screen finds out "does this app currently have SMS permission?
+ * Notification permission?" — always read live from the OS, never cached/stored, so it can
+ * never go stale.
  *
+ * WHERE IT FITS
+ * -------------
+ * Used by every screen/banner that needs to react to permission state: Home's permission
+ * banner, the Review Queue, `src/app/(onboarding)/permissions.tsx`, and
+ * Settings › SMS & notifications. All of them share this one hook instead of each re-querying
+ * the OS independently, which used to be duplicated inline logic before this hook existed (see
+ * git history / `SPEC/traceability.md` if curious).
+ *
+
  * `smsCanAskAgain`/`notificationsCanAskAgain` (F8.5) carry the OS's own distinction between
  * "denied, asking again shows the normal prompt" and "permanently denied, asking again silently
  * no-ops" — IMP-042 needs it to decide whether a permission card's action re-requests or opens

@@ -1,7 +1,12 @@
 /**
- * `PermissionCard` — SPEC-UI-UX.md §6.1/§6.14, SPEC-implementation.md §29.4 catalog. Shared
- * between onboarding step 2 (F12, not built yet) and Settings › SMS & notifications (F8.5):
- * icon tile + title (+ Optional tag) + why-copy + a status pill or an action button.
+ * FILE PURPOSE
+ * ------------
+ * A card explaining one permission (SMS, notifications, or crash reporting) and offering an
+ * action to grant/enable it — icon tile + title (+ "Optional" tag) + plain-language why-copy +
+ * either a status pill (already granted) or an action button. Shared between the onboarding
+ * flow's permissions step (`src/app/(onboarding)/permissions.tsx`) and
+ * `src/app/sms-notifications.tsx` (Settings › SMS & notifications) — the same card, same
+ * copy/behavior, used in both places a user is asked about permissions.
  *
  * `canAskAgain` (default `true`, F8.5/IMP-042) is a documented addition to the catalog's literal
  * `kind, state, optional?, onRequest` prop list — it picks the action button's own label:

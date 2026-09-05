@@ -1,8 +1,48 @@
 /**
- * `SMS_INGEST_TASK` body (SPEC-implementation.md §17.3, steps 1–8 — F1 + F2 scope).
+ * FILE PURPOSE
+ * ------------
+ * This is the actual function that runs every time an SMS arrives on the device — from "here's
+ * the raw text of a message" all the way to "a notification is on screen asking the user to
+ * confirm a detected transaction." It's the single most important function in the automatic-
+ * detection feature: everything else (the parser, the repositories, the notification service)
+ * exists to be called from here.
  *
- * Contract that holds throughout: runs with no UI, opens `expo-sqlite` itself, never logs the
- * body / amount / account, and never throws out of `smsIngestTask` (§17.2 / §32 E1/E2).
+ * WHERE IT FITS
+ * -------------
+ * Registered as the handler for the `'CoinflowSmsIngest'` headless task in
+ * `src/services/tasks/index.ts` — see that file for how Android wakes up the JS engine to run
+ * this function even when the app isn't open. This function has NO UI: it can't show a screen,
+ * can't rely on any React state, and has to open its own database connection (well, `db/client.ts`
+ * does that automatically on import) since there's no app already running to share one with.
+ *
+ * THE 8-STEP PIPELINE
+ * --------------------
+ *   1. Sender gate      — bail out immediately if the SMS isn't from a known bank/payment sender.
+ *   2. Parse             — hand the message to `parseSms()` (`src/domain/parser/`).
+ *   3. Transaction gate  — a non-transaction parse result (ignored SMS) means stop here.
+ *   4. Dedupe check      — has an identical transaction already been recorded? (guards against
+ *                          the same SMS triggering this task twice, e.g. on a retry.)
+ *   5. Write Suggestion  — save a `suggestions` row via `insertIfNew` (`db/repositories/suggestions.ts`).
+ *   6. Account lookup    — check `accountRules` to see if this account is "known" (has a learned
+ *                          category) or "new" — this affects what the notification looks like.
+ *   7. Notify             — post a local notification for the user to review/confirm.
+ *   8. Self-heal          — re-check for any older suggestion that got saved but never got its
+ *                          notification posted (e.g. the task was killed mid-way on a previous
+ *                          run), and post for those too.
+ *
+ * IMPORTANT
+ * ---------
+ * - This function must NEVER throw. Every step is wrapped in one big try/catch, and a caught
+ *   error is only logged (by error *type name*, e.g. "TypeError" — never the actual message,
+ *   which could leak SMS content into logs) and swallowed. Android can — and does — run this
+ *   task under tight resource constraints; a crash here could affect the OS's willingness to
+ *   wake the app for future SMS, so "drop this one SMS silently" is far safer than crashing.
+ * - The raw SMS body is NEVER written to the database or logged anywhere — only the parsed,
+ *   structured fields (amount, direction, account) are stored. This is a deliberate privacy
+ *   choice that holds throughout the app, not just here.
+ * - `ensureMigrated()` is called before any database write because this task can genuinely be
+ *   the very first code that runs after installing the app, if a background SMS somehow arrives
+ *   before the user has ever opened it once (rare, but the code has to handle it).
  */
 
 import * as Crypto from 'expo-crypto';

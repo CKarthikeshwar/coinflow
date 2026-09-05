@@ -1,6 +1,9 @@
 /**
- * Seed data (SPEC-implementation.md §20.5) — pure constants, no database import, so it's
- * unit-testable without a native SQLite. `seed.ts` holds the functions that apply it.
+ * The actual list of default categories every install starts with — plain data only, no
+ * database import, kept separate from `seed.ts` (which has the functions that write these rows
+ * into the database) so the data itself is trivial to unit-test and to read/update on its own.
+ * `isProtected: true` only on "Uncategorized" and "Other" — those two can never be deleted or
+ * renamed by the user, since the app relies on both always existing.
  */
 
 export const SEED_VERSION = 1;

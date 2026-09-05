@@ -1,9 +1,21 @@
 #!/usr/bin/env node
 
 /**
- * This script is used to reset the project to a blank state.
- * It deletes or moves the /src and /scripts directories to /example based on user input and creates a new /src/app directory with an index.tsx and _layout.tsx file.
- * You can remove the `reset-project` script from package.json and safely delete this file after running it.
+ * FILE PURPOSE
+ * ------------
+ * A stock utility script that ships with every `create-expo-app` template (this is NOT
+ * CoinFlow-specific code) — run via `npm run reset-project`. It wipes out the entire `src/`
+ * (and `scripts/`) directory — optionally moving them into `example/` first instead of
+ * deleting them outright — and scaffolds a brand-new, blank `src/app/index.tsx` +
+ * `_layout.tsx`, as if you were starting a fresh Expo project from scratch.
+ *
+ * IMPORTANT — this would destroy the entire CoinFlow app if run
+ * ------------------------------------------------------------------
+ * Running this script in this repository would delete (or archive) every file described
+ * throughout this codebase's comments — the database layer, the SMS parser, every screen, all
+ * of it — and replace `src/app/` with a two-file "Hello World." There is no reason to ever run
+ * `npm run reset-project` in this project; it's a leftover template convenience for starting an
+ * unrelated, brand-new Expo app, not a tool used anywhere in CoinFlow's own workflow.
  */
 
 const fs = require("fs");

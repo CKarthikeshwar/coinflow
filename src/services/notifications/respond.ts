@@ -1,7 +1,41 @@
 /**
- * `SAVE` / `DISCARD` bodies — SPEC-implementation.md §31.5, shared verbatim with §17.4(b). Runs
- * headless (app killed or backgrounded) via `NOTIFICATION_RESPONSE_TASK`, and from the UI once
- * the Review Queue / Confirmation sheet exist (F11/F3).
+ * FILE PURPOSE
+ * ------------
+ * What actually happens when the user responds to a detected transaction — either "Save" (one-
+ * tap confirm using the learned account rule) or "Discard" (throw the suggestion away). The
+ * exact same two functions here run whether the user tapped a notification's action button
+ * while the app was closed, or tapped the equivalent button inside the Review Queue screen.
+ *
+ * WHERE IT FITS
+ * -------------
+ * - `src/services/tasks/index.ts` calls `handleSave`/`handleDiscard` from the headless
+ *   `NOTIFICATION_RESPONSE_TASK` handler, when the user taps a notification's action button.
+ * - `src/app/review-queue.tsx` calls the exact same two functions when the user taps the
+ *   equivalent Save/Dismiss controls inside the app.
+ * Using one shared implementation for both means a user can never see inconsistent behavior
+ * between "responding from a notification" and "responding inside the app."
+ *
+ * DATA FLOW — handleSave
+ * -------------------------
+ *   Suggestion (re-read fresh from the DB — never trust old notification data) + its
+ *   AccountRule (also re-read fresh)
+ *     ↓
+ *   one database transaction: insert a new `transactions` row using the rule's learned
+ *   category/note/payment method, mark the `suggestions` row 'confirmed' and link it to the
+ *   new transaction, bump the rule's `hitCount`
+ *     ↓
+ *   cancel the now-answered notification (`cancelForSuggestion`, `post.ts`)
+ *
+ * IMPORTANT
+ * ---------
+ * - `handleSave` re-reads both the suggestion AND its account rule from the database instead of
+ *   trusting anything captured when the notification was originally built — time may have
+ *   passed, and the rule (or even whether it still qualifies as "known") could have changed. If
+ *   the rule no longer qualifies, this quietly does nothing (`{ outcome: 'noop', reason: 'no-rule' }`)
+ *   rather than writing a transaction with a stale/wrong category.
+ * - `handleDiscard` performs a genuine, permanent delete of the suggestion (via
+ *   `dismissSuggestion`) — there is no "undo" for discarding a suggestion, unlike deleting a
+ *   confirmed transaction, which is soft-deleted with an Undo window.
  */
 
 import { eq } from 'drizzle-orm';

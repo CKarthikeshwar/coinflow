@@ -1,8 +1,17 @@
 /**
- * Root error boundary (§32.3, E20) — catches an uncaught render/lifecycle throw anywhere below
- * it and shows `RecoveryScreen` instead of a blank/frozen app. Mounted in `_layout.tsx` just
- * inside the providers, above `MigrationGate`/the navigator, so it can catch a crash from
- * anywhere in the tree, `MigrationGate` included.
+ * FILE PURPOSE
+ * ------------
+ * The app's last line of defense against a crash: catches any uncaught error thrown while
+ * rendering anywhere below it, and shows `RecoveryScreen` (a friendly "your data is safe,
+ * restart" screen) instead of the app going blank or frozen.
+ *
+ * WHERE IT FITS
+ * -------------
+ * Mounted in `src/app/_layout.tsx` just inside the providers, above `MigrationGate`/the
+ * navigator, so it can catch a crash from anywhere in the tree, `MigrationGate` included. If
+ * crash reporting is on, the caught error is also sent to Sentry via `captureBoundaryError`
+ * (`src/services/crash/index.ts`), and the returned event id is shown to the user as a
+ * reference they could mention if they report the bug.
  *
  * A class component because React has no hook equivalent for `componentDidCatch` /
  * `getDerivedStateFromError` (still true as of React 19).

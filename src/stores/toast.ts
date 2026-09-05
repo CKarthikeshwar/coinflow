@@ -1,7 +1,21 @@
 /**
- * Toast state (SPEC-implementation.md §30.6/§30.7 — Add/Confirm's post-save "Added … · View").
- * Same shape as `undo.ts`'s snackbar (message + one action + auto-hide timer), generalized: any
- * feature can show one, but only one shows at a time — a new `show()` replaces whatever's up.
+ * FILE PURPOSE
+ * ------------
+ * A single, app-wide "toast" banner — a short message with one optional action button that
+ * auto-dismisses after a few seconds. Used for confirmations like "Added · View" after saving a
+ * transaction from the Add/Confirm sheet.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `src/ui/toast.tsx` renders whatever's currently in this store (mounted once near the app
+ * root). Any feature calls `useToast.getState().show(message, action)` to display one — there's
+ * only ever one toast on screen at a time; calling `show()` again while one is already visible
+ * replaces it rather than queueing a second one.
+ *
+ * Same shape/pattern as `undo.ts`'s snackbar (a message + one action + an auto-hide timer) — but
+ * kept as its own separate store rather than merged with it, since a toast's action is generic
+ * (any label/callback) while undo's is specifically "restore this one transaction," and they can
+ * legitimately need to be on screen closer together than sharing one store would cleanly allow.
  */
 
 import { create } from 'zustand';

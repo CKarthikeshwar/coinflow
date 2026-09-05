@@ -1,5 +1,6 @@
-// V1 is dark-only (D33 / SPEC-implementation.md §29.1). Static web export renders dark
-// too — no hydration swap needed.
+// Web build's replacement for `use-color-scheme.ts` — currently identical (`'dark'` always),
+// since the app is dark-mode-only everywhere. Exists as its own file only so the native/web
+// split is complete and consistent with the rest of the codebase's platform-file convention.
 export function useColorScheme(): 'dark' {
   return 'dark';
 }

@@ -1,7 +1,8 @@
 /**
- * `Button` — SPEC-UI-UX.md §3.6 / SPEC-implementation.md §29.4. Pill radius, 700-weight label.
- * `primary` = filled `primary`/`primaryInk`; `ghost` = `surface2`/`text`; `disabled` =
- * `surface2`/`text3`. `loading` shows a spinner and locks the press (§6.4).
+ * The app's one standard pill-shaped button, used anywhere a primary/secondary tappable action
+ * is needed (sheet "Save"/"Add" buttons, dialog confirm actions, etc.) — `variant` picks the
+ * filled/ghost/disabled look, and `loading` swaps the label for a spinner while also disabling
+ * the press, so a slow save can't be double-tapped.
  */
 
 import { ActivityIndicator, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';

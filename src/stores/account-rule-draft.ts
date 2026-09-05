@@ -1,9 +1,17 @@
 /**
- * The Account rules editor's working copy (SPEC-implementation.md §21.3/§30.16, D16). Mirrors
- * `category-draft.ts`'s shape — ephemeral, never persisted, `dirty` drives the discard-confirm
- * (V-6) via `SheetHost`. There's no "create" mode: rules are only ever seeded by
- * `upsertFromTransaction` (F8) the first time an account is saved on a transaction; this store
- * only ever edits an existing row.
+ * FILE PURPOSE
+ * ------------
+ * Working copy for the "edit an account rule" sheet (`src/features/settings/account-rule-editor-sheet.tsx`,
+ * reached from Settings › Account rules) — lets the user tweak the note/category that gets
+ * auto-filled for a given bank account. Same ephemeral-draft-with-dirty-tracking shape as
+ * `add-sheet-draft.ts` and `category-draft.ts`, just for this smaller form.
+ *
+ * IMPORTANT
+ * ---------
+ * There is no "create" mode here — an account rule is never created directly by the user. It's
+ * only ever first created automatically by `upsertFromTransaction`
+ * (`src/db/repositories/account-rules.ts`) the first time a transaction is saved with that
+ * account. This store only ever edits a rule that already exists.
  */
 
 import { create } from 'zustand';
