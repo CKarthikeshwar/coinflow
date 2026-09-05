@@ -1,7 +1,8 @@
 /**
- * SPEC-implementation.md §18.3 — web ships as static output with no CoinFlow features in V1
- * (Android-only, D3). Every route's `.web.tsx` twin renders this instead of touching the
- * database or any Android-only service.
+ * The screen shown on the web build instead of any real feature — CoinFlow only actually works
+ * on Android (it needs SMS access), so every `.web.tsx` version of a screen (e.g.
+ * `src/app/(tabs)/index.web.tsx`) renders this component instead of the real screen, rather
+ * than trying to render a database-backed UI that has no database to read on web.
  */
 
 import { StyleSheet, View } from 'react-native';

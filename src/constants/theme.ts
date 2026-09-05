@@ -1,8 +1,33 @@
 /**
- * Design tokens — the single source of truth for colour, type, spacing, radius and
- * elevation. Values come from SPEC-UI-UX.md §3 and SPEC-implementation.md §29.1.
- * V1 ships one dark theme (D33); `Colors.light` is a reference to `Colors.dark` so any
- * scheme-indexed lookup keeps working.
+ * FILE PURPOSE
+ * ------------
+ * The single source of truth for every design value in the app: colors, spacing, corner
+ * radius, shadow/elevation, and typography. This is what makes the whole app look
+ * consistent — screens and components pull values from here rather than hardcoding their own
+ * hex codes or pixel numbers.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `Colors` is read through `src/hooks/use-theme.ts`'s `useTheme()` (never imported directly by
+ * most components). `Spacing`, `Radius`, `Elevation`, and `fontFamily()` ARE imported directly
+ * — used throughout `src/ui/` (the reusable component primitives) and `src/features/`.
+ * `CategoryPalette` is used only by `src/domain/analytics.ts`'s `resolveCategoryColor` and the
+ * Analytics category-breakdown chart — nowhere else, on purpose (see below).
+ *
+ * IMPORTANT
+ * ---------
+ * - This app currently ships exactly one visual theme (dark) — there's no light mode yet.
+ *   `Colors.light` is literally set equal to `Colors.dark` (not a separate palette) purely so
+ *   any code that indexes `Colors[scheme]` keeps working regardless of what `useColorScheme()`
+ *   returns, without every such lookup needing a special case for "there's actually only one
+ *   theme right now."
+ * - `CategoryPalette`'s nine colors are a deliberate, narrow exception to "everything is
+ *   grayscale/monochrome": they're used ONLY in the Analytics "Where it went" category
+ *   breakdown chart, and nowhere else — never on a card, chip, icon, or any other UI element.
+ *   If you're tempted to reuse one of these hues somewhere else in the UI, that would go
+ *   against a deliberate design decision.
+ * - Prefer the named `Spacing` scale (`Spacing.three`, etc.) over raw pixel numbers when
+ *   building new UI, so spacing stays consistent with the rest of the app.
  */
 
 import { Platform } from 'react-native';

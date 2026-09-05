@@ -1,8 +1,17 @@
 /**
- * Review Queue — SPEC-UI-UX.md §6.3, SPEC-implementation.md §30.5. F11.
+ * FILE PURPOSE
+ * ------------
+ * The full list of pending SMS-detected suggestions awaiting the user's confirmation or
+ * dismissal — the "inbox" for automatic transaction detection. Reached from Home's action strip
+ * ("N to review") and from a notification tap. A root-relative route (flat under `src/app/`,
+ * not nested under `(tabs)/`) since it's a pushed detail screen, not a tab destination.
  *
- * Root-relative navigation (this file lives directly under `src/app/`, not `(tabs)/`) since
- * the full route tree isn't built yet — see `SPEC/traceability.md`.
+ * WHERE IT FITS
+ * -------------
+ * Reads `usePendingSuggestions` (`src/db/repositories/suggestions.ts`) for the list, and calls
+ * the exact same `handleSave`/`handleDiscard` (`src/services/notifications/respond.ts`) that a
+ * notification's action buttons use — so responding to a suggestion here behaves identically to
+ * responding from the notification itself.
  *
  * Permission check (F8.5 / CR-5): used to be its own inline `getSmsPermissions` +
  * `AppState`-subscription copy, predating the shared `usePermissionStatus` hook Home (F6.5)

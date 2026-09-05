@@ -1,6 +1,30 @@
 /**
- * settingsRepo — SPEC-implementation.md §21.6 / §19.5. A tiny typed KV over `app_setting`.
- * Values are JSON-encoded. Sync reads are available to startup code and headless tasks.
+ * FILE PURPOSE
+ * ------------
+ * A tiny generic key-value store on top of the `appSettings` table, for small app-wide flags
+ * that don't need their own dedicated table — "has onboarding finished," "did the user dismiss
+ * this banner," "is crash reporting turned on," and so on. Every value is JSON-encoded before
+ * storage, so a setting can hold a boolean, number, string, or small object.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `getSetting`/`setSetting` are plain synchronous reads/writes — usable from startup code and
+ * the headless background task, not just React components. `useSetting` is the live-updating
+ * hook version for a screen that needs to re-render when a setting changes.
+ *
+ * USED BY
+ * -------
+ * `src/db/migration-gate.tsx` (`crashReportingEnabled`, read once at startup),
+ * `src/features/onboarding/*` (`onboardingDone`), `src/ui/permission-banner.tsx`
+ * (dismiss timestamps), `src/stores/analytics-period.ts` (remembers the last period mode).
+ *
+ * IMPORTANT
+ * ---------
+ * `SettingKey` is a list of the keys the app currently knows about, purely for editor
+ * autocomplete and to make the intent obvious at each call site — it's a soft suggestion, not a
+ * hard constraint. `getSetting`/`setSetting`/`useSetting` all also accept an arbitrary string,
+ * so nothing stops a new key being introduced elsewhere; if you add one, consider adding it to
+ * this union too so it shows up for the next person.
  */
 
 import { eq } from 'drizzle-orm';
@@ -29,8 +53,6 @@ export function getSetting<T>(key: SettingKey | string, fallback: T): T {
     return fallback;
   }
 }
-
-export const getSettingSync = getSetting;
 
 export function setSetting(key: SettingKey | string, value: unknown): void {
   const now = Date.now();

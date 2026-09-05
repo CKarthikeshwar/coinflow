@@ -1,7 +1,12 @@
 /**
- * Analytics — SPEC-UI-UX.md §6.10, SPEC-implementation.md §30.12. F9. Period control (Month/
- * Week + stepper) → "This month" balance arc → Mean/Median tiles → "Where it went" (category
- * donut + list) → "Day by day" (daily chart) → Biggest expenses.
+ * FILE PURPOSE
+ * ------------
+ * The Analytics tab — assembles all the spending-insight components into one scrollable screen:
+ * period control (Month/Week + stepper) → balance arc → Mean/Median tiles → "Where it went"
+ * (category donut + list) → "Day by day" (daily chart) → Biggest expenses. This screen itself
+ * mostly wires together the `db/repositories/analytics.ts` hooks and the presentational
+ * components in `src/features/analytics/` — the actual number-crunching lives in those two
+ * places, not here.
  *
  * Mode hydration: `useAnalyticsPeriod` starts on the current month always (its own header
  * explains why — reading the persisted mode at store-creation time would run before

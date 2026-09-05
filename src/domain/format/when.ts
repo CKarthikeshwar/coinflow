@@ -1,5 +1,28 @@
 /**
- * Relative/absolute time formatter — SPEC-implementation.md §27.2. Pure TS aside from `date-fns`.
+ * FILE PURPOSE
+ * ------------
+ * Turns a raw timestamp into the human-friendly text shown on screen: "just now", "3h ago",
+ * "Yesterday", a day-group header like "Wed, 3 Sep", or a month label like "September".
+ *
+ * WHERE IT FITS
+ * -------------
+ * Sibling to `domain/format/money.ts` — same idea, but for dates/times instead of amounts.
+ * Anywhere a screen needs to show "when did this happen" in a friendly way, it calls one of
+ * these instead of formatting a `Date` by hand, so the whole app describes time consistently.
+ *
+ * USED BY
+ * -------
+ * Transaction rows/details (`formatWhen`), the Transactions list's day-group headers
+ * (`formatDayHeader`), and Home's top bar (`formatMonthLabel`).
+ *
+ * IMPORTANT
+ * ---------
+ * Every function here takes `now`/`ts` as a parameter with a `Date.now()` default, rather than
+ * calling `Date.now()` directly inside a component. That's deliberate: a lint rule in this
+ * project flags a bare `Date.now()` call written inline in a component (because it makes the
+ * component's render output depend on the wall clock, not just its props/state — a "render
+ * purity" problem). Hiding the `Date.now()` call behind a default parameter of an imported pure
+ * function like this one satisfies that rule while still being trivial to call.
  */
 
 import { format, isSameYear, isToday, isYesterday } from 'date-fns';

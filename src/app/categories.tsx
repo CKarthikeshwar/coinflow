@@ -1,14 +1,22 @@
 /**
- * Categories — SPEC-UI-UX.md §6.11, SPEC-implementation.md §29.4. F6.
+ * FILE PURPOSE
+ * ------------
+ * Manage all categories: reorder them (drag), rename/change icon (opens the category editor
+ * sheet), and delete a custom one (reassigning its transactions to Uncategorized first — see
+ * `db/repositories/categories.ts`'s `deleteCategory`).
  *
- * Root-relative navigation (flat under `src/app/`, not `(tabs)/`) since the full route tree
- * isn't built yet — same pattern as `review-queue.tsx` / `transactions.tsx`. Reached today only
- * via the Category Picker sheet's "Manage categories" link — the spec's other entry point,
- * Settings › Categories, doesn't exist yet (Settings itself isn't built).
+ * WHERE IT FITS
+ * -------------
+ * Reached two ways: from the Settings tab's "Categories" row (`href="/categories"`), and from
+ * the Category Picker sheet's "Manage categories →" link
+ * (`src/features/categories/category-picker-sheet.tsx`). A root-relative route (flat under
+ * `src/app/`, not nested under `(tabs)/`) since it's a pushed detail screen, not a tab
+ * destination — same pattern as `account-rules.tsx`/`review-queue.tsx`.
  *
- * Simplification vs. spec (documented, not silent): row delete is a direct tap on a trash icon,
- * not a swipe gesture — same "tap not swipe" simplification already used for Review Queue's
- * dismiss and the transaction list's delete.
+ * IMPORTANT
+ * ---------
+ * Row delete is a direct tap on a trash icon, not a swipe gesture — same "tap not swipe"
+ * simplification already used for Review Queue's dismiss and the transaction list's delete.
  */
 
 import { router } from 'expo-router';

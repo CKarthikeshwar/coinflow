@@ -1,6 +1,8 @@
 /**
- * `NumericKeypad` — SPEC-UI-UX.md §3.6 / SPEC-implementation.md §29.4. 3×4, hairline grid,
- * tabular, amount entry only.
+ * The custom on-screen number pad used for amount entry (not the device's system keyboard) —
+ * purely a "which key was pressed" reporter via `onKey`; it holds no state of its own. The
+ * caller (`transaction-sheet.tsx`) wires `onKey` to `useKeypad`'s `press()`
+ * (`src/stores/keypad.ts`), which is what actually turns keypresses into an amount.
  */
 
 import { Pressable, StyleSheet, View } from 'react-native';

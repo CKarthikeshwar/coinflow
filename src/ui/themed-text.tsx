@@ -1,10 +1,18 @@
 /**
- * Base text primitive (SPEC-implementation.md §29.3). `type` picks a §3.2 role that
- * fixes family + size + weight + tracking + tabular figures. Build every screen from
- * this, not bare `<Text>`. `themeColor` overrides the role's default colour.
+ * FILE PURPOSE
+ * ------------
+ * The base text component every screen in the app should use instead of React Native's plain
+ * `<Text>`. Instead of setting font/size/weight/color by hand at every call site, you pick a
+ * named `type` (a design "role" like `'title'`, `'body'`, `'caption'`) and this component looks
+ * up the exact font family, size, weight, letter-spacing, and default color for that role from
+ * the `ROLES` table below — which is what keeps typography consistent across the whole app.
  *
- * Tracking in §3.2 is given in `em`; RN `letterSpacing` is px, so each role stores the
- * px value computed at its own size.
+ * WHERE IT FITS
+ * -------------
+ * Used throughout `src/ui/`, `src/features/`, and `src/app/` — this and `themed-view.tsx` are
+ * the two most widely-used building blocks in the entire UI layer. `themeColor` is an escape
+ * hatch to override just the color for one specific case, without losing the role's
+ * type/size/weight — e.g. reusing the `'body'` role's sizing but in a warning color.
  */
 
 import { StyleSheet, Text, type TextProps } from 'react-native';

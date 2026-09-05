@@ -1,7 +1,25 @@
 /**
- * categoryRepo — SPEC-implementation.md §21.2. Delete is immediate (no soft-delete):
- * reassign the category's transactions to Uncategorized (`categoryId = NULL`) then delete,
- * in one transaction; the reassigned count feeds the confirm dialog (§6.11 / IMP-018).
+ * FILE PURPOSE
+ * ------------
+ * The `categoryRepo` — every operation on the `categories` table: list, create, rename/change
+ * icon, reorder, and delete. Also owns the two custom error types the UI catches to show a
+ * friendly message ("a category with that name already exists," "this category is protected").
+ *
+ * WHERE IT FITS
+ * -------------
+ * Used by `src/app/categories.tsx` (the categories management screen — reorder, delete),
+ * `src/features/categories/category-editor-sheet.tsx` (create/rename), and
+ * `src/features/categories/category-picker-sheet.tsx` (the picker shown from Add/Confirm).
+ *
+ * IMPORTANT
+ * ---------
+ * Unlike transactions, deleting a category is immediate — there's no soft-delete/Undo for
+ * categories. Because a category can still have transactions pointing at it, `deleteCategory`
+ * first reassigns every transaction that used it to Uncategorized (`categoryId = NULL`), then
+ * deletes the category row, both inside one database transaction so the two changes can't get
+ * out of sync. The reassigned count is returned so the UI can tell the user "N transactions
+ * moved to Uncategorized" before they confirm. The built-in "Uncategorized" and "Other"
+ * categories are `isProtected` and `deleteCategory` refuses to delete them.
  */
 
 import { asc, eq, sql } from 'drizzle-orm';
@@ -37,8 +55,6 @@ export function listCategories(): Category[] {
 export function getCategoryMap(): Map<string, Category> {
   return new Map(listCategories().map((c) => [c.id, c]));
 }
-
-export const getCategoryMapSync = getCategoryMap;
 
 function nameTaken(name: string, exceptId?: string): boolean {
   const row = db

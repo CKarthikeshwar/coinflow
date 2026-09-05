@@ -1,10 +1,20 @@
 /**
- * `RootNavigator` — SPEC-implementation.md §28.1 (F12). First launch (no `onboardingDone` row
- * yet, or explicitly `false`) shows only `(onboarding)`; later launches — and the moment
+ * FILE PURPOSE
+ * ------------
+ * The actual expo-router `<Stack>` for the whole app — decides which set of screens is even
+ * reachable: only onboarding, or the full app (tabs + all the pushed screens like Transaction
+ * Details, Categories, Settings). This is the top-level "which mode is the app in" switch.
+ *
+ * WHERE IT FITS
+ * -------------
+ * Mounted once by `src/app/_layout.tsx`, inside `<MigrationGate>` (so it never runs before the
+ * database is ready). First launch (no `onboardingDone` row yet, or explicitly `false`) shows
+ * only the `(onboarding)` screens; later launches — and the moment
  * `(onboarding)/category-review.tsx`'s Done handler writes the setting — show the normal app
- * (UI-062). Read live via `useSetting`, not a one-time snapshot, so the gate flips the instant
- * that write happens (that screen also does an explicit `router.replace('/')` itself, §30.3, so
- * this is the robustness path, not the only way the transition happens).
+ * (tabs, review queue, transaction details, categories, settings, etc). Read live via
+ * `useSetting`, not a one-time snapshot, so the gate flips the instant that write happens (that
+ * screen also does an explicit `router.replace('/')` itself, so this is the robustness path,
+ * not the only way the transition happens).
  *
  * Uses `<Stack.Protected guard={...}>` (SDK 57), **not** a conditional `<Redirect>` swapped in
  * for the `<Stack>` itself. An earlier version of this file did exactly that — return either

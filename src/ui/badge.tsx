@@ -1,6 +1,7 @@
 /**
- * `Badge` — SPEC-UI-UX.md §3.6 / SPEC-implementation.md §29.4. Pill, `surface3`/`text2`,
- * tabular count via `formatCount` (§27.1).
+ * A small pill showing a count (e.g. how many pending suggestions on the Review Queue tab).
+ * Formats the number through `formatCount` (`src/domain/format/money.ts`), which caps display
+ * at "99+" rather than letting a badge grow unbounded for a large count.
  */
 
 import { StyleSheet, View } from 'react-native';

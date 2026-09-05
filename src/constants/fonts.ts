@@ -1,8 +1,16 @@
 /**
- * Bundled fonts (SPEC-UI-UX.md §3.2). Manrope 300/400/500/600/700 + Geist 400/500/600/700.
- * `@expo-google-fonts/*` ships the TTFs; `useAppFonts()` registers one family name per
- * weight, matching the `fontFamily()` map in `theme.ts`. The root layout blocks first
- * paint until this resolves so text never flashes in the system font.
+ * FILE PURPOSE
+ * ------------
+ * Loads the app's two custom fonts (Manrope for headings/figures, Geist for everything else)
+ * before the app renders. `@expo-google-fonts/*` ships the actual font files; this just
+ * registers one loadable "family name" per weight (e.g. `Manrope_600SemiBold`), matching the
+ * names `fontFamily()` in `src/constants/theme.ts` expects to find.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `useAppFonts()` is called once, in `src/app/_layout.tsx`, and the root layout deliberately
+ * renders nothing (`return null`) until it resolves — that's what prevents text from
+ * flashing in the plain system font for a moment before the real fonts are ready.
  */
 
 import {

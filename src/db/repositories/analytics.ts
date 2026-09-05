@@ -1,9 +1,35 @@
 /**
- * analyticsRepo — SPEC-implementation.md §21.5 / §26. Live aggregates over `transaction`.
- * Home's slice (F6.5) — all-time running balance, this-period Spent/Income, MoM deltas, the
- * all-time uncategorized count — plus F9's Analytics screen slice: by-category breakdown,
- * largest expenses, the daily series (+ mean/median, this period and previous), and the
- * period-scoped uncategorized count.
+ * FILE PURPOSE
+ * ------------
+ * All the aggregate/summary numbers shown on the Home screen and the Analytics tab: running
+ * balance, this-period spend/income, month-over-month percent change, spend broken down by
+ * category, the biggest expenses, and a day-by-day spend chart with mean/median. Every function
+ * here is read-only — it computes a live-updating summary from the `transactions` table, it
+ * never writes to it.
+ *
+ * WHERE IT FITS
+ * -------------
+ * This is the SQL half of the Analytics feature; `src/domain/analytics.ts` is the pure-math
+ * half. The split exists because SQL aggregation (SUM, COUNT, GROUP BY) is efficient to do
+ * inside SQLite, but bucketing a result into "one entry per calendar day, including days with
+ * zero spend" and computing percentiles/medians is easier and more testable in plain JS — so
+ * this file fetches rows with SQL, then hands them to `domain/analytics.ts`'s pure functions to
+ * finish the calculation.
+ *
+ * USED BY
+ * -------
+ * `src/app/(tabs)/index.tsx` (Home: `useRunningBalance`, `usePeriodSummary`, `useMoMDeltas`,
+ * `useUncategorizedCount`) and `src/app/(tabs)/analytics.tsx` (Analytics tab: all of the above
+ * plus `useCategoryBreakdown`, `useLargestExpenses`, `useDailySeries`).
+ *
+ * IMPORTANT
+ * ---------
+ * Every hook here uses `useLiveQuery` (`src/hooks/use-live-query.ts`), so these numbers update
+ * automatically the instant a transaction is added/edited/deleted anywhere in the app —
+ * including from the background SMS task — without the screen needing to manually refetch.
+ * The running balance is always computed live from every transaction ever recorded; it is
+ * NEVER read from a bank SMS's own "Available balance" text, since that figure isn't
+ * trustworthy as a running total (it can include transactions this app never saw).
  */
 
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';

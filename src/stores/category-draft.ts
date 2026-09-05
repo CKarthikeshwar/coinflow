@@ -1,10 +1,12 @@
 /**
- * The Create/Edit Category working copy (SPEC-implementation.md §22.2, mirrors
- * `add-sheet-draft.ts`'s shape). Ephemeral — never persisted, cleared on sheet close.
- * `dirty` drives the discard-confirm (V-6) via `SheetHost`.
- *
- * `dirty` is a real diff against the seeded values (`_initial`), not a latch — see
- * `add-sheet-draft.ts`'s header for why.
+ * FILE PURPOSE
+ * ------------
+ * Working copy for the Create/Edit Category sheet
+ * (`src/features/categories/category-editor-sheet.tsx`, reached from Settings › Categories).
+ * `categoryId: null` means the sheet is creating a brand-new category; a non-null id means it's
+ * editing an existing one. Same ephemeral-draft-with-dirty-tracking pattern as
+ * `add-sheet-draft.ts` — see that file's header for why `dirty` is computed as a real diff
+ * against the seeded values rather than a one-way flag.
  */
 
 import { create } from 'zustand';

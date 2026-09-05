@@ -1,8 +1,13 @@
 /**
- * Home — SPEC-UI-UX.md §6.2, SPEC-implementation.md §30.4. F6.5 step 3: the real screen —
- * balance hero (D2/§26.2), Income/Spending tiles with MoM deltas (§26.1/§26.3), the action
- * strip (review + uncategorized, F11/F7), Recent activity (F5's card, ≤8 rows), and the
- * permission banner (V-9) — replacing step 1's "coming soon" stub.
+ * FILE PURPOSE
+ * ------------
+ * The Home tab — the app's default landing screen. Shows the running balance, this month's
+ * income/spending with month-over-month change, quick links to the Review Queue and
+ * uncategorized transactions, a short recent-activity list, and a banner nudging the user to
+ * enable SMS/notification permissions if they're off. Everything on this screen is read-only
+ * (aside from the permission-request/dismiss actions) — all the actual data comes from the
+ * `db/repositories/analytics.ts` and `db/repositories/transactions.ts` live-query hooks, so it
+ * updates automatically the instant a transaction changes anywhere in the app.
  *
  * Retry mechanism: `useLiveQuery` has no manual refetch, so **Try again** remounts the
  * data-reading subtree via a `key` bump rather than threading a refetch call through every

@@ -54,17 +54,24 @@ relevant SPEC doc and ask rather than guessing in code.
 
 - **Routing**: `expo-router` with the app entry at `expo-router/entry` (`package.json` `main`).
   Routes live under `src/app/` (custom location — the default is `app/`). `src/app/_layout.tsx` is
-  the root layout: wraps everything in `ThemeProvider`, renders `AnimatedSplashOverlay`, then
-  `AppTabs`.
+  the root layout: `ThemeProvider` → `RootErrorBoundary` → `MigrationGate` (blocks first paint
+  until the database is migrated/seeded) → `AppBackground` wrapping `RootNavigator` (the actual
+  expo-router `<Stack>`/tabs) plus the always-mounted `SheetHost`/`UndoHost`/`ToastHost`/
+  `NotificationRouter`, with `AnimatedSplashOverlay` as a sibling that covers everything until
+  the native splash hands off.
 - **Path aliases** (`tsconfig.json`): `@/*` → `src/*`, `@/assets/*` → `assets/*`. Use these, not
   relative `../../` paths.
 - **Platform-specific files**: `.web.tsx` / `.web.ts` siblings override the native file on web.
-  Examples: `app-tabs.tsx` (native `NativeTabs` from `expo-router/unstable-native-tabs`) vs
-  `app-tabs.web.tsx` (custom tab bar via `expo-router/ui`); `use-color-scheme.ts` vs
-  `use-color-scheme.web.ts` (web variant defers to `'light'` until hydration for static rendering);
-  `animated-icon.tsx` vs `animated-icon.web.tsx`. When you add cross-platform behavior, follow this
-  split rather than branching on `Platform.OS` everywhere (though `Platform.select` / `Platform.OS`
-  is used for smaller divergences).
+  Examples: `use-color-scheme.ts` vs `use-color-scheme.web.ts` (V1 is dark-only, so both variants
+  currently just return `'dark'` unconditionally — the split is kept so there's one place to
+  introduce a real light/dark distinction per-platform if that ever ships);
+  `animated-icon.tsx` vs `animated-icon.web.tsx`. Most
+  `src/app/` screens follow this same split (e.g. `data.tsx` / `data.web.tsx`). The tab bar itself
+  is `src/features/app-shell/tab-bar.tsx` (`CoinFlowTabBar`), a custom component used on every
+  platform rather than `NativeTabs` — the raised centre "Add" FAB notch isn't expressible with
+  `expo-router/unstable-native-tabs`. When you add cross-platform behavior, follow the `.web`
+  sibling split rather than branching on `Platform.OS` everywhere (though `Platform.select` /
+  `Platform.OS` is used for smaller divergences).
 - **Web** ships as static output (`app.json` → `web.output: "static"`) via `react-native-web`.
 
 ### Theming

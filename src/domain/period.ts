@@ -1,9 +1,38 @@
 /**
- * Local calendar period math (SPEC-implementation.md §27.3 / P-11). Built narrow for F6.5's
- * Home tiles (month-only); F9's Analytics screen is the "grow into it" this file's original
- * header predicted — week mode, stepping, labels, and the day-bucketing helpers that used to be
- * a private `localDayStart` copy in both `transactions.tsx` and `transactions.ts`'s repo (each
- * had an identical inline function with a comment pointing at this exact consolidation).
+ * FILE PURPOSE
+ * ------------
+ * All "what calendar period am I looking at, and what day does this timestamp fall in" logic
+ * lives here: the current month or week as a `{ start, end, label }` triple, stepping to the
+ * next/previous period, and converting a raw timestamp into "which local day is this."
+ *
+ * WHERE IT FITS
+ * -------------
+ * Both Home (month totals) and Analytics (month or week, steppable) are built around a `Period`
+ * object from this file. Anywhere the app needs to ask a database query "give me the rows
+ * between these two timestamps," that range comes from here — this file doesn't touch the
+ * database itself, it just does date math.
+ *
+ * USED BY
+ * -------
+ * - `src/stores/analytics-period.ts` — holds the *currently selected* period (month/week +
+ *   which one) in app state, built with the functions here.
+ * - `src/features/analytics/period-control.tsx` — the "‹ September 2026 ›" stepper UI calls
+ *   `stepPeriod`/`previousPeriod` when you tap the arrows.
+ * - `src/db/repositories/analytics.ts` and `src/db/repositories/transactions.ts` — use
+ *   `startMs`/`endMsExclusive` from a `Period` as the date-range bounds in their SQL queries,
+ *   and use `startOfLocalDay`/`dayIndex` to bucket rows by day.
+ * - `src/domain/analytics.ts` — uses the local-day helpers to build the daily spend chart.
+ *
+ * IMPORTANT
+ * ---------
+ * All of this works in the *device's local timezone*, not UTC — "today" means today where the
+ * phone is set, so a transaction just after local midnight counts toward the new day even
+ * though the UTC day hasn't changed yet. `dayIndex` assumes no DST (fine for India, the only
+ * region this app currently targets); it would need adjusting before targeting a DST timezone.
+ * Previously, both `transactions.tsx` (screen) and `transactions.ts` (repository) each had
+ * their own private copy of the "which local day does this timestamp fall in" logic — they were
+ * consolidated into the single `startOfLocalDay`/`dayIndex` helpers here so day-bucketing
+ * behaves identically everywhere it's used.
  */
 
 import { addDays, addMonths, addWeeks, format, isSameYear, startOfDay, startOfISOWeek, startOfMonth } from 'date-fns';

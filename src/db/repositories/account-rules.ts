@@ -1,7 +1,38 @@
 /**
- * accountRuleRepo — SPEC-implementation.md §21.3 / §19.3 (F8). One rule per normalized
- * account key; last write wins. `upsertFromTransaction` runs after every insert/edit with
- * a non-empty account — from the UI and from the headless notification Save (no fork).
+ * FILE PURPOSE
+ * ------------
+ * The `accountRuleRepo` — this is the app's "memory" of what you usually do for a given bank
+ * account/merchant. Every time you save a transaction with an account attached, this records
+ * (or updates) the category/note/payment method you picked, keyed by the account's normalized
+ * form (see `src/domain/normalize.ts`). Next time a transaction comes in from that same
+ * account, that memory is what lets the app pre-fill the category instead of leaving it blank.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `upsertFromTransaction` is called after EVERY transaction insert/edit that has a non-empty
+ * account — both from the UI (Add/Confirm/Edit sheets) and from the headless "Save" action a
+ * user can tap directly on a notification without opening the app. Both paths call the exact
+ * same function, so the learned rule updates identically either way, and there's no separate
+ * "notification version" of this logic to keep in sync.
+ *
+ * USED BY
+ * -------
+ * - `src/features/transactions/write-confirmed-transaction.ts` — writes the rule after saving.
+ * - `src/services/notifications/respond.ts` — writes the rule after a notification "Save".
+ * - `src/domain/categorize.ts` — reads a rule (via `getAccountRule`) to decide whether an
+ *   incoming SMS-detected transaction is from a "known" account (safe to one-tap-save) or a
+ *   "new" one (needs manual review).
+ * - `src/features/transactions/transaction-sheet.tsx` — reads a rule to pre-fill the sheet, and
+ *   `searchByPrefix` powers the account-name autocomplete while typing.
+ *
+ * IMPORTANT
+ * ---------
+ * There's exactly one rule per normalized account key — "last write wins." If you save a
+ * transaction for an account with a different category than last time, the rule updates to the
+ * new category; there's no history of past choices, only the most recent one. The one
+ * exception: if the new save is left Uncategorized, the previously learned category is kept
+ * rather than being overwritten with "no category" — see the `categoryIsUncategorized` handling
+ * in `upsertFromTransaction`.
  */
 
 import { desc, eq, like } from 'drizzle-orm';
@@ -65,15 +96,11 @@ export function upsertFromTransaction(src: RuleSource): void {
     .run();
 }
 
-export const upsertFromTransactionSync = upsertFromTransaction;
-
 export function getAccountRule(normalizedKey: string): AccountRule | null {
   return (
     db.select().from(accountRules).where(eq(accountRules.normalizedKey, normalizedKey)).get() ?? null
   );
 }
-
-export const getAccountRuleSync = getAccountRule;
 
 export function useAccountRules() {
   return useLiveQuery(db.select().from(accountRules).orderBy(desc(accountRules.hitCount)));

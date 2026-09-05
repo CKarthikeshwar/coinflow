@@ -1,12 +1,49 @@
 /**
- * transactionRepo — SPEC-implementation.md §21.1 / §19.1. Every write path here is shared
- * verbatim between the UI and the headless notification Save (§17.0 rule 2) — the repo is
- * synchronous because the `expo-sqlite` driver is (§20.1).
+ * FILE PURPOSE
+ * ------------
+ * The `transactionRepo` — every operation the app performs on the `transactions` table lives
+ * here: create, edit, soft-delete, restore, permanently purge, look up one, look up a live
+ * list with filters/search, and check for a duplicate. This is the ONLY file in the app that
+ * writes SQL against the `transactions` table — no screen or component queries it directly.
  *
- * Derived on write: `type` from `direction` (debit→expense, credit→income; caller may pass
- * a reserved type explicitly — IMP-012), `normalizedAccountKey` from `account` (§24),
- * `searchText` for the D27 search fallback. `categoryId` is forced null when `type` is
- * income (IMP-011).
+ * WHERE IT FITS
+ * -------------
+ * Sits directly on top of `src/db/schema.ts` (the table definition) and `src/db/client.ts`
+ * (the shared connection). Screens and features call these functions instead of writing their
+ * own SQL — that's what "repository layer" means here: one trusted place per table, so every
+ * caller gets the exact same derived-field logic (see below) instead of each screen
+ * reimplementing it slightly differently.
+ *
+ * USED BY
+ * -------
+ * `src/features/transactions/write-confirmed-transaction.ts` (Add/Confirm), `src/app/transaction/[id].tsx`
+ * (Details/Edit/Delete), `src/app/(tabs)/transactions.tsx` (the ledger list + search),
+ * `src/features/transactions/undo-host.tsx` (Undo), `src/services/notifications/respond.ts`
+ * (the headless "Save from notification" path), and several Analytics/Home queries.
+ *
+ * DATA FLOW
+ * ---------
+ * A write always goes through `insertTransaction`/`updateTransaction`, which derive a few
+ * fields automatically rather than trusting the caller to supply them correctly (see
+ * IMPORTANT below), then a live-query hook (`useTransactionList`, `useTransaction`,
+ * `useRecentTransactions`) automatically re-renders any screen reading that data — because
+ * `src/db/client.ts` has `enableChangeListener` on, ANY write from ANYWHERE (including the
+ * background SMS task) makes every open live query refresh, not just the screen that wrote it.
+ *
+ * IMPORTANT
+ * ---------
+ * - Every write path here (`insertTransaction`, `updateTransaction`, etc.) is called
+ *   identically from the UI and from the headless background task that runs when the user taps
+ *   "Save" on a notification without opening the app — this only works because `expo-sqlite`'s
+ *   synchronous driver means there's no separate async/sync version to keep in sync.
+ * - On every insert/update, three fields are derived automatically rather than trusted from
+ *   the caller: `type` is derived from `direction` (debit → expense, credit → income, unless the
+ *   caller explicitly passes a reserved type), `normalizedAccountKey` is computed from `account`
+ *   via `src/domain/normalize.ts` (this is the key `accountRules` matching relies on), and
+ *   `searchText` is a lower-cased combination of note/description/account for the search
+ *   fallback when FTS5 isn't available (`src/db/fts.ts`).
+ * - `categoryId` is always forced to `null` when `type` is `'income'` — income transactions are
+ *   never categorized in this app (a deliberate product decision, not a bug).
  */
 
 import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
@@ -97,8 +134,6 @@ export function insertTransaction(input: InsertTransactionInput): Transaction {
   return row;
 }
 
-export const insertTransactionSync = insertTransaction;
-
 export type TransactionPatch = Partial<
   Pick<
     InsertTransactionInput,
@@ -157,13 +192,9 @@ export function purgeDeleted(before: number): void {
     .run();
 }
 
-export const purgeDeletedSync = purgeDeleted;
-
 export function getTransaction(id: string): Transaction | null {
   return db.select().from(transactions).where(eq(transactions.id, id)).get() ?? null;
 }
-
-export const getTransactionSync = getTransaction;
 
 export function useTransaction(id: string) {
   return useLiveQuery(db.select().from(transactions).where(eq(transactions.id, id)), [id]);
@@ -194,6 +225,11 @@ export function useTransactionList(query: TransactionListQuery) {
   if (from != null) conds.push(sql`${transactions.occurredAt} >= ${from}`);
   if (to != null) conds.push(sql`${transactions.occurredAt} <= ${to}`);
 
+  // The category filter chip row lets the user select specific categories AND a special
+  // "Uncategorized" chip at the same time — this builds the matching SQL condition for
+  // whichever combination is active. "Uncategorized" isn't a real category row; it means
+  // "expense transactions with no categoryId" (income is always categoryId=null too, by the
+  // rule above, but that doesn't count as "Uncategorized" for filtering purposes here).
   const categoryCond =
     categoryIds?.length && uncategorized
       ? or(inArray(transactions.categoryId, categoryIds), and(isNull(transactions.categoryId), eq(transactions.type, 'expense')))
@@ -251,5 +287,3 @@ export function hasDedupeKey(key: string): boolean {
   const inSugg = db.select({ id: suggestions.id }).from(suggestions).where(eq(suggestions.dedupeKey, key)).get();
   return !!inSugg;
 }
-
-export const hasDedupeKeySync = hasDedupeKey;

@@ -30,6 +30,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# IDE
+.idea/
+
 # local env files
 .env*.local
 
@@ -44,6 +47,9 @@ example
 # generated native folders
 /ios
 /android
+
+# native module build output (nested — the /android rule above doesn't reach this one)
+modules/coinflow-sms/android/build/
 
 # on-device bug-report videos/screenshots (large binaries, not project source)
 /app-references/

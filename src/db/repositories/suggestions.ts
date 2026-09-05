@@ -1,8 +1,40 @@
 /**
- * suggestionRepo — SPEC-implementation.md §21.4 / §19.4. Dismiss is a hard DELETE (D26);
- * `confirmed` rows linger briefly for stale-notification routing (§10) and are purged by
- * §20.6. `insertIfNew` + `confirmSuggestion` + `dismissSuggestion` run from the headless
- * SMS pipeline and share their implementation with the UI.
+ * FILE PURPOSE
+ * ------------
+ * The `suggestionRepo` — manages the `suggestions` table, which holds transactions the app
+ * *detected* from an SMS but the user hasn't confirmed yet. A suggestion is a "draft"; it only
+ * becomes a real `transactions` row once the user confirms it.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `insertIfNew` is called by `src/services/tasks/sms-ingest.ts` — the headless background task
+ * that runs when a new SMS arrives — right after `parseSms` (`src/domain/parser/`) successfully
+ * reads a transaction out of the message. From there, a suggestion is either:
+ *   - confirmed (`confirmSuggestion`) when the user taps "Save" on the notification or in the
+ *     Review Queue — this runs in the SAME database transaction as the actual transaction
+ *     insert, so a suggestion is never left "confirmed" without a matching transaction, or
+ *     vice versa (see `src/services/notifications/respond.ts` and
+ *     `src/features/transactions/write-confirmed-transaction.ts`).
+ *   - dismissed (`dismissSuggestion`) when the user swipes it away or taps "Discard" — this is
+ *     a genuine, immediate DELETE, unlike a transaction's soft-delete.
+ *
+ * USED BY
+ * -------
+ * `src/services/tasks/sms-ingest.ts` (create), `src/app/review-queue.tsx` (list/dismiss),
+ * `src/services/notifications/respond.ts` (confirm/dismiss from a notification tap).
+ *
+ * IMPORTANT
+ * ---------
+ * - `insertIfNew` relies on a unique database index on `dedupeKey` (`uniq_sugg_dedupe` in
+ *   `schema.ts`) plus `ON CONFLICT DO NOTHING` to guarantee the exact same SMS can never create
+ *   two suggestions, even if the background task somehow runs twice for the same message.
+ * - A `confirmed` suggestion isn't deleted immediately — it's kept around briefly so a
+ *   notification the user taps late (after already confirming elsewhere, or on another device
+ *   in theory) can still be routed sensibly instead of pointing at nothing. It's cleaned up
+ *   later by `src/db/maintenance.ts`'s `purge()`.
+ * - Every function here is called identically from the UI and from the headless background
+ *   task — same reason as `transactions.ts`: the database driver is synchronous, so there's no
+ *   separate async path to keep in sync.
  */
 
 import { and, count, desc, eq, lt } from 'drizzle-orm';
@@ -61,13 +93,9 @@ export function insertIfNew(input: InsertSuggestionInput): { created: boolean; i
   return { created: true, id };
 }
 
-export const insertIfNewSync = insertIfNew;
-
 export function getSuggestion(id: string): Suggestion | null {
   return db.select().from(suggestions).where(eq(suggestions.id, id)).get() ?? null;
 }
-
-export const getSuggestionSync = getSuggestion;
 
 /** Called inside the same DB transaction as the transaction insert (§17.4b / §6.4). */
 export function confirmSuggestion(id: string, transactionId: string): void {
@@ -77,14 +105,10 @@ export function confirmSuggestion(id: string, transactionId: string): void {
     .run();
 }
 
-export const confirmSuggestionSync = confirmSuggestion;
-
 /** Hard DELETE (D26) — notification Discard + Review Queue swipe. */
 export function dismissSuggestion(id: string): void {
   db.delete(suggestions).where(eq(suggestions.id, id)).run();
 }
-
-export const dismissSuggestionSync = dismissSuggestion;
 
 export function dismissAllPending(): number {
   const res = db.delete(suggestions).where(eq(suggestions.status, 'pending')).run();
@@ -134,4 +158,3 @@ export function purgeConfirmed(before: number): void {
     .run();
 }
 
-export const purgeConfirmedSync = purgeConfirmed;

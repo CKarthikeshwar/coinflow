@@ -9,12 +9,27 @@ import android.util.Log
 import com.facebook.react.HeadlessJsTaskService
 
 /**
- * Manifest-registered receiver for `SMS_RECEIVED` (SPEC-implementation.md §17.1). Android
- * delivers this even when the app process is dead. `onReceive` has ~10 s: coalesce the
- * multipart PDUs, pull sender / body / timestamp, hand them to a bounded headless-JS task.
+ * FILE PURPOSE (step 1 of the SMS-detection pipeline)
+ * -----------------------------------------------------
+ * This is the very first code that runs when an SMS arrives on the device — a manifest-
+ * registered Android `BroadcastReceiver` for `SMS_RECEIVED`. Android delivers this broadcast
+ * even when the app process is completely dead (not just backgrounded), which is what makes
+ * "detect a transaction even when CoinFlow isn't open" possible at all.
  *
- * It never touches SQLite, `expo-notifications`, or the network, and never writes the body
- * to disk (P-9). A malformed broadcast must never crash the host app (§17.2 / §32 E1).
+ * WHERE IT FITS
+ * -------------
+ * `onReceive` has roughly 10 seconds of guaranteed run time: it coalesces the (possibly
+ * multipart) SMS PDUs into one message, pulls out the sender/body/timestamp, and hands them off
+ * to `CoinflowSmsHeadlessTaskService` (this same folder) to actually start the JS engine and
+ * run the real parsing logic. This class itself does none of the real work — no database, no
+ * notifications, no parsing — it's purely "catch the SMS and pass it along."
+ *
+ * IMPORTANT
+ * ---------
+ * It never touches SQLite, `expo-notifications`, or the network, and never writes the SMS body
+ * to disk — only in-memory, passed forward as an Android `Bundle`. A malformed or unexpected
+ * broadcast must never crash the host app, hence the broad try/catch that only logs the
+ * exception's class name (never its message, which could contain SMS content).
  */
 class SmsReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {

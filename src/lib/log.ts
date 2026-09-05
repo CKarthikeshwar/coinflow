@@ -1,15 +1,36 @@
 /**
- * `log` — SPEC-implementation.md §32.1. The one place `warn`/`error` are allowed to reach
- * Sentry from. `debug`/`info` are `__DEV__`-only; `warn`/`error` always hit the console in dev
- * and, in release, forward a redacted event to Sentry **only when crash reporting is armed**
- * (`src/services/crash`) — otherwise they're dropped, matching the "nothing transmits by
- * default" guarantee.
+ * FILE PURPOSE
+ * ------------
+ * The app's logging utility (`log.debug/info/warn/error`) — this is the ONLY sanctioned way for
+ * a `warn`/`error` call to potentially reach Sentry. It's also where the actual PII-scrubbing
+ * logic lives (`scrubText`/`redactError`), reused by `src/services/crash/index.ts` too.
  *
- * `redactError`/`scrubText` are the actual privacy boundary: everything that could reach
- * Sentry (log calls here, and `beforeSend`/`beforeBreadcrumb` in `src/services/crash`) is
- * required to pass through `scrubText`. Parser/SMS code must never put SMS body text into an
- * `Error` message — this only strips *patterns* (currency, long digit runs, VPAs, long
- * literals), not arbitrary free text.
+ * WHERE IT FITS
+ * -------------
+ * A handful of files call `log.warn`/`log.error` directly (mainly `src/db/migration-gate.tsx`
+ * and the settings/export flow) instead of Sentry directly, so this file is where the "should
+ * this actually leave the device" decision is centralized rather than scattered across callers.
+ *
+ * IMPORTANT — privacy behavior
+ * --------------------------------
+ * - `debug`/`info` only ever print to the console, and only in dev builds — they can never
+ *   reach Sentry, full stop.
+ * - `warn`/`error` always print to the console in dev, and in a release build, forward a
+ *   *redacted* version of the error to Sentry — but ONLY if crash reporting has been armed
+ *   (`src/services/crash`'s `armCrashReporting(true)` has run, meaning the user opted in). If
+ *   it hasn't, `forward()` does nothing at all — this matches the app-wide guarantee that
+ *   nothing transmits over the network unless the user explicitly turned crash reporting on.
+ * - `scrubText` is the actual privacy filter: it strips patterns that look like money (₹1,234),
+ *   VPAs (name@bank), or long digit runs (account/reference numbers) from any text before it
+ *   could ever reach Sentry, and truncates long strings as a further safety margin. This
+ *   strips *known dangerous patterns*, not arbitrary free text — which is exactly why the SMS
+ *   parser (`src/domain/parser/`) has its own hard rule to NEVER put raw SMS body text into an
+ *   `Error` object in the first place: this scrubber is a safety net, not something to rely on
+ *   as the only protection.
+ * - `_setCrashSink` exists purely to avoid a circular import: this file needs to call into
+ *   `src/services/crash` to actually send to Sentry, but `services/crash` also needs to import
+ *   from this file (for `scrubText`/`redactError`). Instead of importing each other directly,
+ *   `services/crash` calls `_setCrashSink` once at startup to hand this file a callback.
  */
 
 let armed = false;

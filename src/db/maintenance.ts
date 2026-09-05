@@ -1,7 +1,34 @@
 /**
- * Launch maintenance and whole-database operations (SPEC-implementation.md §20.4–§20.7,
- * §21.6). `runLaunchMaintenance` is what `<MigrationGate>` runs; `ensureMigrated` is the
- * shared guard every headless task calls before any read/write (§20.4).
+ * FILE PURPOSE
+ * ------------
+ * Whole-database housekeeping: running migrations, cleaning up old soft-deleted rows, and
+ * wiping everything for the "Clear all data" settings option.
+ *
+ * WHERE IT FITS
+ * -------------
+ * - `ensureMigrated` is called by `src/services/tasks/sms-ingest.ts` before it touches the
+ *   database — this guards against the rare case where a background SMS arrives before the app
+ *   has ever been opened (and therefore before the app's normal startup migration has run).
+ * - `purge` is called by `src/db/migration-gate.tsx` once at every app startup (see IMPORTANT
+ *   below) to hard-delete transactions that were soft-deleted more than a minute ago (the Undo
+ *   window is 5 seconds, so a minute is a safe margin) and old confirmed suggestions.
+ * - `clearAllData` is called by `src/app/data.tsx`'s "Clear all data" button (Settings → Data).
+ *
+ * DATA FLOW
+ * ---------
+ * `clearAllData` wipes `suggestions`, `transactions`, `accountRules`, and any custom
+ * categories, then re-seeds the default categories and runs SQLite's `VACUUM` to actually
+ * reclaim disk space — the net effect is the app returning to a fresh-install state, which
+ * `src/app/data.tsx` follows with a relaunch back into onboarding.
+ *
+ * IMPORTANT
+ * ---------
+ * `runLaunchMaintenance` below is NOT currently called anywhere in the app — despite what an
+ * earlier version of this comment said, `<MigrationGate>` (`src/db/migration-gate.tsx`) does
+ * NOT call it. Instead, `MigrationGate` calls `seedDatabase()`, `purge()`, and
+ * `isFtsAvailable()` directly, inline in its own effect, duplicating what this function does.
+ * This looks like dead code left over from a refactor — see the "things to investigate" note
+ * for this file.
  */
 
 import { and, eq, isNotNull, lt } from 'drizzle-orm';

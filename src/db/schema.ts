@@ -1,11 +1,56 @@
 /**
- * Drizzle schema — the database blueprint. Mirrors SPEC-implementation.md §19 exactly.
- * Conventions (§19.0): money is an integer count of paise, always > 0; timestamps are
- * integer Unix epoch ms UTC; ids are UUIDv4 text; enums are text with a TS-only guard;
- * booleans are integer 0/1; raw SMS is never a column (only sender + receivedAt survive).
+ * FILE PURPOSE
+ * ------------
+ * This is the database blueprint — every table CoinFlow has, and every column on each table.
+ * It's written using Drizzle ORM's schema syntax, which both (a) generates the actual SQLite
+ * table-creation SQL, and (b) gives every other file in the app fully-typed access to rows
+ * (e.g. `Transaction` below is a TypeScript type generated straight from this table definition,
+ * so if you add/rename a column here, TypeScript will flag every place in the app that needs
+ * updating).
  *
- * SQL table names are singular snake_case (matching the raw SQL in §19.6 / §26); the
- * exported table objects are plural camelCase.
+ * WHERE IT FITS
+ * -------------
+ * This is the lowest layer of the whole app — nothing in `src/db/`, `src/domain/`, or
+ * `src/features/` can exist without it. No screen or component ever imports this file directly
+ * to run a query, though: all reads/writes go through `src/db/repositories/*.ts` ("the only
+ * sanctioned way the app touches the database" — see that folder). This file only defines the
+ * shape of the data; the repositories define the operations on it.
+ *
+ * THE FIVE TABLES, IN PLAIN LANGUAGE
+ * -----------------------------------
+ * - `categories`   — the list of spending categories (Food, Travel, ...), plus any custom ones
+ *                    the user creates. `kind` distinguishes seeded ("default"), the single
+ *                    built-in "Uncategorized" ("system", `isProtected: true` so it can't be
+ *                    deleted), and user-created ("custom").
+ * - `transactions`  — the actual ledger: every confirmed expense/income. Each row optionally
+ *                    links to a `categories` row (`categoryId`). `source` says whether it was
+ *                    typed manually or came from an SMS. `deletedAt` is a *soft* delete (the row
+ *                    stays for a few seconds so the "Undo" snackbar can restore it — see D26 in
+ *                    the codebase's own change history) rather than deleting immediately.
+ * - `accountRules`  — the app's "memory" of what you usually do for a given bank
+ *                    account/merchant: which category, note, and payment method you picked last
+ *                    time. This is what makes SMS-detected transactions get a category
+ *                    auto-filled the second time you see the same account. See
+ *                    `src/domain/categorize.ts` and `src/db/repositories/account-rules.ts`.
+ * - `suggestions`   — a transaction the app *thinks* it detected from an SMS, but the user
+ *                    hasn't confirmed yet. Lives in the Review Queue / a notification until the
+ *                    user confirms it (at which point a real `transactions` row is created and
+ *                    `confirmedTransactionId` links back to it) or dismisses it (hard-deleted).
+ * - `appSettings`   — a generic key/value table for small app-wide settings (e.g. which
+ *                    analytics period mode was last selected) that don't deserve their own table.
+ *
+ * IMPORTANT CONVENTIONS (apply throughout the app, not just this file)
+ * ----------------------------------------------------------------------
+ * - Money is always an integer count of **paise** (never a fractional rupee number) — see
+ *   `src/domain/format/money.ts` for why.
+ * - Timestamps are integer Unix epoch milliseconds (UTC) — see `src/domain/period.ts` for how
+ *   these get converted to "local calendar day" for display/bucketing.
+ * - IDs are randomly generated UUIDv4 strings, not auto-incrementing integers.
+ * - The raw text of an SMS is *never* stored anywhere in the database — only `smsSender` and
+ *   `smsReceivedAt` survive from the original message, once it's been parsed. This is a
+ *   deliberate privacy decision, not an oversight.
+ * - SQL table names are singular ("transaction", "category"); the exported JS/TS objects you'll
+ *   actually import (`transactions`, `categories`) are plural, matching normal JS naming.
  */
 
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';

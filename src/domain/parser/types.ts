@@ -1,4 +1,18 @@
-/** SPEC-implementation.md §23 — pure types, no react-native / expo imports (§18.1). */
+/**
+ * FILE PURPOSE
+ * ------------
+ * The shared type definitions for the SMS parser (`RawSms` in, `ParseResult` out, plus the
+ * pieces in between). Kept in their own file, separate from the logic, so both `parse-sms.ts`
+ * and `ignore-rules.ts`/`extract.ts` can share one definition of "what a parsed SMS looks like"
+ * without any risk of circular imports between them.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `ParseResult` is the contract between the parser and the rest of the app: it's either
+ * `{ kind: 'ignored', reason }` or `{ kind: 'transaction', fields, parsedFlags, warnings }`.
+ * `src/services/tasks/sms-ingest.ts` is the only place outside `domain/parser/` that reads a
+ * `ParseResult` — it turns a `'transaction'` result into a `Suggestion` database row.
+ */
 
 import type { PaymentMethod } from '@/db/schema';
 

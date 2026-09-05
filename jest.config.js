@@ -1,7 +1,12 @@
-// Jest — see SPEC-implementation.md §34 (testing strategy).
-// The centrepiece is unit tests on `src/domain` (pure TS: SMS parser corpus,
-// normalization, analytics math, formatter, period math, undo). Component tests
-// (RNTL, the V-3 states) and Maestro E2E come with Phase 5 feature work.
+// FILE PURPOSE: configures Jest, the test runner `npm test` invokes. Built on the `jest-expo`
+// preset (which knows how to handle React Native's JSX/native-module quirks), with a few
+// project-specific fixes below for packages Jest wouldn't otherwise know how to load.
+//
+// The centrepiece of this project's test suite is unit tests on `src/domain` (pure TS: the SMS
+// parser corpus, account normalization, analytics math, money/date formatting, period math) —
+// see `collectCoverageFrom` below, which only tracks coverage for that folder. Component tests
+// (`@testing-library/react-native`, one `*.test.tsx` next to most screens/features) and the
+// Maestro end-to-end flow in `e2e/` cover the UI layer on top of that.
 
 /** @type {import('jest').Config} */
 module.exports = {

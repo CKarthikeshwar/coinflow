@@ -1,6 +1,25 @@
 /**
- * Notification content builder — SPEC-implementation.md §31.3. Pure — no `expo-notifications`
- * calls here, just the content shape `post.ts` hands to `scheduleNotificationAsync`.
+ * FILE PURPOSE
+ * ------------
+ * Turns a `Suggestion` row (a detected-but-unconfirmed transaction) into the exact title, body
+ * text, and metadata that will be shown in a notification — e.g. "₹450 debited" /
+ * "Swiggy · UPI". This file does NOT actually post anything; it just builds the content object.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `src/services/notifications/post.ts` calls `buildTxnNotification` and hands the result
+ * straight to `expo-notifications`' `scheduleNotificationAsync`. Keeping the "what should this
+ * say" logic separate from the "how do I actually post it" logic makes the content easy to
+ * unit-test without needing to mock the whole notifications API.
+ *
+ * IMPORTANT
+ * ---------
+ * `categoryIdentifier` (which set of action buttons the notification gets — see
+ * `categories.ts`) is decided here, by checking `isKnownAccountRule(rule)`
+ * (`src/domain/categorize.ts`): a "known" account gets the one-tap `Save` button, a "new" one
+ * doesn't. The `data` field carries the `suggestionId` that a tap or button-press needs to look
+ * the suggestion back up — see `src/services/notifications/respond.ts` (button presses) and
+ * `src/features/app-shell/notification-router.tsx` (a tap that opens the app).
  */
 
 import { isKnownAccountRule } from '@/domain/categorize';

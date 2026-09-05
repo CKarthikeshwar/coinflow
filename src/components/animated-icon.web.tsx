@@ -1,3 +1,10 @@
+/**
+ * Web build's replacement for `animated-icon.tsx`. `AnimatedSplashOverlay` is a no-op here —
+ * the web build doesn't have a native splash screen to hand off from, so there's nothing for it
+ * to do. `AnimatedIcon` below (like its native counterpart) is unused dead code left over from
+ * the original create-expo-app template.
+ */
+
 import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Keyframe, Easing } from 'react-native-reanimated';

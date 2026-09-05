@@ -1,13 +1,19 @@
 /**
- * Data — SPEC-UI-UX.md §6.14, SPEC-implementation.md §20.7/§20.8/§30.16 (IMP-043/044, UI-065).
- * F8.5. Export (JSON + CSV via the OS share sheet) and Clear all data (two-step `CONFIRM`-typed
- * dialog → `clearAllData` → relaunch into onboarding).
+ * FILE PURPOSE
+ * ------------
+ * Settings › Data — the two ways a user can export their data (JSON backup, CSV of
+ * transactions, both via the OS share sheet) and the "Clear all data" danger-zone action (a
+ * two-step dialog requiring the user to type CONFIRM, then `clearAllData()`
+ * (`src/db/maintenance.ts`) wipes everything).
  *
- * "Relaunch into onboarding" (§20.7) is a documented simplification: `clearAllData()` already
- * drops every `app_setting` row including `onboardingDone`, so the *next* app launch's
- * `<MigrationGate>`/router redirect naturally lands on onboarding (F12, not built yet) — there's
- * no separate in-session redirect to build. This screen just confirms success and pops back;
- * closing the app is the same relaunch the router-level redirect will already do once F12 exists.
+ * IMPORTANT
+ * ---------
+ * There's no explicit "now redirect to onboarding" code in this screen after Clear all data
+ * runs. `clearAllData()` already drops every `app_setting` row including `onboardingDone`, so
+ * the *next* time `<MigrationGate>`/`RootNavigator` evaluates that setting (which happens live,
+ * via `useSetting`), it naturally routes to onboarding on its own — this screen just shows a
+ * success state and pops back, relying on that existing live-read mechanism rather than
+ * duplicating a redirect here.
  */
 
 import { router } from 'expo-router';

@@ -1,8 +1,18 @@
 /**
- * Transactions route filter params ↔ `TransactionListQuery` — SPEC-UI-UX.md §6.7/§6.9. Pure,
- * no RN/expo imports, so it's unit testable without mounting `transactions.tsx`. The applied
- * filter is stored as plain comma-joined strings in the route's own search params (see
- * `filter-draft.ts`'s header comment); this is the one place that (de)serializes them.
+ * FILE PURPOSE
+ * ------------
+ * Converts the Transactions screen's filter state to and from URL/route query-param strings
+ * (e.g. `?categoryIds=abc,def&uncategorized=1`) — this is what lets an active filter be part of
+ * the route itself rather than living only in memory (see `filter-draft.ts`'s header for why
+ * that split exists). Kept pure (no react-native/expo imports) so it's unit-testable without
+ * mounting the whole Transactions screen.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `src/app/(tabs)/transactions.tsx` calls `parseFilterParams` on its own route params to build
+ * the `TransactionListQuery` it passes to `useTransactionList`
+ * (`src/db/repositories/transactions.ts`); `filter-sheet.tsx`'s Apply button writes the reverse
+ * direction back into the route via `router.setParams`.
  */
 
 import type { PaymentMethod, TransactionType } from '@/db/schema';

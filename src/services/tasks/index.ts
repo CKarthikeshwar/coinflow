@@ -1,16 +1,51 @@
 /**
- * Background task + notification-category registration (SPEC-implementation.md §17.2 / §31.1/2).
+ * FILE PURPOSE
+ * ------------
+ * Registers everything the app needs to be able to run CODE IN THE BACKGROUND, i.e. while the
+ * app isn't open on screen — most importantly, the handler that runs when a new SMS arrives so
+ * the app can detect a transaction from it even if the user never opens CoinFlow.
  *
- * Imported at the very top of the app entry (`index.js`), before `expo-router` mounts, so the
- * definitions exist whether the JS context was started by the UI or by a background trigger.
+ * WHERE IT FITS
+ * -------------
+ * This file must run and finish its top-level registration calls BEFORE anything else in the
+ * app, which is why `index.js` (the actual app entry point, see `package.json`'s `"main"`)
+ * imports this file first, ahead of `expo-router/entry`. That ordering matters because Android
+ * can start this app's JS engine *specifically to run a background task* — e.g. when an SMS
+ * arrives while the app is fully closed — without ever mounting the UI/router at all. If the
+ * task registrations below lived inside a React component instead, they'd never run in that
+ * "background-only" scenario, and background SMS detection would silently stop working whenever
+ * the app wasn't already open.
  *
- * Two paths, two mechanisms (see CR-3, §37):
- *   - SMS ingest  → RN headless task. `CoinflowSmsHeadlessTaskService` (native, §17.6) starts
- *                   the JS task named `CoinflowSmsIngest`; we register its handler with
- *                   `AppRegistry.registerHeadlessTask`. There is no SMS `TaskConsumer` in
- *                   `expo-task-manager`, and §17.6 already mandates `HeadlessJsTaskService`.
- *   - Notification response → `expo-notifications` background handler via
- *                   `TaskManager.defineTask` + `Notifications.registerTaskAsync` (§17.2 / §31).
+ * TWO SEPARATE BACKGROUND MECHANISMS
+ * -----------------------------------
+ * Android (and this app) actually uses two different background-task systems, because they
+ * solve two different problems:
+ *   - SMS ingest → a React Native "headless task." The native Kotlin side
+ *     (`CoinflowSmsHeadlessTaskService` in `modules/coinflow-sms/android/`) wakes up the JS
+ *     engine and asks it to run a JS function named `'CoinflowSmsIngest'`. This file's job is
+ *     just to tell React Native "when something asks for the task named 'CoinflowSmsIngest',
+ *     run `smsIngestTask` (defined in `./sms-ingest.ts`)" via `AppRegistry.registerHeadlessTask`.
+ *   - Notification response → a separate `expo-task-manager` background task
+ *     (`NOTIFICATION_RESPONSE_TASK`) that fires when the user taps "Save" or "Discard" directly
+ *     on a notification without opening the app. `handleSave`/`handleDiscard`
+ *     (`src/services/notifications/respond.ts`) do the actual work.
+ *
+ * DATA FLOW — the SMS background path
+ * -------------------------------------
+ *   Android receives an SMS
+ *     ↓ (native Kotlin, modules/coinflow-sms/android/)
+ *   CoinflowSmsHeadlessTaskService wakes the JS engine, asks for task 'CoinflowSmsIngest'
+ *     ↓
+ *   AppRegistry runs smsIngestTask (src/services/tasks/sms-ingest.ts)
+ *     ↓
+ *   parseSms() (src/domain/parser/) → suggestionRepo.insertIfNew() → a notification is posted
+ *
+ * IMPORTANT
+ * ---------
+ * All the registration calls below are safe to run on every single app launch — they're
+ * idempotent (re-registering the same task name/category twice doesn't cause duplicates), which
+ * is what lets this file just unconditionally run its setup at import time rather than needing
+ * "have I already registered this" guard logic.
  */
 
 import * as Notifications from 'expo-notifications';

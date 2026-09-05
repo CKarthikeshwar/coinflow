@@ -1,5 +1,10 @@
 /**
- * SMS & notifications — SPEC-UI-UX.md §6.14, SPEC-implementation.md §30.16 (IMP-040/042). F8.5.
+ * FILE PURPOSE
+ * ------------
+ * Settings › SMS & notifications — lets the user see and grant/enable the app's two OS
+ * permissions (SMS access, notifications) via two `PermissionCard`s, using the same shared
+ * `usePermissionStatus` hook every other permission-aware screen uses.
+ *
  * Live OS permission status via `usePermissionStatus`; two `PermissionCard`s. This is the first
  * place IMP-042 ("a permanently-denied permission's Enable action opens the system settings
  * screen") is actually implemented — Home's and Review Queue's existing banners both just

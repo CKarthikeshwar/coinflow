@@ -1,7 +1,11 @@
 /**
- * `useAnalyticsPeriod` — SPEC-implementation.md §30.12 (F9). Holds the Analytics screen's
- * current period (Month/Week mode + the stepped anchor).
+ * FILE PURPOSE
+ * ------------
+ * Holds which time period the Analytics tab (`src/app/(tabs)/analytics.tsx`) is currently
+ * showing — month or week mode, and which specific month/week (steppable with the ‹ › arrows).
+ * Also remembers the user's last-used mode (month vs week) across app restarts, via a setting.
  *
+
  * Starts on the current month, always — it deliberately does **not** read the persisted
  * `analyticsPeriodMode` setting (§19.5) here at store-creation time. Zustand's `create()` runs
  * its initializer the moment this module is first evaluated, which — via the `@/stores` barrel

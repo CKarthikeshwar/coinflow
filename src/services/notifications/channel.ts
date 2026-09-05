@@ -1,7 +1,23 @@
 /**
- * The one Android notification channel — SPEC-implementation.md §31.1. Created at first app
- * launch and re-asserted on every launch (idempotent — `setNotificationChannelAsync` upserts).
- * Also called from `SMS_INGEST_TASK` step 7: a headless post must not assume the UI ever ran.
+ * FILE PURPOSE
+ * ------------
+ * Creates the one Android "notification channel" this app posts to (Android groups
+ * notifications into channels so the user can control their behavior — sound, importance — per
+ * channel in system settings, rather than per individual notification).
+ *
+ * WHERE IT FITS
+ * -------------
+ * Called from `src/services/tasks/index.ts` on every app launch, and effectively required
+ * before `src/services/notifications/post.ts` can post anything — Android silently drops a
+ * notification aimed at a channel that doesn't exist yet. It's safe to call repeatedly:
+ * `setNotificationChannelAsync` creates-or-updates, so calling it again just re-confirms the
+ * same settings rather than erroring or duplicating anything.
+ *
+ * IMPORTANT
+ * ---------
+ * This has to work even when the UI has never run — a background SMS can arrive and need to
+ * post a notification before the user has ever opened the app once — so `sms-ingest.ts` also
+ * calls this itself rather than assuming `src/services/tasks/index.ts`'s call already ran.
  */
 
 import * as Notifications from 'expo-notifications';

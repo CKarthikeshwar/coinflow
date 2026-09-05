@@ -1,7 +1,36 @@
 /**
- * Categorization — SPEC-implementation.md §25. No colour, no keyword map, no ML in V1.
- * Pure TS, no react-native / expo imports — `db/repositories/account-rules.ts` supplies the
- * `AccountRule` row this reads.
+ * FILE PURPOSE
+ * ------------
+ * Decides how a transaction should be auto-categorized based on which account/merchant it
+ * came from. This app deliberately does NOT guess a category from keywords or machine
+ * learning (see `idea.md` §7) — the only signal it trusts is "have I seen this exact account
+ * before, and what did the user pick last time?" That memory is an `AccountRule` row.
+ *
+ * WHERE IT FITS
+ * -------------
+ * This sits between the account-rule "memory" (`src/db/repositories/account-rules.ts`, which
+ * reads/writes the learned rule for an account) and anything that needs to turn that rule into
+ * an actual decision: which category to pre-fill, and whether the account counts as "known"
+ * (safe to one-tap-save) or "new" (needs the user to review it first).
+ *
+ * USED BY
+ * -------
+ * - `src/features/transactions/transaction-sheet.tsx` — pre-fills category/note/payment method
+ *   when the Add/Confirm sheet opens for a recognized account (`resolveCategoryForAccount`).
+ * - `src/app/review-queue.tsx`, `src/services/notifications/content.ts`,
+ *   `src/services/notifications/respond.ts` — all use `isKnownAccountRule` to decide whether a
+ *   detected transaction gets a one-tap "Save" action or has to be reviewed manually.
+ *
+ * DEPENDS ON
+ * ----------
+ * Only the `AccountRule`/`PaymentMethod` *types* from `src/db/schema.ts` — this file never
+ * queries the database itself, it just interprets a rule row that's handed to it.
+ *
+ * IMPORTANT
+ * ---------
+ * `resolveCategoryForAccount` intentionally returns Uncategorized (`categoryId: null`) when
+ * there's no rule at all — it never falls back to guessing. If you're tempted to add keyword
+ * matching or a default category here, that would go against a deliberate product decision.
  */
 
 import type { AccountRule, PaymentMethod } from '@/db/schema';

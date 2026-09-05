@@ -1,8 +1,38 @@
 /**
- * Blocks first paint until migrations resolve, then runs seed + purge once, then renders
- * the app (SPEC-implementation.md §20.4). The native splash stays up while this returns
- * `null`. On migration failure it shows a non-dismissible screen — no raw SQL, no
- * auto-wipe.
+ * FILE PURPOSE
+ * ------------
+ * `<MigrationGate>` wraps the entire app and controls what's allowed to render before the
+ * database is actually ready. It blocks rendering the real app until SQLite migrations finish,
+ * then runs one-time startup housekeeping (seeding default categories, purging old soft-deleted
+ * rows), and only then renders its `children` (the real app).
+ *
+ * WHERE IT FITS
+ * -------------
+ * This is one of the very first things that runs when the app launches — see
+ * `src/app/_layout.tsx` for where it wraps the router. While this component is still waiting
+ * (`success` false, or the post-migration effect hasn't finished), it renders `null`, which
+ * means the native splash screen (started in `_layout.tsx`) stays visible instead of the user
+ * seeing a flash of a broken/empty screen.
+ *
+ * DATA FLOW
+ * ---------
+ *   App launches
+ *     ↓
+ *   MigrationGate mounts, calls Drizzle's `useMigrations` hook
+ *     ↓ (while pending: renders null, native splash stays up)
+ *   migrations succeed
+ *     ↓
+ *   one-time effect: seedDatabase() → purge() → isFtsAvailable() → armCrashReporting(...)
+ *     ↓
+ *   renders `children` — the real app takes over
+ *
+ * IMPORTANT
+ * ---------
+ * If migrations fail (a corrupted or unreadable database), this component shows a dedicated,
+ * non-dismissible error screen instead of the app — deliberately not auto-wiping the user's
+ * data or running raw recovery SQL. The only actions offered are "Try again" (reload) and
+ * "Export a copy" (copies the raw `.db` file off-device via the OS share sheet, in case the
+ * data is still recoverable another way) — see `src/features/settings/export.ts`.
  */
 
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';

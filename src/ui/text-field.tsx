@@ -1,8 +1,9 @@
 /**
- * `TextField` — SPEC-UI-UX.md §3.6 / SPEC-implementation.md §29.4. Inset `surface2`;
- * `empty` (muted) / `filled` (hairline border) / `focus` (`primary` border) states are
- * derived from local focus + value, not passed in — simpler call site than the spec'd
- * explicit `state` prop, same visual outcome.
+ * The app's standard text input field — used for note/description/account fields in the
+ * Add/Confirm sheet and similar forms. Its empty/filled/focused visual states (muted vs.
+ * bordered vs. highlighted) are computed automatically from whether it currently has a value
+ * and whether it's focused, rather than requiring the parent to track and pass a `state` prop
+ * — one less thing for every call site to manage.
  */
 
 import { useState } from 'react';

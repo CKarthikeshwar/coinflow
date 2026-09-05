@@ -1,13 +1,39 @@
 /**
- * Crash reporting — SPEC-implementation.md §33.4 (D34, the P-9 amendment). `Sentry.init()` is
- * called from here and nowhere else, and only while `crashReportingEnabled` is true — that's
- * the entire no-network guarantee (§33.2): until `armCrashReporting(true)` runs, no transport
- * is ever constructed and no socket can open.
+ * FILE PURPOSE
+ * ------------
+ * Wires up Sentry (the third-party crash-reporting service) — but only if the user has
+ * explicitly opted in via Settings, and with aggressive scrubbing so financial data can never
+ * leave the device inside a crash report.
  *
- * `beforeSend`/`beforeBreadcrumb` are the second scrub pass (the first is `redactError` /
- * `scrubText` in `src/lib/log.ts`, applied before an event ever reaches here) — fail-closed:
- * an event that still matches a currency/VPA/digit pattern after scrubbing is dropped
- * entirely rather than sent partially-redacted.
+ * WHERE IT FITS
+ * -------------
+ * `armCrashReporting(enabled)` is called once at startup by `src/db/migration-gate.tsx` (reading
+ * the saved setting), and again immediately whenever the user flips the toggle in Settings ›
+ * Data. `captureBoundaryError` is called from `src/features/app-shell/root-error-boundary.tsx`
+ * when the app crashes. `src/lib/log.ts` also reports errors through this file (via
+ * `_setCrashSink`, see below) rather than duplicating the Sentry setup itself.
+ *
+ * PRIVACY GUARANTEE — this is the whole point of this file
+ * ------------------------------------------------------------
+ * This app promises it makes NO network requests at all unless the user turns on crash
+ * reporting (a strict no-network-by-default policy, enforced app-wide and checked by
+ * `src/__tests__/no-network.test.ts`). `Sentry.init()` — the only thing in this whole app that
+ * can open a network connection — is called ONLY from inside this file, and ONLY when
+ * `armCrashReporting(true)` runs. Until that happens, no Sentry transport object exists, so
+ * there is literally nothing capable of opening a socket. This is a deliberate architectural
+ * choice, not an accident of where the code happens to live.
+ *
+ * Even once armed, every event goes through two layers of scrubbing before it can leave the
+ * device:
+ *   1. `redactError`/`scrubText` in `src/lib/log.ts` — applied before an error ever reaches
+ *      this file, stripping obvious PII patterns (amounts, account-like strings) from the
+ *      message/stack.
+ *   2. `beforeSend`/`beforeBreadcrumb` below — Sentry's own hooks, run right before anything is
+ *      actually transmitted. These strip device name/user/server info entirely, drop
+ *      breadcrumbs that could leak navigation history through financial screens, and — the
+ *      important part — FAIL CLOSED: if an event still matches a money/account-like pattern
+ *      (`LEAK_PATTERN`) after scrubbing, the whole event is dropped rather than sent
+ *      partially-redacted. Better to lose a crash report than leak financial data.
  */
 
 import Constants from 'expo-constants';

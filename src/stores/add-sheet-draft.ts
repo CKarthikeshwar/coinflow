@@ -1,7 +1,25 @@
 /**
- * The Add / Edit / Confirmation working copy (SPEC-implementation.md §22.2). Ephemeral —
- * never persisted, cleared on sheet close. `dirty` drives the discard-confirm (V-6).
- * The exact field set firms up with the sheets in step 5 (§22.6).
+ * FILE PURPOSE
+ * ------------
+ * Holds the "working copy" of whatever transaction is currently being typed/edited in the
+ * Add/Edit/Confirm sheet (`src/features/transactions/transaction-sheet.tsx`) — the amount,
+ * category, note, etc. the user has entered so far, before it's actually saved to the database.
+ * Ephemeral only: never persisted to disk, wiped clean on sheet close.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `transaction-sheet.tsx` is effectively the only real consumer — it reads this store to render
+ * the form and calls `patch()` on every field change, `open()` when the sheet is opened (for
+ * Add, Edit, or Confirm), and `reset()` when the sheet closes for good (submitted or discarded).
+ * `dirty` is what powers the "discard changes?" confirmation if the user tries to close a sheet
+ * with unsaved edits.
+ *
+ * IMPORTANT
+ * ---------
+ * `dirty` is a genuine diff against the values the draft was *seeded* with (`_initial`), not a
+ * one-way flag that latches "true" forever after the first edit — so typing something and then
+ * typing it back to its original value correctly un-dirties the draft, instead of permanently
+ * (and wrongly) prompting "discard changes?" for a net-zero edit.
  *
  * `dirty` is a real diff against the seeded values (`_initial`), not a latch that stays true
  * after the first `patch()` call — toggling a field back to what it was seeded with correctly

@@ -1,8 +1,28 @@
 /**
- * Imperative sheet host (SPEC-implementation.md §22.2 / D25). Sheets are not routes — they
- * are opened from anywhere with `open(name, params)`. The full API (mount-once host,
- * `requestClose` discard flow) is specified in §28 and wired with the sheet components in
- * step 5; this is the state container it builds on.
+ * FILE PURPOSE
+ * ------------
+ * Tracks which bottom sheet (Add, Edit, Confirm, Filter, category picker, ...) is currently
+ * open, anywhere in the app. Sheets in this app are NOT expo-router routes/screens — they're
+ * plain components that any part of the app can pop open by calling `open('add')` (etc.) on
+ * this store, without needing to navigate anywhere.
+ *
+ * WHERE IT FITS
+ * -------------
+ * `src/features/app-shell/sheet-host.tsx` is mounted once, near the root of the app (see
+ * `_layout.tsx`), and watches this store's `current` value to decide which sheet component (if
+ * any) to actually render. Any button anywhere in the app that should open a sheet — e.g. the
+ * Home screen's "+" button, a transaction row's "Edit" action — just calls
+ * `useSheetRegistry.getState().open('add', { ... })` rather than navigating to a route.
+ *
+ * IMPORTANT
+ * ---------
+ * `requestClose` (used by the hardware back button / swipe-to-dismiss gesture in `SheetHost`)
+ * is deliberately NOT the same as `close` — it routes through whatever the currently-open
+ * sheet's own Cancel handler is (registered via `setOnRequestClose` while that sheet is
+ * mounted), so a back-gesture triggers the exact same "discard unsaved changes?" confirmation
+ * as tapping the sheet's own Cancel button would. Calling `close()` directly bypasses that
+ * check entirely — it should only be used when there's deliberately nothing to guard (e.g. a
+ * sheet like the plain category picker, which has no draft data of its own to lose).
  */
 
 import { create } from 'zustand';

@@ -1,8 +1,9 @@
 /**
- * `AmountInput` — SPEC-UI-UX.md V-10 / SPEC-implementation.md §29.4. Large centred figure +
- * caret; `₹` prefix in `text3`; helper line for 0 / over-max. `mode:'summary'` is the slim
- * sticky bar once the sheet is scrolled to the fields (§6.4) — this pass renders it as a
- * plain row rather than an animated collapse; same content, no slide/pin animation yet.
+ * The big amount display in the Add/Confirm sheet — purely a display component, not an actual
+ * text input; the number it shows comes from `src/stores/keypad.ts`, which the on-screen
+ * `NumericKeypad` writes into. `mode: 'full'` is the large centered hero figure shown while
+ * actively entering the amount; `mode: 'summary'` is the slim row shown once the user has
+ * scrolled down to the other fields, so the amount stays visible but out of the way.
  */
 
 import { StyleSheet, View } from 'react-native';

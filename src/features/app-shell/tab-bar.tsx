@@ -1,8 +1,16 @@
 /**
- * `CoinFlowTabBar` — SPEC-UI-UX.md §3.6 / §4, SPEC-implementation.md §29.4 (D25 / D32).
- * A custom `tabBar` for `(tabs)/_layout.tsx`, not `NativeTabs` — the only way to get the
- * raised centre **Add** "FAB notch" the design calls for. 4 destinations (Home, Transactions,
- * Analytics, Settings); active tab `text`, inactive `text3`; the pill lifts on `Elevation.pop`.
+ * FILE PURPOSE
+ * ------------
+ * The app's bottom tab bar — a floating pill with 4 destinations (Home, Transactions, Analytics,
+ * Settings) plus a raised "+" button in the middle that opens the Add-transaction sheet directly
+ * (it's not a 5th tab/route — tapping it calls `useSheetRegistry`'s `open('add')` instead of
+ * navigating anywhere).
+ *
+ * WHERE IT FITS
+ * -------------
+ * Passed as the custom `tabBar` render prop to `(tabs)/_layout.tsx`'s tab navigator, instead of
+ * using `NativeTabs` — a fully custom component was necessary because `NativeTabs` has no way to
+ * express the raised centre "Add" FAB notch the design calls for.
  *
  * Simplification (documented, not silent): the design calls the pill "blurred" — `expo-blur`
  * isn't installed yet, so this uses a solid `surface` fill instead. Same shape and elevation,

@@ -1,9 +1,24 @@
 /**
- * Notification → route resolution — SPEC-implementation.md §28.3 / §31.6. Pure decision logic,
- * separated from the side-effecting navigation in `notification-router.tsx` so it's unit testable
- * without mounting the app. Always re-reads the Suggestion/Transaction by id — never trusts the
- * notification's own `data` for anything beyond the id, since the row may have changed (been
- * confirmed, dismissed, or deleted) since the notification was posted.
+ * FILE PURPOSE
+ * ------------
+ * Decides which screen to open when the user taps a notification (not a button on it — the
+ * notification body itself). Deliberately kept as pure decision logic with no navigation code
+ * in it, so `src/features/app-shell/notification-router.tsx` (which does the actual navigating)
+ * can stay a thin wrapper, and this decision logic can be unit-tested without mounting any UI.
+ *
+ * WHERE IT FITS
+ * -------------
+ * The only caller is `notification-router.tsx`, mounted once in `src/app/_layout.tsx`, which
+ * listens for a notification tap and calls `resolveNotificationTarget` to find out where to go.
+ *
+ * IMPORTANT — "stale tap" handling
+ * ------------------------------------
+ * Time can pass between a notification being posted and the user actually tapping it — long
+ * enough that the underlying suggestion/transaction may have already changed (confirmed via a
+ * different route, dismissed, deleted). This function NEVER trusts the notification's own
+ * stored data beyond the id — it always re-reads the current row from the database and decides
+ * the destination from its *current* state, so a stale tap can never route somewhere that no
+ * longer makes sense (e.g. trying to "confirm" a suggestion that was already confirmed).
  */
 
 import { getSuggestion } from '@/db/repositories/suggestions';

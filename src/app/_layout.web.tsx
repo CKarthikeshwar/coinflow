@@ -1,4 +1,10 @@
 /**
+ * FILE PURPOSE
+ * ------------
+ * Web build's replacement for `_layout.tsx` (the root layout). Very similar structure, but uses
+ * a plain expo-router `<Stack />` directly instead of `RootNavigator`/`RootErrorBoundary` — see
+ * below for exactly why the onboarding-gating logic in particular can't just be reused as-is.
+ *
  * Web variant — SPEC-implementation.md §18.3 (Android-only, D3). F12's onboarding `<Redirect>`
  * (see `_layout.tsx`) reads `useSetting('onboardingDone')` live at the root, every render — but
  * `useLiveQuery`'s own `.web.ts` stub (§18.3's original fix) returns `updatedAt: undefined`

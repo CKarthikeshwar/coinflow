@@ -1,4 +1,32 @@
-/** Field extractors — SPEC-implementation.md §23.4. Each returns `value | null`, never throws. */
+/**
+ * FILE PURPOSE
+ * ------------
+ * The regex-based "readers" that pull individual pieces of information out of an SMS message
+ * body: how much money, which direction (debit/credit), which account/person it involved, and
+ * which payment method (UPI/card/bank transfer/wallet) was used. `parse-sms.ts` calls these
+ * one at a time and assembles the results.
+ *
+ * WHERE IT FITS
+ * -------------
+ * This is the "read the text" layer, one step below `parse-sms.ts`'s orchestration. Every
+ * function here takes a plain string and returns `value | null` — never throws, and never
+ * assumes the text is well-formed, because real bank SMS formats vary wildly between banks
+ * and change over time.
+ *
+ * USED BY
+ * -------
+ * `src/domain/parser/parse-sms.ts` (the only caller) and `src/domain/parser/ignore-rules.ts`
+ * (reuses the debit/credit/amount regex *sources* to check "does this message even mention an
+ * amount or a direction keyword" before deciding whether to ignore it).
+ *
+ * IMPORTANT
+ * ---------
+ * When you're reading `extractAmountAndDirection` below, the tricky part isn't finding a
+ * number or a keyword — it's SMS messages that mention MULTIPLE amounts or BOTH debit and
+ * credit keywords (e.g. "Rs 500 debited... available balance Rs 12,340"). The function has to
+ * pick which amount is the actual transaction amount (as opposed to a balance figure) and
+ * whether it was money going out or in — see the inline comments there for exactly how.
+ */
 
 import { normalizeAccount } from '@/domain/normalize';
 import type { PaymentMethod } from '@/db/schema';
@@ -63,8 +91,28 @@ export type AmountResult = { value: number | null; outOfRange: boolean };
 export type DirectionResult = { value: Direction | null; ambiguous: boolean };
 
 /**
- * Amount and direction are resolved together (§23.4): multiple amounts prefer the one
- * adjacent to a direction keyword; a direction tie is broken by nearness to the chosen amount.
+ * Amount and direction are resolved together (§23.4), because a real bank SMS often contains
+ * more than one number ("Rs 500 debited... available balance Rs 12,340") or, less often,
+ * mentions both a debit and credit keyword. Neither can be picked in isolation without risking
+ * picking the wrong one, so this function finds all the candidates for both, then uses their
+ * positions in the text to decide which amount is the real transaction amount and which
+ * direction word applies to it — using "closest word wins" as the tie-breaker, on the
+ * assumption that a bank writes the amount right next to the verb describing what happened to
+ * it ("Rs 500 debited"), not next to an unrelated balance figure.
+ *
+ * Step 1 — pick the amount:
+ *   - Exactly one amount in the message → that's the one, no ambiguity possible.
+ *   - Multiple amounts, but no debit/credit keyword anywhere → just take the first amount
+ *     (there's no keyword to use as a tie-breaker, so guessing further would be worse).
+ *   - Multiple amounts AND at least one direction keyword → pick whichever amount sits
+ *     closest (fewest characters away) to any direction keyword in the text.
+ *
+ * Step 2 — pick the direction:
+ *   - Only debit keywords found → direction is 'debit'. Only credit keywords → 'credit'.
+ *   - BOTH debit and credit keywords appear (rare, but happens) → look at which one is
+ *     physically closer to the amount chosen in step 1, and use that. If they're exactly
+ *     tied in distance, direction is genuinely ambiguous, `ambiguous: true` — the caller
+ *     surfaces this as a warning rather than guessing.
  */
 export function extractAmountAndDirection(body: string): {
   amount: AmountResult;
@@ -86,6 +134,8 @@ export function extractAmountAndDirection(body: string): {
     );
   }
 
+  // Sanity-check the chosen amount against a hard ceiling (₹1 crore) rather than trusting any
+  // number the regex found — a badly-formatted SMS could otherwise produce an absurd amount.
   const outOfRange = chosen !== null && (chosen.value <= 0 || chosen.value > MAX_PAISE);
 
   const hasDebit = debitPositions.length > 0;

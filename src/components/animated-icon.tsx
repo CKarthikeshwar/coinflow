@@ -1,3 +1,33 @@
+/**
+ * FILE PURPOSE
+ * ------------
+ * `AnimatedSplashOverlay` — the animated transition from the native splash screen into the
+ * real app. It's a full-screen overlay that starts showing the same image the native splash
+ * shows (so there's no visible jump when the native splash hands off), then plays a short
+ * fade/scale-out animation once the app is actually ready underneath it.
+ *
+ * WHERE IT FITS
+ * -------------
+ * Mounted once in `src/app/_layout.tsx`, as a sibling to `<MigrationGate>`'s children (so it
+ * sits visually on top of everything else while it's still showing). The handoff sequence:
+ *   1. `SplashScreen.preventAutoHideAsync()` runs at module load in `_layout.tsx` — the native
+ *      splash stays frozen on screen.
+ *   2. This component renders, showing a plain (non-animated) copy of the splash image.
+ *   3. Its `onLayout` fires once it's actually painted → calls `SplashScreen.hideAsync()` to
+ *      dismiss the native splash — this component's own image is already covering the screen,
+ *      so nothing flashes — then flips into its animated exit.
+ *   4. The exit `Keyframe` animation plays; when it finishes, this component unmounts itself
+ *      (`setVisible(false)`), revealing the real app underneath.
+ *
+ * IMPORTANT
+ * ---------
+ * `AnimatedIcon` (further down this file, and its `.web.tsx` counterpart) is a SEPARATE,
+ * unused component — a more elaborate glow/logo animation left over from this project's
+ * original `create-expo-app` template. Nothing in `src/app/` or `src/features/` imports or
+ * renders it; only `AnimatedSplashOverlay` is actually wired into the app. It hasn't been
+ * removed as part of this documentation pass (comment-only changes), but it's dead code.
+ */
+
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useState } from 'react';
@@ -95,6 +125,8 @@ const glowKeyframe = new Keyframe({
   },
 });
 
+// NOTE: not currently used anywhere — see the file-level comment above. Left over from the
+// original create-expo-app template's icon animation demo.
 export function AnimatedIcon() {
   return (
     <View style={styles.iconContainer}>

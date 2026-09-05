@@ -1,10 +1,33 @@
 /**
- * The shared "write a transaction from a draft" path — SPEC-implementation.md §17.4(b) /
- * §25.2 / §30.6: `insertTransaction` + (if confirming a Suggestion) `confirmSuggestion` +
- * `upsertFromTransaction`, all in **one** DB transaction. Built for F3's Confirmation sheet;
- * `draft.mode` already distinguishes `'confirm'` from `'add'`/`'edit'`, so this is the same
- * function F4 (manual Add) will call later — not built ahead of need, just shaped to not
- * require a rewrite when F4 lands.
+ * FILE PURPOSE
+ * ------------
+ * Turns the Add/Confirm/Edit sheet's in-progress draft (`src/stores/add-sheet-draft.ts`) into
+ * actual database writes. This is where the UI form's data finally becomes a real
+ * `transactions` row — everything before this point in the sheet is just editing local state.
+ *
+ * WHERE IT FITS
+ * -------------
+ * Called by `src/features/transactions/transaction-sheet.tsx` when the user taps the primary
+ * button. `writeConfirmedTransaction` handles both `'add'` (a brand-new manual transaction) and
+ * `'confirm'` (turning an SMS-detected suggestion into a real transaction) — both need to
+ * insert a new transaction row, and `'confirm'` additionally needs to mark the source
+ * suggestion as confirmed. `writeEditedTransaction` handles `'edit'` — updating a transaction
+ * that already exists, using `updateTransaction` from `src/db/repositories/transactions.ts`.
+ *
+ * IMPORTANT — a deliberate duplication, not an oversight
+ * -----------------------------------------------------------
+ * `writeConfirmedTransaction` re-implements the "learn this account" upsert logic inline
+ * (the block that inserts/updates an `accountRules` row) instead of calling the shared
+ * `upsertFromTransaction` helper in `src/db/repositories/account-rules.ts`, even though
+ * `writeEditedTransaction` right below it DOES call that shared helper. This isn't
+ * inconsistency for its own sake: `writeConfirmedTransaction` needs the transaction insert,
+ * the suggestion-confirm, and the account-rule learn step to all happen inside ONE atomic
+ * `db.transaction(...)` call (so a crash partway through can't leave a confirmed suggestion
+ * with no matching transaction, for example) — but the shared `upsertFromTransaction` helper
+ * always runs its own queries against the top-level `db` object, not whatever `tx` a caller
+ * might be inside, so it can't be called from within this function's transaction block.
+ * `writeEditedTransaction` doesn't have that constraint (its own database write isn't wrapped in
+ * an explicit transaction the same way), so it's free to reuse the shared helper normally.
  */
 
 import { eq } from 'drizzle-orm';

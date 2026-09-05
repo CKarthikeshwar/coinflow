@@ -1,14 +1,34 @@
 /**
- * Posting — single vs. group (SPEC-implementation.md §31.4, `SMS_INGEST_TASK` step 7).
+ * FILE PURPOSE
+ * ------------
+ * Actually calls `expo-notifications` to post a notification onto the device — the one place in
+ * the app that does this. Handles both posting one transaction-review notification and keeping
+ * a "N transactions to review" summary notification in sync as suggestions come and go.
  *
- * Note on OS-level stacking: §31.3 specifies a `threadId` so the OS can visually stack these
- * under the group summary, but the installed `expo-notifications@57.0.16` `NotificationContentInput`
- * has no such field, and its Android builder never calls `Notification.Builder#setGroup()` —
- * confirmed against the installed typings and native source. `content.ts` still carries
- * `threadId` on the internal content shape (documents spec intent), but there is nothing to pass
- * it to here: the individual and summary notifications appear as separate entries, not a
- * collapsed stack. Adding real Android grouping would mean native code beyond the "SMS bridge
- * only" module surface (D24), so this is accepted as a platform/library gap, not fixed in JS.
+ * WHERE IT FITS
+ * -------------
+ * `postForSuggestion` is called from `src/services/tasks/sms-ingest.ts` (step 7 of the SMS
+ * pipeline) every time a new suggestion is created. `cancelForSuggestion` is called from
+ * `src/services/notifications/respond.ts` after the user saves or discards one, and
+ * `cancelAllSuggestionNotifications` from the Review Queue's "Dismiss all."
+ *
+ * IMPORTANT — a known platform limitation, left as-is on purpose
+ * -----------------------------------------------------------------
+ * The design intent was for individual transaction notifications to visually stack/collapse
+ * under the "N transactions to review" summary notification (standard Android notification
+ * grouping). That doesn't actually happen: the installed version of `expo-notifications`
+ * doesn't expose the Android API needed to group notifications that way, so each one shows as
+ * its own separate entry instead of a collapsed group. Fixing this for real would require
+ * writing native Android code, which is outside what this app's one custom native module is
+ * scoped to do (see `modules/coinflow-sms/`, which is deliberately kept to "the SMS bridge
+ * only"). This is a known, accepted gap, not a bug to chase.
+ *
+ * The exact technical reason: `content.ts` still builds a `threadId` field (documenting the
+ * original intent), but the installed `expo-notifications` version's `NotificationContentInput`
+ * type has no field to receive it, and its Android implementation never calls the native
+ * `Notification.Builder#setGroup()` method that would be needed to actually group notifications
+ * — so there's genuinely nothing this file could pass through even if it wanted to. The
+ * individual and summary notifications simply appear as separate entries.
  */
 
 import * as Notifications from 'expo-notifications';

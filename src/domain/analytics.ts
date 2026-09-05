@@ -1,10 +1,36 @@
 /**
- * Pure analytics helpers (§26) — the parts of the math that don't need a DB query.
- * `analyticsRepo` (`src/db/repositories/analytics.ts`) does the SQL half and calls into these
- * for the JS-side bucketing/statistics §26.6 asks for. No react-native/expo imports — testable
- * without mounting anything. `CategoryPalette` itself (the actual hue values) lives in
- * `constants/theme.ts`, which imports `react-native`; `resolveCategoryColor` below takes it as a
- * plain `Record<string,string>` parameter instead of importing it, to keep this file pure.
+ * FILE PURPOSE
+ * ------------
+ * Pure math for the Analytics tab: percent-change, day-by-day spend buckets, mean/median,
+ * the chart's y-axis scaling, and category color lookup. "Pure" means no database, no
+ * react-native/expo imports, no side effects — every function here just takes plain data in
+ * and returns plain data out, which is what makes it cheap to unit test.
+ *
+ * WHERE IT FITS
+ * -------------
+ * This is the bottom layer of the Analytics feature. The actual SQL queries (which rows to
+ * pull from the database) live one layer up, in `src/db/repositories/analytics.ts` — that
+ * file fetches the raw rows, then calls into the functions here to turn them into the
+ * shapes the Analytics screen renders (a day-by-day series, a mean, a median, etc).
+ *
+ * USED BY
+ * -------
+ * - `src/db/repositories/analytics.ts` (`percentDelta`, `buildDailySeries`, `meanDailySpend`,
+ *   `medianDailySpend`, `dailyChartYMax`) — builds the period summary the Analytics screen reads.
+ * - `src/features/analytics/category-breakdown.tsx` (`shareOf`, `resolveCategoryColor`) —
+ *   turns per-category totals into percentages and picks each category's chart color.
+ *
+ * DEPENDS ON
+ * ----------
+ * `src/domain/period.ts` for "what day does this timestamp fall on" helpers (`startOfLocalDay`,
+ * `endOfLocalDayExclusive`) — everything here works in local-device days, not UTC days.
+ *
+ * IMPORTANT
+ * ---------
+ * `resolveCategoryColor` takes the color palette as a plain parameter instead of importing it
+ * from `constants/theme.ts` directly — importing `theme.ts` would pull in `react-native`, which
+ * would break the "no framework imports" rule this file follows. If you need another palette
+ * lookup here, keep passing it in rather than importing `Colors`/`CategoryPalette` directly.
  */
 
 import { addDays } from 'date-fns';

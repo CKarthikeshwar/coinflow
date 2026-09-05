@@ -1,15 +1,22 @@
 /**
- * Account rules — SPEC-UI-UX.md §6.14, SPEC-implementation.md §30.16 (D16). F8. The only window
- * into F8's account-memory behaviour (`upsertFromTransaction`/`getAccountRule`, already wired
- * since F2/F3/F4/F11) — read + edit + delete learned rules.
+ * FILE PURPOSE
+ * ------------
+ * Lets the user see, edit, and delete the "account memory" the app has learned — for each bank
+ * account/merchant it has a rule for, which category/note/payment method it auto-fills. This is
+ * the only screen that gives the user visibility into `db/repositories/account-rules.ts`'s
+ * data, which otherwise updates silently in the background every time a transaction is saved.
  *
- * Root-relative route (flat under `src/app/`, same pattern as `categories.tsx`/
- * `review-queue.tsx`) — the full Settings subpage tree is F8.5's job, not this one's. Reached
- * today via a temporary link on the Settings tab stub; F8.5 will replace that stub with the real
- * grouped list, whose own "Account rules" row will point at this same screen, already built.
+ * WHERE IT FITS
+ * -------------
+ * Reached from the Settings tab (`(tabs)/settings.tsx`'s "Account rules" row, `href="/account-rules"`).
+ * A root-relative route (flat under `src/app/`, not nested under `(tabs)/`) since it's a pushed
+ * detail screen, not a tab destination — same pattern as `categories.tsx`/`review-queue.tsx`.
+ * Tapping a row opens `src/features/settings/account-rule-editor-sheet.tsx` to edit it.
  *
- * Simplification vs. spec (documented, not silent): row delete is a direct tap on a trash icon,
- * not a swipe gesture — same "tap not swipe" simplification already used for Categories.
+ * IMPORTANT
+ * ---------
+ * Row delete is a direct tap on a trash icon, not a swipe gesture — same "tap not swipe"
+ * simplification used for Categories, Review Queue, and the transaction list.
  */
 
 import { router } from 'expo-router';

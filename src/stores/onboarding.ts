@@ -1,7 +1,18 @@
 /**
- * Onboarding progress (SPEC-implementation.md §22.2 / §6.1). Step index + the per-step
- * selections held before they're committed to the DB on "Done" (which then sets
- * `onboardingDone`).
+ * FILE PURPOSE
+ * ------------
+ * Tracks progress through the multi-step onboarding flow (`src/app/(onboarding)/`) — which step
+ * the user is on, and the choices they've made on the category-review step (which default
+ * categories they turned off, what order they want them in). Nothing here touches the database
+ * until the user actually finishes onboarding.
+ *
+ * WHERE IT FITS
+ * -------------
+ * Used by `src/app/(onboarding)/welcome.tsx`, `permissions.tsx`, and `category-review.tsx` to
+ * move between steps and record selections. Only once the user completes the flow are these
+ * selections actually written to the database (creating/reordering categories) and the
+ * `onboardingDone` setting flipped to true (`src/db/repositories/settings.ts`) — this store is
+ * just the scratch pad along the way.
  */
 
 import { create } from 'zustand';
