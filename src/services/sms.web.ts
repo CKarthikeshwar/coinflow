@@ -9,9 +9,9 @@
 
 import { PermissionStatus } from 'expo-modules-core';
 
-import type { PermissionResponse } from '../../modules/coinflow-sms';
+import type { InboxMessage, PermissionResponse } from '../../modules/coinflow-sms';
 
-export type { PermissionResponse };
+export type { InboxMessage, PermissionResponse };
 
 export function isSmsCaptureSupported(): boolean {
   return false;
@@ -23,6 +23,10 @@ export async function getSmsPermissions(): Promise<PermissionResponse> {
 
 export async function requestSmsPermissions(): Promise<PermissionResponse> {
   return deniedResponse();
+}
+
+export async function getRecentSmsMessages(_sinceEpochMs: number): Promise<InboxMessage[]> {
+  return [];
 }
 
 function deniedResponse(): PermissionResponse {

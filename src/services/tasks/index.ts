@@ -48,6 +48,7 @@
  * "have I already registered this" guard logic.
  */
 
+import * as BackgroundTask from 'expo-background-task';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { AppRegistry, Platform } from 'react-native';
@@ -56,16 +57,31 @@ import { ensureNotificationChannel } from '@/services/notifications/channel';
 import { registerNotificationCategories } from '@/services/notifications/categories';
 import { handleDiscard, handleSave } from '@/services/notifications/respond';
 
+import { reconcileMissedSms } from './sms-reconcile';
 import { smsIngestTask } from './sms-ingest';
 
 /** Native task name — must match `CoinflowSmsHeadlessTaskService.getTaskConfig` (§17.6). */
 export const SMS_INGEST_TASK = 'CoinflowSmsIngest';
 /** `expo-notifications` background-response task id (§17.4b / §31). */
 export const NOTIFICATION_RESPONSE_TASK = 'coinflow.NOTIFICATION_RESPONSE';
+/** Periodic `expo-background-task` id — the reconciliation backstop (§17.9, CR-11). */
+export const SMS_RECONCILE_TASK = 'coinflow.SMS_RECONCILE';
 
 // --- SMS ingest (app-killed wake path) ---------------------------------------
 if (Platform.OS === 'android') {
   AppRegistry.registerHeadlessTask(SMS_INGEST_TASK, () => smsIngestTask);
+}
+
+// --- Missed-SMS reconciliation backstop (§17.9, CR-11) — opportunistic, OS-batched; the
+// real-time broadcast path and the app-open sweep (SmsReconciler) both run first. --------------
+if (Platform.OS === 'android') {
+  TaskManager.defineTask(SMS_RECONCILE_TASK, async () => {
+    await reconcileMissedSms({ notify: true });
+    return BackgroundTask.BackgroundTaskResult.Success;
+  });
+  BackgroundTask.registerTaskAsync(SMS_RECONCILE_TASK).catch((e: unknown) => {
+    console.warn('[tasks] SMS_RECONCILE_TASK registration failed:', (e as Error)?.name ?? 'unknown');
+  });
 }
 
 // --- Notification channel + categories (idempotent — safe to call on every launch) ----------

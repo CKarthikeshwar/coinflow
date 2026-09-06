@@ -13,4 +13,17 @@ export interface CoinflowSmsNativeModule {
   getPermissionsAsync(): Promise<PermissionResponse>;
   /** Prompt for `RECEIVE_SMS` + `READ_SMS`; resolves with the post-prompt state. */
   requestPermissionsAsync(): Promise<PermissionResponse>;
+  /**
+   * Read-only query against Android's shared SMS inbox for messages received at or after
+   * `sinceEpochMs`, oldest first (§17.8, CR-10). Backs the reconciliation sweep that catches a
+   * message another app's higher/equal-priority receiver swallowed before `SmsReceiver` ran.
+   */
+  getRecentInboxMessagesAsync(sinceEpochMs: number): Promise<InboxMessage[]>;
+}
+
+/** One row read from `content://sms/inbox` (§17.8). */
+export interface InboxMessage {
+  sender: string;
+  body: string;
+  timestampMs: number;
 }

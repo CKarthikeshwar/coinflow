@@ -950,10 +950,18 @@ platform-guarded JS API); a `.web.ts` stub throws.
   `CoinflowSmsHeadlessTaskService` (extends `HeadlessJsTaskService`) with an
   `HeadlessJsTaskConfig` (timeout ~30 s, `allowedInForeground = true`) carrying
   `{ sender, body, timestampMs }`.
+- `getRecentInboxMessagesAsync(sinceEpochMs: number): Promise<{ sender: string; body: string;
+  timestampMs: number }[]>` **(CR-10)** — queries `content://sms/inbox`
+  (`Telephony.Sms.Inbox.CONTENT_URI`, projection `address`/`date`/`body`, `date >= sinceEpochMs`,
+  ordered ascending). Backs the reconciliation sweep in §17.8; same in-memory-only handling as the
+  receiver (P-9) — nothing the native side reads here is ever written to disk itself.
 
 **Config plugin injects (Android only):** `RECEIVE_SMS` + `READ_SMS` `<uses-permission>`; the
 `<receiver>` and `<service>` entries; `android:allowBackup="false"` on `<application>` (D21 — or
 via `expo-build-properties`; finalised in §33). Nothing on iOS.
+
+`<receiver>` priority raised `999` → `2147483647` (`Integer.MAX_VALUE`) **(CR-10)** — see §17.8 for
+why.
 
 **Dev-client requirement.** Because of the SMS permissions and the custom native module, **Expo
 Go will not run CoinFlow**. Local dev uses `expo run:android` or an EAS `development` build;
@@ -968,6 +976,111 @@ default + `beforeSend` scrub → **§33.4 / D34** (Sentry, opt-in / default OFF)
 not built:** the contingency hybrid (native posts a provisional notification, JS replaces it) —
 adopt only if a ~2-week field test on OEM battery-killer devices shows > ~5 % dropped events or
 > ~10 s median latency (D18 / D23).
+
+### 17.8 Missed-broadcast reconciliation (CR-10)
+
+**Trigger found on-device (2026-09-06, Moto Edge 60 Pro, Android 16):** Truecaller registers its
+own `SMS_RECEIVED` receiver at `android:priority = 2147483647` (`Integer.MAX_VALUE`) — the same
+ceiling Google Messages (the actual default SMS app) uses — and its bank/"Insights" feature can
+call `abortBroadcast()` on a message it classifies as a bank SMS, before dispatch ever reaches
+CoinFlow's receiver (priority `999`, confirmed lower via `dumpsys activity broadcasts history` on
+the test device). When that happens, `SmsReceiver.onReceive` is **never called** — no crash, no
+log, no notification, nothing in the §32 failure matrix catches it, because nothing native or JS
+ever ran. Confirmed on-device: an identical PNB transaction SMS was correctly ingested when
+Truecaller was absent, and silently dropped when present, with Android's own broadcast-dispatch
+log as the only trace. This is a generic risk, not a Truecaller-specific one — any app holding
+`RECEIVE_SMS` can register at the same ceiling and do the same thing.
+
+**Fix 1 — priority parity (partial, §17.6).** `<receiver>` priority raised to `2147483647` to match
+the ceiling other apps already use. This does **not** guarantee CoinFlow wins a same-priority race
+— Android does not specify dispatch order among receivers tied at the same priority — so it
+narrows the window but does not close it. Real recovery is fix 2.
+
+**Fix 2 — reconciliation sweep (the actual fix).** Aborting the `SMS_RECEIVED` broadcast does not
+stop the message from being written to Android's shared SMS store — confirmed on-device (both
+test messages were present in `content://sms/inbox` regardless of whether CoinFlow's receiver ran).
+So CoinFlow adds a second, independent detection path that never depends on that broadcast firing
+at all:
+
+- `reconcileMissedSms()` (new — `src/services/tasks/sms-reconcile.ts`) calls the native
+  `getRecentInboxMessagesAsync(sinceEpochMs)` (§17.6) with a fixed **48-hour lookback** — no
+  persisted "last synced" cursor. A fixed window was chosen over a watermark specifically to avoid
+  cursor-drift / clock-skew edge cases; the existing `dedupeKey` check (§17.3 step 4) already makes
+  re-scanning already-processed messages free of duplicate Suggestions, so the lookback can be
+  generous without cost beyond the query itself.
+- Every message returned is run through the **exact same `smsIngestTask`** (§17.3, unmodified) used
+  by the real broadcast path — not a parallel/duplicated pipeline. This is the same "one pipeline,
+  two entry points" shape as F4/F5's manual-vs-headless write paths (§17.0 rule 2): the sender
+  gate, parser, transaction gate, dedupe, Suggestion write, rule match, notify, and self-heal steps
+  are identical regardless of which path found the message, so there is nothing to keep in sync
+  between them.
+- **Trigger:** cold app launch and every `AppState → active` transition, wired from
+  `src/app/_layout.tsx`. This is a **new** hook — no such lifecycle hook currently exists in the
+  codebase for this purpose. It intentionally does **not** also wire up `reconcileNotifications()`
+  (§31.8) to the same event — that is a separate, already-flagged gap (see that function's own file
+  header in `src/services/notifications/reconcile.ts`) and is out of scope for this fix; the two
+  are independent and must not be conflated.
+- ~~**No new background scheduler.**~~ **Superseded by §17.9 / CR-11** — a periodic
+  `expo-background-task` trigger was added as a second entry point, same day. §17.9 covers why this
+  doesn't reopen D23.
+- **Privacy (P-9) unchanged.** The native method reads into memory only, same as the receiver; the
+  JS side discards `body` the same way step 5 already does. Nothing new is persisted.
+- Never throws past its own boundary — same blanket try/catch-and-log-type-only convention as
+  §17.2/§32; a failed sweep is silently skipped, same class of trade as `reconcileNotifications`'s
+  own permission-denied early return (§31.7).
+
+No `SPEC-UI-UX.md` change — nothing here is user-visible beyond "a Suggestion that would otherwise
+have been missed now correctly appears."
+
+### 17.9 Two reconciliation triggers, two notification behaviors (CR-11)
+
+**User's call, same day as CR-10:** a message caught by the app-open/foreground trigger shouldn't
+push a notification at all — the user is already looking at the app, so it should just land quietly
+in the Review Queue. A message caught by a *periodic* background trigger should notify normally,
+since the user isn't necessarily looking at anything. This needs a second, real trigger to
+distinguish from, so a periodic background sweep was added alongside the existing one.
+
+**`smsIngestTask` gains a `notify` option** (§17.3, default `true` — the real broadcast path and
+the periodic sweep are both unaffected): `smsIngestTask(payload, { notify: false })` still runs
+steps 1–6 exactly as before (sender gate → parse → transaction gate → dedupe → write the
+Suggestion → rule match) but skips **both** step 7 (post) and step 8 (self-heal). Step 8 has to be
+skipped too, not just step 7 — `reconcileNotifications()`'s entire job is "post for every pending
+Suggestion with no live notification," so leaving it enabled would immediately re-post the exact
+notification `notify: false` just suppressed. The Review Queue's own live query already surfaces
+every pending Suggestion regardless of notification state, so nothing is hidden from the user by
+skipping both — only the push is skipped, on the theory that "you're in the app" and "there's a
+push notification for something you're in the app to see" are redundant.
+
+**`reconcileMissedSms(options: { notify: boolean })`** — `notify` is now required at the call site
+(no default) precisely so a future third call site can't silently pick the wrong one; passes
+straight through to every `smsIngestTask` call for that sweep.
+
+**Two call sites:**
+1. `SmsReconciler` (`src/app/_layout.tsx`, unchanged trigger from §17.8) → `{ notify: false }`.
+2. **New** — a periodic `expo-background-task` task, `SMS_RECONCILE_TASK` (`'coinflow.SMS_RECONCILE'`),
+   defined via `TaskManager.defineTask` and registered with `BackgroundTask.registerTaskAsync` at
+   module scope in `src/services/tasks/index.ts` (same file/pattern as `NOTIFICATION_RESPONSE_TASK`,
+   Android-only per D3) → `{ notify: true }`. Uses the package default interval (~12h, 15-minute
+   floor, opportunistic/OS-batched — not exact) rather than tuning it; this is purely a last-resort
+   backstop for "the app hasn't been opened in a while," not a latency-sensitive path, and the
+   default is already what `expo-background-task` recommends for exactly this shape of task.
+
+**Does this reopen D23?** No — D23 rejected `expo-background-task` for the *primary* while-killed
+detection path specifically because its 15-minute floor and OS-batched scheduling can't deliver a
+timely notification for a fresh SMS, and it doesn't run at all while the app is killed on some
+OEMs. Both objections are about latency and reliability *as the only path*. Here it's an
+opportunistic third-string backstop behind two faster paths (the real-time broadcast, then the
+app-open sweep) — being slow and inexact is fine for a safety net whose entire job is "eventually,
+if nothing else caught it." D18's "JS-owned, thin native bridge" still holds: the task body is
+`reconcileMissedSms({ notify: true })`, no new native code.
+
+**Config plugin:** `expo-background-task`'s own plugin (auto-added to `app.json` by `npx expo
+install`) handles whatever native registration `WorkManager` needs; nothing hand-rolled the way
+`coinflow-sms`'s plugin is (§17.6) — this stays "one native surface: the SMS bridge" for anything
+CoinFlow-specific, per D24.
+
+No `SPEC-UI-UX.md` change — the Review Queue screen itself is unchanged; this only changes whether
+a push notification accompanies a new pending Suggestion.
 
 ---
 
@@ -2974,3 +3087,40 @@ change in `SPEC-UI-UX.md` §9.
   detail, including a re-check of the test-suite flakiness (reproduced with the new test
   excluded — confirmed unrelated), in `SPEC/traceability.md`'s "Closing the remaining §32/§33
   deferrals" entry. No linked `SPEC-UI-UX.md` change — none of the three touch UI.
+
+- **CR-10** (2026-09-06, on-device troubleshooting — no SMS notification on a Moto Edge 60 Pro,
+  Android 16) — **found and closed a real detection gap: Truecaller can silently swallow the
+  `SMS_RECEIVED` broadcast before CoinFlow's receiver ever runs.** Root-caused on-device via
+  `dumpsys activity broadcasts history` (an identical bank SMS was delivered to CoinFlow's
+  receiver and correctly produced a Suggestion + notification with Truecaller absent; with it
+  present, the receiver was never invoked at all — no crash, no log, nothing in the §32 matrix,
+  because nothing ran). Full design in the new **§17.8**; summary: (1) `<receiver>` priority raised
+  `999` → `2147483647` to match the ceiling Truecaller/Google Messages already use (§17.6) — a
+  partial mitigation only, Android doesn't define same-priority ordering; (2) the real fix is a new
+  **reconciliation sweep** — `getRecentInboxMessagesAsync()` (new native method, §17.6) plus
+  `reconcileMissedSms()` (new, `src/services/tasks/sms-reconcile.ts`), triggered on app launch and
+  `AppState → active` from `src/app/_layout.tsx`, feeding any missed message from a fixed 48h
+  lookback through the **same, unmodified** `smsIngestTask` pipeline (§17.3) rather than a parallel
+  one. No new background scheduler — stays inside the existing lazy/on-open recovery model
+  (§17.0 rule 3, §31.8). Explicitly does **not** also fix `reconcile.ts`'s own separately-flagged
+  gap (missing `AppState`/launch wiring for `reconcileNotifications()`) — left alone, out of scope,
+  called out in §17.8 so the two aren't conflated later. No linked `SPEC-UI-UX.md` change — nothing
+  user-visible beyond a Suggestion that would otherwise have been silently missed now appearing.
+
+- **CR-11** (2026-09-06, same-day refinement of CR-10, user's explicit call) — **split
+  reconciliation into two triggers with two notification behaviors, and added the second trigger.**
+  Full design in the new **§17.9**; summary: `smsIngestTask` gains a `notify` option (default
+  `true`, so the real broadcast path is unaffected) that skips *both* the notification post (step 7)
+  and self-heal (step 8) when `false` — skipping only step 7 would be immediately undone by step 8,
+  whose job is exactly "post for every pending Suggestion missing one." The existing app-open/
+  foreground sweep (§17.8's `SmsReconciler`) now calls it with `{ notify: false }` — the user is
+  already looking at the app, so a caught message lands quietly in the Review Queue instead of
+  pushing a notification. A **new** periodic `expo-background-task` trigger
+  (`SMS_RECONCILE_TASK`, `src/services/tasks/index.ts`, package-default ~12h interval) calls it
+  with `{ notify: true }`, since that one fires when the user isn't necessarily looking at
+  anything. Explicitly does **not** reopen D23 (which rejected `expo-background-task` for the
+  *primary* while-killed detection path over latency/reliability) — this is a third-string,
+  opportunistic backstop behind two faster paths, where "eventually" is an acceptable answer; §17.9
+  spells out why the two aren't in tension. New dependency: `expo-background-task` (`npx expo
+  install`, its own config plugin auto-added to `app.json`) — no hand-rolled native code, D18/D24
+  stand. No linked `SPEC-UI-UX.md` change — the Review Queue screen is unchanged.
