@@ -17,9 +17,9 @@ import { requireOptionalNativeModule } from 'expo';
 import { UnavailabilityError } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
-import type { CoinflowSmsNativeModule, PermissionResponse } from './CoinflowSms.types';
+import type { CoinflowSmsNativeModule, InboxMessage, PermissionResponse } from './CoinflowSms.types';
 
-export type { PermissionResponse } from './CoinflowSms.types';
+export type { InboxMessage, PermissionResponse } from './CoinflowSms.types';
 
 const NAME = 'CoinflowSms';
 
@@ -43,4 +43,10 @@ export async function getPermissionsAsync(): Promise<PermissionResponse> {
 export async function requestPermissionsAsync(): Promise<PermissionResponse> {
   if (!native) throw new UnavailabilityError(NAME, 'requestPermissionsAsync');
   return native.requestPermissionsAsync();
+}
+
+/** Messages in `content://sms/inbox` received at or after `sinceEpochMs`, oldest first (§17.8). */
+export async function getRecentInboxMessagesAsync(sinceEpochMs: number): Promise<InboxMessage[]> {
+  if (!native) throw new UnavailabilityError(NAME, 'getRecentInboxMessagesAsync');
+  return native.getRecentInboxMessagesAsync(sinceEpochMs);
 }

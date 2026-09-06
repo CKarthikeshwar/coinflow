@@ -45,7 +45,9 @@ function withCoinflowSms(config) {
         },
         'intent-filter': [
           {
-            $: { 'android:priority': '999' },
+            // Matches the ceiling other SMS-reading apps (default SMS app, Truecaller, etc.)
+            // already use — narrows, but does not close, a same-priority race (§17.8, CR-10).
+            $: { 'android:priority': '2147483647' },
             action: [{ $: { 'android:name': SMS_RECEIVED_ACTION } }],
           },
         ],

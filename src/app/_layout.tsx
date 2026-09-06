@@ -53,6 +53,7 @@ import { NotificationRouter } from '@/features/app-shell/notification-router';
 import { RootErrorBoundary } from '@/features/app-shell/root-error-boundary';
 import { RootNavigator } from '@/features/app-shell/root-navigator';
 import { SheetHost } from '@/features/app-shell/sheet-host';
+import { SmsReconciler } from '@/features/app-shell/sms-reconciler';
 import { ToastHost } from '@/features/app-shell/toast-host';
 import { UndoHost } from '@/features/transactions/undo-host';
 
@@ -79,6 +80,7 @@ export default function RootLayout() {
                   <UndoHost />
                   <ToastHost />
                   <NotificationRouter />
+                  <SmsReconciler />
                 </BottomSheetModalProvider>
               </AppBackground>
               <AnimatedSplashOverlay />

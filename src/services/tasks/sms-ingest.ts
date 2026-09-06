@@ -77,7 +77,21 @@ async function dedupeKeyFor(
   });
 }
 
-export async function smsIngestTask(payload: SmsHeadlessPayload | undefined): Promise<void> {
+/**
+ * `notify: false` (§17.9, CR-11) — used by the app-open/foreground reconciliation sweep, where
+ * the user is already looking at the app: still writes the Suggestion (steps 1–6) but skips BOTH
+ * the notification post (step 7) AND self-heal (step 8) — leaving step 8 enabled would immediately
+ * re-post the exact notification step 7 just skipped, since self-heal's job is "post for every
+ * pending Suggestion missing one." The Review Queue's own live query surfaces the Suggestion
+ * either way; only the push is skipped.
+ */
+export type SmsIngestOptions = { notify?: boolean };
+
+export async function smsIngestTask(
+  payload: SmsHeadlessPayload | undefined,
+  options?: SmsIngestOptions,
+): Promise<void> {
+  const notify = options?.notify ?? true;
   try {
     const sender = payload?.sender?.trim();
     if (!sender) return;
@@ -127,13 +141,16 @@ export async function smsIngestTask(payload: SmsHeadlessPayload | undefined): Pr
 
     const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
 
-    // Step 7 — notify (single vs. group decision lives in post.ts).
-    await postForSuggestion(suggestion, rule);
+    if (notify) {
+      // Step 7 — notify (single vs. group decision lives in post.ts).
+      await postForSuggestion(suggestion, rule);
 
-    // Step 8 — self-heal: re-post for any older pending Suggestion missing a live notification
-    // (a previous run inserted the row but was killed before step 7). Idempotent — safe to call
-    // unconditionally every time.
-    await reconcileNotifications();
+      // Step 8 — self-heal: re-post for any older pending Suggestion missing a live notification
+      // (a previous run inserted the row but was killed before step 7). Idempotent — safe to call
+      // unconditionally every time. Skipped along with step 7 when `notify: false` (§17.9) — it
+      // would otherwise immediately re-post the notification step 7 just skipped.
+      await reconcileNotifications();
+    }
   } catch (e) {
     // The receiver + task must never crash the app. No PII — name only (§17.2).
     console.warn('[smsIngestTask] dropped SMS:', (e as Error)?.name ?? 'unknown');

@@ -153,3 +153,19 @@ describe('smsIngestTask — IMP-002 (non-qualifying SMS)', () => {
     await expect(smsIngestTask(QUALIFYING_SMS)).resolves.toBeUndefined();
   });
 });
+
+describe('smsIngestTask — notify: false (§17.9, CR-11)', () => {
+  it('still writes the Suggestion and looks up the rule, but skips post + self-heal', async () => {
+    await smsIngestTask(QUALIFYING_SMS, { notify: false });
+    expect(insertIfNewMock).toHaveBeenCalledTimes(1);
+    expect(getAccountRuleMock).toHaveBeenCalledWith('merchant@okhdfcbank');
+    expect(postForSuggestionMock).not.toHaveBeenCalled();
+    expect(reconcileNotificationsMock).not.toHaveBeenCalled();
+  });
+
+  it('defaults to notify: true when no options are given', async () => {
+    await smsIngestTask(QUALIFYING_SMS);
+    expect(postForSuggestionMock).toHaveBeenCalledTimes(1);
+    expect(reconcileNotificationsMock).toHaveBeenCalledTimes(1);
+  });
+});

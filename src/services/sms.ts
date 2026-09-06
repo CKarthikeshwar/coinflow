@@ -31,9 +31,9 @@
 import { PermissionStatus } from 'expo-modules-core';
 
 import * as CoinflowSms from '../../modules/coinflow-sms';
-import type { PermissionResponse } from '../../modules/coinflow-sms';
+import type { InboxMessage, PermissionResponse } from '../../modules/coinflow-sms';
 
-export type { PermissionResponse };
+export type { InboxMessage, PermissionResponse };
 
 /** `true` only on an Android dev-client / standalone build with the native module linked. */
 export function isSmsCaptureSupported(): boolean {
@@ -50,6 +50,12 @@ export async function getSmsPermissions(): Promise<PermissionResponse> {
 export async function requestSmsPermissions(): Promise<PermissionResponse> {
   if (!CoinflowSms.isSupported()) return deniedResponse();
   return CoinflowSms.requestPermissionsAsync();
+}
+
+/** Inbox messages at/after `sinceEpochMs` (§17.8); `[]` where capture is unsupported. */
+export async function getRecentSmsMessages(sinceEpochMs: number): Promise<InboxMessage[]> {
+  if (!CoinflowSms.isSupported()) return [];
+  return CoinflowSms.getRecentInboxMessagesAsync(sinceEpochMs);
 }
 
 function deniedResponse(): PermissionResponse {
