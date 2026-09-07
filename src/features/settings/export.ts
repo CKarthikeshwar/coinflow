@@ -35,7 +35,8 @@ import { isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { accountRules, categories, transactions } from '@/db/schema';
 
-function ensureFile(name: string): File {
+/** Also reused by `diagnostics.ts` (§33.1, CR-12) — same cache-write-then-share pattern. */
+export function ensureFile(name: string): File {
   const file = new File(Paths.cache, name);
   file.create({ overwrite: true });
   return file;

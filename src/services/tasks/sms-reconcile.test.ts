@@ -4,6 +4,7 @@
  * (that's `sms-ingest.test.ts`'s job).
  */
 
+import { setSetting } from '@/db/repositories/settings';
 import { getRecentSmsMessages, isSmsCaptureSupported } from '@/services/sms';
 
 import { reconcileMissedSms } from './sms-reconcile';
@@ -14,10 +15,12 @@ jest.mock('@/services/sms', () => ({
   getRecentSmsMessages: jest.fn().mockResolvedValue([]),
 }));
 jest.mock('./sms-ingest', () => ({ smsIngestTask: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('@/db/repositories/settings', () => ({ setSetting: jest.fn() }));
 
 const isSmsCaptureSupportedMock = isSmsCaptureSupported as jest.Mock;
 const getRecentSmsMessagesMock = getRecentSmsMessages as jest.Mock;
 const smsIngestTaskMock = smsIngestTask as jest.Mock;
+const setSettingMock = setSetting as jest.Mock;
 
 const MESSAGE = { sender: 'AD-PNBSMS-S', body: 'A/c credited for INR 1.00.', timestampMs: 1_700_000_000_000 };
 
@@ -66,5 +69,22 @@ describe('reconcileMissedSms', () => {
     getRecentSmsMessagesMock.mockResolvedValue([MESSAGE]);
     smsIngestTaskMock.mockRejectedValueOnce(new Error('boom'));
     await expect(reconcileMissedSms({ notify: false })).resolves.toBeUndefined();
+  });
+
+  describe('pipeline health stamping (§17.10, CR-12)', () => {
+    it('records the sweep timestamp and match count on a successful fetch', async () => {
+      const now = 1_800_000_000_000;
+      jest.spyOn(Date, 'now').mockReturnValue(now);
+      getRecentSmsMessagesMock.mockResolvedValue([MESSAGE, MESSAGE]);
+      await reconcileMissedSms({ notify: false });
+      expect(setSettingMock).toHaveBeenCalledWith('smsLastReconcileSweepAt', now);
+      expect(setSettingMock).toHaveBeenCalledWith('smsLastReconcileMatchCount', 2);
+    });
+
+    it('does not stamp anything if the fetch itself rejects', async () => {
+      getRecentSmsMessagesMock.mockRejectedValue(new Error('inbox query failed'));
+      await reconcileMissedSms({ notify: false });
+      expect(setSettingMock).not.toHaveBeenCalled();
+    });
   });
 });

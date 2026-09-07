@@ -6,6 +6,7 @@ const mockRouterBack = jest.fn();
 const mockClearAllData = jest.fn();
 const mockExportJson = jest.fn();
 const mockExportCsv = jest.fn();
+const mockSendDiagnostics = jest.fn();
 const mockSetSetting = jest.fn();
 const mockArmCrashReporting = jest.fn();
 let mockCrashReportingValue: boolean | undefined;
@@ -21,12 +22,16 @@ jest.mock('@/features/settings/export', () => ({
   exportJson: (...args: unknown[]) => mockExportJson(...args),
   exportCsv: (...args: unknown[]) => mockExportCsv(...args),
 }));
+jest.mock('@/features/settings/diagnostics', () => ({
+  sendDiagnostics: (...args: unknown[]) => mockSendDiagnostics(...args),
+}));
 
 beforeEach(() => {
   mockRouterBack.mockReset();
   mockClearAllData.mockReset();
   mockExportJson.mockReset().mockResolvedValue(undefined);
   mockExportCsv.mockReset().mockResolvedValue(undefined);
+  mockSendDiagnostics.mockReset().mockResolvedValue(undefined);
   mockSetSetting.mockReset();
   mockArmCrashReporting.mockReset();
   mockCrashReportingValue = false;
@@ -48,6 +53,19 @@ it('a failed export shows a retry message, not a partial-success claim (E17)', a
   mockExportJson.mockRejectedValue(new Error('share failed'));
   const { getByText } = await render(<DataScreen />);
   await fireEvent.press(getByText('Export JSON'));
+  expect(getByText(/Couldn't export/)).toBeTruthy();
+});
+
+it('Send diagnostics calls sendDiagnostics', async () => {
+  const { getByText } = await render(<DataScreen />);
+  await fireEvent.press(getByText('Send diagnostics'));
+  expect(mockSendDiagnostics).toHaveBeenCalled();
+});
+
+it('a failed diagnostics send shows the same retry message (E21)', async () => {
+  mockSendDiagnostics.mockRejectedValue(new Error('share failed'));
+  const { getByText } = await render(<DataScreen />);
+  await fireEvent.press(getByText('Send diagnostics'));
   expect(getByText(/Couldn't export/)).toBeTruthy();
 });
 

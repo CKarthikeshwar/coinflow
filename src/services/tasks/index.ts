@@ -53,12 +53,13 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { AppRegistry, Platform } from 'react-native';
 
+import { setSetting } from '@/db/repositories/settings';
 import { ensureNotificationChannel } from '@/services/notifications/channel';
 import { registerNotificationCategories } from '@/services/notifications/categories';
 import { handleDiscard, handleSave } from '@/services/notifications/respond';
 
 import { reconcileMissedSms } from './sms-reconcile';
-import { smsIngestTask } from './sms-ingest';
+import { smsIngestTask, type SmsHeadlessPayload } from './sms-ingest';
 
 /** Native task name — must match `CoinflowSmsHeadlessTaskService.getTaskConfig` (§17.6). */
 export const SMS_INGEST_TASK = 'CoinflowSmsIngest';
@@ -69,7 +70,16 @@ export const SMS_RECONCILE_TASK = 'coinflow.SMS_RECONCILE';
 
 // --- SMS ingest (app-killed wake path) ---------------------------------------
 if (Platform.OS === 'android') {
-  AppRegistry.registerHeadlessTask(SMS_INGEST_TASK, () => smsIngestTask);
+  AppRegistry.registerHeadlessTask(SMS_INGEST_TASK, () => async (payload: SmsHeadlessPayload) => {
+    // §17.10 (CR-12) — proves Android actually invoked the real-time path, independent of
+    // whether the message goes on to match a sender; best-effort, must never block ingest.
+    try {
+      setSetting('smsLastRealtimeInvokedAt', Date.now());
+    } catch (e) {
+      console.warn('[tasks] smsLastRealtimeInvokedAt write failed:', (e as Error)?.name ?? 'unknown');
+    }
+    return smsIngestTask(payload);
+  });
 }
 
 // --- Missed-SMS reconciliation backstop (§17.9, CR-11) — opportunistic, OS-batched; the

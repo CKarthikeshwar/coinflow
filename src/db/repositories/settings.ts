@@ -42,7 +42,10 @@ export type SettingKey =
   | 'crashReportingEnabled'
   | 'schemaSeededVersion'
   | 'lastPurgeAt'
-  | 'analyticsPeriodMode';
+  | 'analyticsPeriodMode'
+  | 'smsLastRealtimeInvokedAt'
+  | 'smsLastReconcileSweepAt'
+  | 'smsLastReconcileMatchCount';
 
 export function getSetting<T>(key: SettingKey | string, fallback: T): T {
   const row = db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).get();

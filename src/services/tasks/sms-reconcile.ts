@@ -36,6 +36,7 @@
  * as `reconcileNotifications`'s own permission-denied early return (§31.7).
  */
 
+import { setSetting } from '@/db/repositories/settings';
 import { getRecentSmsMessages, isSmsCaptureSupported } from '@/services/sms';
 
 import { smsIngestTask } from './sms-ingest';
@@ -47,6 +48,11 @@ export async function reconcileMissedSms(options: { notify: boolean }): Promise<
     if (!isSmsCaptureSupported()) return;
 
     const messages = await getRecentSmsMessages(Date.now() - LOOKBACK_MS);
+    // §17.10 (CR-12) — proves the sweep ran and how much it found, regardless of which of the
+    // two triggers (§17.9) fired it; only stamped once the fetch above has actually succeeded.
+    setSetting('smsLastReconcileSweepAt', Date.now());
+    setSetting('smsLastReconcileMatchCount', messages.length);
+
     for (const { sender, body, timestampMs } of messages) {
       await smsIngestTask({ sender, body, timestampMs }, { notify: options.notify });
     }

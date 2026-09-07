@@ -26,6 +26,7 @@ import { clearAllData } from '@/db/maintenance';
 import { setSetting, useSetting } from '@/db/repositories/settings';
 import { armCrashReporting } from '@/services/crash';
 
+import { sendDiagnostics } from '@/features/settings/diagnostics';
 import { exportCsv, exportJson } from '@/features/settings/export';
 import { Button } from '@/ui/button';
 import { ConfirmDialog } from '@/ui/confirm-dialog';
@@ -34,7 +35,7 @@ import { TopBar } from '@/ui/top-bar';
 
 export default function DataScreen() {
   const [confirmingClear, setConfirmingClear] = useState(false);
-  const [exportError, setExportError] = useState<'json' | 'csv' | null>(null);
+  const [exportError, setExportError] = useState<'json' | 'csv' | 'diagnostics' | null>(null);
   const [cleared, setCleared] = useState(false);
   const crashReporting = useSetting<boolean>('crashReportingEnabled');
   const crashReportingOn = crashReporting.value ?? false;
@@ -44,12 +45,14 @@ export default function DataScreen() {
     armCrashReporting(next);
   };
 
-  const handleExport = async (kind: 'json' | 'csv') => {
+  const handleExport = async (kind: 'json' | 'csv' | 'diagnostics') => {
     setExportError(null);
     try {
-      await (kind === 'json' ? exportJson() : exportCsv());
+      if (kind === 'json') await exportJson();
+      else if (kind === 'csv') await exportCsv();
+      else await sendDiagnostics();
     } catch {
-      // E17 — a retry toast with nothing partially shared; the share sheet itself owns any
+      // E17/E21 — a retry toast with nothing partially shared; the share sheet itself owns any
       // partial-share state, this screen only needs to say it didn't go through.
       setExportError(kind);
     }
@@ -81,6 +84,17 @@ export default function DataScreen() {
             Couldn&apos;t export — nothing was shared. Try again.
           </ThemedText>
         ) : null}
+
+        <ThemedText type="label" themeColor="text3" style={styles.sectionLabel}>
+          Diagnostics
+        </ThemedText>
+        <ThemedText type="caption" themeColor="text3" style={styles.diagnosticsCopy}>
+          Bundle device info, permission state, and recent app activity — no messages or amounts —
+          to send when reporting a bug.
+        </ThemedText>
+        <Button variant="ghost" onPress={() => handleExport('diagnostics')} style={styles.clearButton}>
+          Send diagnostics
+        </Button>
 
         <ThemedText type="label" themeColor="text3" style={styles.sectionLabel}>
           Crash reporting
@@ -133,6 +147,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: Spacing.two },
   exportButton: { flex: 1 },
   error: { paddingTop: Spacing.two },
+  diagnosticsCopy: { paddingBottom: Spacing.two },
   crashRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   crashCopy: { flex: 1 },
   clearButton: {},

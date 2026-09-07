@@ -31,7 +31,14 @@
  *   `src/services/crash` to actually send to Sentry, but `services/crash` also needs to import
  *   from this file (for `scrubText`/`redactError`). Instead of importing each other directly,
  *   `services/crash` calls `_setCrashSink` once at startup to hand this file a callback.
+ * - **Ring buffer (CR-12, §32.1)** — every `warn`/`error` call also appends its already-scrubbed
+ *   form to `getRecentLogs()`'s bounded last-50 in-memory buffer, *unconditionally* (not gated on
+ *   `armed`). This is what backs the Settings › Data "Send diagnostics" export: crash reporting is
+ *   off by default for everyone, so without this a diagnostics bundle would carry no activity
+ *   trail at all. In-memory only — cleared on process death, never persisted to disk.
  */
+
+const RING_BUFFER_SIZE = 50;
 
 let armed = false;
 let capture: ((error: unknown, extra: { op?: string }) => void) | null = null;
@@ -68,6 +75,21 @@ function forward(e: unknown, op?: string) {
   if (!__DEV__ && armed && capture) capture(e, { op });
 }
 
+export type LoggedEvent = { ts: number; level: 'warn' | 'error'; op?: string; name: string; message: string };
+
+const ringBuffer: LoggedEvent[] = [];
+
+function record(level: LoggedEvent['level'], e: unknown, op?: string) {
+  const redacted = redactError(e);
+  ringBuffer.push({ ts: Date.now(), level, op, name: redacted.name, message: redacted.message });
+  if (ringBuffer.length > RING_BUFFER_SIZE) ringBuffer.shift();
+}
+
+/** Last `RING_BUFFER_SIZE` scrubbed `warn`/`error` events, oldest first (§32.1, CR-12). */
+export function getRecentLogs(): LoggedEvent[] {
+  return [...ringBuffer];
+}
+
 export const log = {
   debug: (...args: unknown[]) => {
     if (__DEV__) console.debug(...args);
@@ -77,10 +99,12 @@ export const log = {
   },
   warn: (e: unknown, op?: string) => {
     if (__DEV__) console.warn(op ?? '', e);
+    record('warn', e, op);
     forward(e, op);
   },
   error: (e: unknown, op?: string) => {
     if (__DEV__) console.error(op ?? '', e);
+    record('error', e, op);
     forward(e, op);
   },
 };

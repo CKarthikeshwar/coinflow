@@ -1082,6 +1082,33 @@ CoinFlow-specific, per D24.
 No `SPEC-UI-UX.md` change — the Review Queue screen itself is unchanged; this only changes whether
 a push notification accompanies a new pending Suggestion.
 
+### 17.10 Pipeline health tracking (CR-12)
+
+Two read-only signals, stored via the existing generic `appSettings` KV store (§19.5,
+`getSetting`/`setSetting`) — no schema change, no effect on detection/notification behaviour;
+CR-10/CR-11 stand exactly as built. Purpose: let the Settings › Data "Send diagnostics" export
+(§33.1) answer "did the real-time path ever run on this device, and is the reconciliation backstop
+catching anything?" without physical access to the phone — the exact question `dumpsys` answered
+on-device for CR-10, now answerable from an exported file.
+
+- **`smsLastRealtimeInvokedAt`** (epoch ms) — stamped by a thin wrapper around the
+  `AppRegistry.registerHeadlessTask(SMS_INGEST_TASK, …)` registration in
+  `src/services/tasks/index.ts`: `setSetting('smsLastRealtimeInvokedAt', Date.now())` runs
+  immediately before delegating to the unmodified `smsIngestTask(payload)`. This proves Android
+  actually invoked the headless task at all, independent of whether the message went on to match a
+  known sender — the fact that stayed silently missing for the Truecaller case, since nothing
+  native or JS executed. Best-effort: the `setSetting` call is wrapped so a write failure can never
+  block or fail the real ingest.
+- **`smsLastReconcileSweepAt`** (epoch ms) + **`smsLastReconcileMatchCount`** (integer) — stamped
+  in `reconcileMissedSms()` (`src/services/tasks/sms-reconcile.ts`) immediately after
+  `getRecentSmsMessages()` returns successfully, before the per-message loop — so a thrown fetch
+  leaves both settings untouched (the sweep genuinely didn't run), while a successful fetch records
+  it regardless of which trigger fired it (§17.9's foreground sweep and periodic task both call
+  this same function, so both feed the same two settings — consistent with "one pipeline, multiple
+  triggers").
+
+No `SPEC-UI-UX.md` change.
+
 ---
 
 ## 18. Project structure
@@ -2350,8 +2377,10 @@ reads `useSetting` for the SMS/Notifications subtitle (On/Off) · static list �
   list; row → edit note/category (`updateAccountRule`); swipe → `deleteAccountRule`; empty state
   until the first rule. Backs F8.
 - **Data** (`data.tsx`) — **Export** row → `exportJson` + `exportCsv` → `Sharing.shareAsync`
-  (IMP-043); **Clear all data** (danger) → two-step `ConfirmDialog` (type `CONFIRM`) →
-  `clearAllData` → relaunch into onboarding (IMP-044/065).
+  (IMP-043); **Diagnostics** row (CR-12) → **Send diagnostics** → `sendDiagnostics()` →
+  `Sharing.shareAsync`, same error-toast pattern as Export (E21); **Clear all data** (danger) →
+  two-step `ConfirmDialog` (type `CONFIRM`) → `clearAllData` → relaunch into onboarding
+  (IMP-044/065).
 - **About** (`about.tsx`) — version; "All your data stays on this device."; licenses + help
   links.
 
@@ -2558,6 +2587,14 @@ live in `src/services/tasks/` (§17.2) and call into `respond.ts`.
   `'export.csv'`), counts (`pendingCount`), and enum values (`direction`, `paymentMethod`).
 - **Never:** SMS body, `amountMinor`, `account`, `note`, `description`, category name, sender id,
   `dedupeKey`, file contents, DB rows.
+- **In-memory ring buffer (CR-12)** — every `warn`/`error` call also appends its already-scrubbed
+  `{ ts, level, op, name, message }` to a bounded last-50-entries buffer in `log.ts`
+  (`getRecentLogs()`), **unconditionally** — not gated on `crashReportingEnabled`. This is what
+  lets the Settings › Data "Send diagnostics" export (§33.1) carry recent app activity even when
+  crash reporting has never been turned on (the default for everyone), which is exactly the state
+  a bug report typically arrives in. In-memory only — cleared on process death — a deliberate v1
+  scope cut, not a gap: this is a manual, pull-based companion to crash reporting, not a
+  replacement for it.
 
 ### 32.2 Failure matrix
 
@@ -2583,6 +2620,7 @@ live in `src/services/tasks/` (§17.2) and call into `respond.ts`.
 | E18 | **`clearAllData` fails partway** | it runs as one DB transaction + a settings reset; on failure it rolls back and shows "Couldn't clear data — nothing was changed." | `error` op `maintenance/clear` |
 | E19 | **Deep link to a `transaction/[id]` that doesn't exist** | `+not-found` → a friendly "That transaction isn't here anymore." + **Go home** | `debug` |
 | E20 | **Uncaught render error anywhere** | root error boundary (§32.3): full-screen **"Something went wrong."** + **Reload app** (re-mounts the tree); data untouched | `error` op `boundary`, component stack scrubbed |
+| E21 | **Diagnostics export: file write or share fails (CR-12)** | Data screen toast **"Couldn't export — nothing was shared. Try again."** (same copy/pattern as E17) | `error` op `export/diagnostics`, no bundle contents |
 
 ### 32.3 Error boundaries
 
@@ -2638,6 +2676,18 @@ lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — o
   `Sharing.shareAsync`, and **deleted in a `finally`** after the share sheet returns. They are
   never written to a world-readable location by CoinFlow; where the user then sends them is the
   user's choice (§12 / IMP-043).
+- **Diagnostics export (CR-12)** — `sendDiagnostics()` (`src/features/settings/diagnostics.ts`)
+  follows the identical cache-write-then-share pattern as the three data exports above, triggered
+  only by an explicit tap on Settings › Data's **Send diagnostics** row (§30.16) — never automatic,
+  never a background upload. Contents: `exportedAt`, app version, device platform/OS
+  version/manufacturer/model (`expo-device`), live SMS/notification permission state, the §17.10
+  pipeline-health settings, `crashReportingEnabled`, and the last 50 scrubbed log entries
+  (§32.1's ring buffer). **Never included:** SMS body, `amountMinor`, account/category/note text,
+  or any DB row — same exclusion list as §32.1. This is the mechanism the earlier
+  no-physical-access diagnosis problem (CR-10's root cause) is meant to solve for future
+  device-specific bugs; it does not require any change to §33.2's no-network assertion, since
+  `Sharing.shareAsync` is user-driven and outside `no-network.test.ts`'s scope, same as the other
+  three exports.
 - No `MediaStore`, no clipboard writes of financial data.
 
 ### 33.2 No-network assertion
@@ -3124,3 +3174,25 @@ change in `SPEC-UI-UX.md` §9.
   spells out why the two aren't in tension. New dependency: `expo-background-task` (`npx expo
   install`, its own config plugin auto-added to `app.json`) — no hand-rolled native code, D18/D24
   stand. No linked `SPEC-UI-UX.md` change — the Review Queue screen is unchanged.
+
+- **CR-12** (2026-09-07, generalizing CR-10's on-device troubleshooting into a reusable path — the
+  Truecaller bug was only root-caused because the affected phone could be physically brought in
+  for `adb dumpsys` inspection; this closes that dependency for future device-specific reports) —
+  **added a manual "Send diagnostics" export.** Full design in the new **§17.10** (pipeline-health
+  settings) and the amended §32.1/§32.2 (E21)/§30.16/§33.1; summary: (1) two new read-only
+  `appSettings` signals — `smsLastRealtimeInvokedAt` (stamped when Android actually invokes the
+  real-time headless task, §17.10) and `smsLastReconcileSweepAt`/`smsLastReconcileMatchCount`
+  (stamped on every successful reconciliation sweep, §17.8/§17.9) — answer, from an exported file,
+  the exact question `dumpsys` answered on-device for CR-10; (2) `log.ts` gains a bounded 50-entry
+  in-memory ring buffer of scrubbed `warn`/`error` events, unconditional on
+  `crashReportingEnabled` (§32.1), so a report has *something* even though crash reporting defaults
+  off for everyone; (3) `sendDiagnostics()` (new, `src/features/settings/diagnostics.ts`) bundles
+  device info, live permission state, the §17.10 settings, and the ring buffer into a JSON file,
+  shared via the identical cache-write-then-`Sharing.shareAsync` pattern the three existing data
+  exports already use (§33.1) — a new **Send diagnostics** row on Settings › Data (§30.16). New
+  dependency: `expo-device` (`npx expo install`) — `Platform.OS`/`Platform.Version` alone can't
+  distinguish OEMs, which is the entire point. **Explicitly does not require a §33.2 no-network
+  policy change** — `Sharing.shareAsync` is user-driven and already outside `no-network.test.ts`'s
+  scope. **Explicitly out of scope:** any automatic/background telemetry to a backend for a beta
+  tester cohort — that idea was discussed and deliberately deferred, not built; this CR is the
+  manual, pull-only tier only. No linked `SPEC-UI-UX.md` change beyond the one new Data-screen row.
