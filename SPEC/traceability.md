@@ -94,6 +94,22 @@ confirmed against the originally-affected physical device (Truecaller present, p
 SMS now produces a Suggestion + notification). No new `IMP-0xx`/`UI-0xx` — this hardens IMP-001's
 existing delivery guarantee against third-party interference, it doesn't add a new one.
 
+**Follow-up — a "Send diagnostics" export (§17.10/§32.1/§33.1, CR-12):** the gap CR-10 exposed
+wasn't just this one bug, it was the process — the Truecaller fix was only root-caused because the
+affected phone could be physically brought in for `adb dumpsys` inspection. CR-12 generalizes that
+into a repeatable path for the *next* device-specific report, without physical access: two new
+`appSettings` signals record whether the real-time headless task ever actually ran and what the
+reconciliation sweep last found (§17.10); `log.ts` gains a 50-entry ring buffer of scrubbed
+`warn`/`error` events, unconditional on crash reporting being armed (§32.1), since that's off by
+default for everyone; and a new **Send diagnostics** row on Settings › Data (`data.tsx`) bundles
+all of it plus device info (new `expo-device` dependency) and live permission state into a JSON
+file via the OS share sheet — same manual, user-driven pattern as the existing exports, so it
+needs no change to the no-network-by-default guarantee (§33.2). Verified end-to-end on a physical
+Samsung device: share sheet opens with the correct file, and the JSON content was confirmed
+accurate field-by-field, including the pipeline-health timestamp firing for real from a live
+on-device reconciliation sweep. No new `IMP-0xx`/`UI-0xx` — a diagnostic/support surface, not a
+product-facing acceptance criterion.
+
 ## F1 — Automatic transaction detection
 
 | IMP | Criterion | UI-0xx | Component/service | Test kind | Test id / file | Status |
