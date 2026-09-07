@@ -67,6 +67,33 @@ gap in the current library/Reanimated-v4 combination worth keeping patched.
 Manual verification owed since F3/F4 (see their sections below) for "the sheet actually opens
 on-device" is now **confirmed** — Add Transaction opens correctly on a physical device.
 
+## Cross-cutting fix — a third-party app can silently swallow the SMS broadcast (§17.8/§17.9, CR-10/CR-11)
+
+Not tied to a single feature: IMP-001's "a qualifying SMS creates exactly one pending Suggestion"
+held on every test device, but a real-world report (a Moto Edge 60 Pro with Truecaller installed)
+showed transaction SMS going undetected in the wild. Root-caused on that device via `dumpsys
+activity broadcasts history`: Truecaller (or any app holding `RECEIVE_SMS` at the same top
+priority as the default SMS app) can call `abortBroadcast()` on a recognized bank SMS before
+CoinFlow's `SmsReceiver` ever runs — no crash, no log, nothing in the §32 failure matrix, because
+nothing native or JS executes at all. Invisible to every existing test (unit tests drive
+`smsIngestTask` directly, never through the real Android broadcast dispatch), so this was only
+findable on a real device running a real interfering app — the same "surfaces only on-device"
+pattern as the two cross-cutting fixes above.
+
+Fixed with two changes, neither of which touches IMP-001's actual guarantee (both feed the exact
+same, unmodified `smsIngestTask` pipeline — §17.3 steps 1–8 are unchanged):
+1. `SmsReceiver`'s intent-filter priority raised to `Integer.MAX_VALUE` (partial mitigation only —
+   Android doesn't define ordering between receivers at the same priority).
+2. A new reconciliation sweep (`reconcileMissedSms`, `src/services/tasks/sms-reconcile.ts`) reads
+   Android's shared SMS store directly — aborting the broadcast doesn't stop the message from
+   landing there — on app launch/foreground and on a new periodic `expo-background-task`, feeding
+   any message the real-time path missed through the same pipeline as a backstop.
+
+Verified: unit-tested (`sms-reconcile.test.ts`, extended `sms-ingest.test.ts`); the fix itself was
+confirmed against the originally-affected physical device (Truecaller present, previously-silent
+SMS now produces a Suggestion + notification). No new `IMP-0xx`/`UI-0xx` — this hardens IMP-001's
+existing delivery guarantee against third-party interference, it doesn't add a new one.
+
 ## F1 — Automatic transaction detection
 
 | IMP | Criterion | UI-0xx | Component/service | Test kind | Test id / file | Status |
