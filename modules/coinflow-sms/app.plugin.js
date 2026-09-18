@@ -15,6 +15,7 @@ const { withAndroidManifest, AndroidConfig } = require('expo/config-plugins');
 
 const RECEIVER = 'expo.modules.coinflowsms.SmsReceiver';
 const SERVICE = 'expo.modules.coinflowsms.CoinflowSmsHeadlessTaskService';
+const STORE_JOB_SERVICE = 'expo.modules.coinflowsms.SmsStoreJobService';
 const PERMISSIONS = ['android.permission.RECEIVE_SMS', 'android.permission.READ_SMS'];
 const SMS_RECEIVED_ACTION = 'android.provider.Telephony.SMS_RECEIVED';
 
@@ -57,6 +58,17 @@ function withCoinflowSms(config) {
     app.service = app.service ?? [];
     if (!app.service.some((s) => s.$?.['android:name'] === SERVICE)) {
       app.service.push({ $: { 'android:name': SERVICE, 'android:exported': 'false' } });
+    }
+
+    // CR-16: the store-watcher job. BIND_JOB_SERVICE means only the system can bind it.
+    if (!app.service.some((s) => s.$?.['android:name'] === STORE_JOB_SERVICE)) {
+      app.service.push({
+        $: {
+          'android:name': STORE_JOB_SERVICE,
+          'android:exported': 'true',
+          'android:permission': 'android.permission.BIND_JOB_SERVICE',
+        },
+      });
     }
 
     return cfg;

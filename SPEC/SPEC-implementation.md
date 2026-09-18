@@ -1273,10 +1273,11 @@ straight through to every `smsIngestTask` call for that sweep.
 2. **New** — a periodic `expo-background-task` task, `SMS_RECONCILE_TASK` (`'coinflow.SMS_RECONCILE'`),
    defined via `TaskManager.defineTask` and registered with `BackgroundTask.registerTaskAsync` at
    module scope in `src/services/tasks/index.ts` (same file/pattern as `NOTIFICATION_RESPONSE_TASK`,
-   Android-only per D3) → `{ notify: true }`. Registered with an explicit **3-hour minimum interval** (CR-15; `SMS_RECONCILE_INTERVAL_MINUTES`,
+   Android-only per D3) → `{ notify: true }`. Registered with an explicit **12-hour minimum interval** (CR-15, raised from 3h by CR-16; `SMS_RECONCILE_INTERVAL_MINUTES`,
    15-minute floor, opportunistic/OS-batched — not exact) and **no network constraint** (patched out of
-   `expo-background-task`, `patches/expo-background-task+57.0.16.patch`). Still a last-resort backstop, not a
-   latency-sensitive path. (This paragraph used to say the package default was ~12h; on Android the native
+   `expo-background-task`, `patches/expo-background-task+57.0.16.patch`). Since CR-16 it is mostly a *watchdog* (it re-arms
+   the SMS-store watcher, §17.11) with the 48h inbox sweep as a
+   last-resort net, which is why 12h is enough. Still not a latency-sensitive path. (This paragraph used to say the package default was ~12h; on Android the native
    scheduler's actual default is 24h and it also required a connected network — hence CR-15.)
 
 **Does this reopen D23?** No — D23 rejected `expo-background-task` for the *primary* while-killed
@@ -1320,6 +1321,60 @@ on-device for CR-10, now answerable from an exported file.
   it regardless of which trigger fired it (§17.9's foreground sweep and periodic task both call
   this same function, so both feed the same two settings — consistent with "one pipeline, multiple
   triggers").
+
+### 17.11 SMS-store watcher (CR-16)
+
+**Problem.** `SmsReceiver` (§17.1) depends on Android delivering the `SMS_RECEIVED` broadcast to us.
+Another app (e.g. Truecaller) can call `abortBroadcast()` on it first — and priority can't be raised
+past what the manifest already claims (`2147483647`, §17.6). §17.8/§17.9 only catch such a message
+*eventually* (next app open, or the periodic task). Aborting the broadcast does **not** stop the message
+being written to Android's shared SMS store (confirmed on-device, CR-10), so the store itself is the
+reliable thing to watch.
+
+**Mechanism.** A `JobScheduler` job whose trigger is a content change to `content://sms`
+(`JobInfo.addTriggerContentUri`, `FLAG_NOTIFY_FOR_DESCENDANTS`), so Android's own system service holds
+the observer and wakes us — nothing of ours has to be running. New native pieces, all in
+`modules/coinflow-sms` (the D18/D24 rule holds: Kotlin only does the wake trigger, no parsing/DB/notification):
+
+- `SmsStoreJobService` (`JobService`) — job id `7301`; `setTriggerContentUpdateDelay(5s)` /
+  `setTriggerContentMaxDelay(30s)` so a burst of messages becomes one run. `onStartJob` **re-arms first**
+  (a trigger job fires once), then starts the existing `CoinflowSmsHeadlessTaskService` with
+  `task=store` and returns.
+- `CoinflowSmsHeadlessTaskService.getTaskConfig` — routes `task=store` to the headless JS task
+  `CoinflowSmsStoreChanged` (60s budget); anything else is the unchanged `CoinflowSmsIngest` path.
+- `SmsStoreTrigger.schedule(context, force)` — idempotent: an already-pending job is left alone unless
+  `force` (used by the job re-arming itself), because replacing it would discard a change it had recorded.
+- Module function `armSmsStoreTrigger()` → JS wrapper `armSmsStoreTrigger()` (`modules/coinflow-sms/src`,
+  `src/services/sms.ts`). The config plugin adds `<service …SmsStoreJobService
+  android:permission="android.permission.BIND_JOB_SERVICE">`. No new permission (READ_SMS is already held).
+
+**JS half.** `registerHeadlessTask('CoinflowSmsStoreChanged')` in `src/services/tasks/index.ts`: stamps
+`smsLastStoreTriggerAt`, runs `reconcileMissedSms({ notify: true, source: 'storeTrigger', lookbackMs: 6h })`
+(the same sweep and `smsIngestTask` / `dedupeKey` guard as §17.8 — one pipeline, one more trigger). It notifies, like a real incoming SMS, because it can fire while the user
+isn't looking.
+
+**Arming — because the trigger is one-shot and non-persistent.** `JobInfo` rejects a persisted job that
+has a trigger URI, so Android drops it on reboot; it also fires once per arm. `armSmsStoreTrigger()` is
+therefore called at: every JS start (module scope of `tasks/index.ts`, including headless starts — the first
+SMS after a reboot re-arms it), every app launch/foreground (`SmsReconciler`), and the periodic task (§17.9,
+the watchdog). It is a cheap no-op when already pending.
+
+**Limits (accepted).** Runs late in Doze / App Standby (minutes to hours on an idle phone, rather than
+seconds); a force-stopped app gets nothing until next opened — same as the broadcast receiver; aggressive
+OEM task-killers can cancel jobs (Xiaomi/Oppo/Vivo/Samsung "sleeping apps"); between a reboot and the next
+arm point it is off, covered by the app-open sweep and the 12h task. RCS-only bank messages never enter the SMS
+store and are not covered (a notification-listener path was considered and deferred).
+
+**"Which path caught it" counters.** `smsIngestTask` takes `source: 'broadcast' | 'storeTrigger' | 'sweepOpen' |
+'sweepPeriodic'`; when a message produces a genuinely **new** suggestion (`created`), the matching
+`app_setting` counter (`smsCaughtBroadcast` / `…StoreTrigger` / `…SweepOpen` / `…SweepPeriodic`,
+`src/services/tasks/catch-stats.ts`) is incremented — dedupe no-ops count for nothing. Together with
+`smsLastStoreTriggerAt` they are added to the Send Diagnostics bundle under `pipelineHealth`
+(`lastStoreTriggerAt`, `caughtBy`), so an exported file shows whether the store watcher is earning its keep on
+a given phone. Counts only; no message content (P-9).
+
+**Background sweeps also run migrations first.** `reconcileMissedSms` now
+`await ensureMigrated()` (§20.4) — headless triggers can beat the UI to the database.
 
 No `SPEC-UI-UX.md` change.
 
@@ -3696,4 +3751,6 @@ change in `SPEC-UI-UX.md` §9.
   `npx expo prebuild --clean` for the new icons to land. iOS `expo.icon` left as-is (iOS is a stub
   target, D3). No dependency, permission or schema change.
 
-- **CR-15** (2026-09-19, review of the missed-SMS backstop's real cadence) — **background reconcile now runs at a 3-hour minimum interval with no network requirement.** `registerTaskAsync(SMS_RECONCILE_TASK)` passed no options, so `expo-background-task` used its Android default of once every 24h (its doc-comment says 12h; the Kotlin constant is `60L * 24L`), and its scheduler hard-codes `NetworkType.CONNECTED`, so the sweep could not run offline even though it only reads the local SMS store and writes local SQLite. (1) `src/services/tasks/index.ts`: `minimumInterval: SMS_RECONCILE_INTERVAL_MINUTES` (180). (2) New `patches/expo-background-task+57.0.16.patch` (applied by `patch-package` on install and in CI) drops the network constraint from `BackgroundTaskScheduler.kt`. Still only a minimum — Android Doze/App Standby may stretch it — and it only runs while the app is backgrounded (the library reschedules ~1h later if foregrounded). Needs a native rebuild (`npx expo prebuild --clean`) to take effect. No permission or schema change; `no-network.test.ts` unaffected.
+- **CR-15** (2026-09-19, review of the missed-SMS backstop's real cadence) — **background reconcile now runs at a 3-hour minimum interval with no network requirement.** `registerTaskAsync(SMS_RECONCILE_TASK)` passed no options, so `expo-background-task` used its Android default of once every 24h (its doc-comment says 12h; the Kotlin constant is `60L * 24L`), and its scheduler hard-codes `NetworkType.CONNECTED`, so the sweep could not run offline even though it only reads the local SMS store and writes local SQLite. (1) `src/services/tasks/index.ts`: `minimumInterval: SMS_RECONCILE_INTERVAL_MINUTES` (180). (2) New `patches/expo-background-task+57.0.16.patch` (applied by `patch-package` on install and in CI) drops the network constraint from `BackgroundTaskScheduler.kt`. Still only a minimum — Android Doze/App Standby may stretch it — and it only runs while the app is backgrounded (the library reschedules ~1h later if foregrounded). Needs a native rebuild (`npx expo prebuild --clean`) to take effect. No permission or schema change; `no-network.test.ts` unaffected. *(The 3h interval was raised to 12h by CR-16.)*
+
+- **CR-16** (2026-09-19, closing the Truecaller-class detection gap properly) — **SMS-store watcher added, background sweep interval set to 12h.** Full design in the new **§17.11**; summary: (1) a `JobScheduler` content-trigger job on `content://sms` (`SmsStoreJobService`, `SmsStoreTrigger`, module function `armSmsStoreTrigger`, config-plugin `<service … BIND_JOB_SERVICE>`) starts the existing headless host with `task=store`, which runs the §17.8 sweep with a 6h lookback and `notify:true` — catching a message whose `SMS_RECEIVED` broadcast another app aborted, within seconds when the phone is awake (later in Doze); it re-arms itself each run and is re-armed on every JS start, app launch/foreground and periodic task because Android drops it on reboot. (2) **Amends CR-15:** the periodic `expo-background-task` interval goes **3h → 12h** (`SMS_RECONCILE_INTERVAL_MINUTES = 12 * 60`) — with the store watcher doing the real-time catching, that task is a watchdog + last-resort net, so a shorter interval buys little battery-for-benefit; the no-network-constraint patch from CR-15 stands. (3) "Which path caught it" counters (`smsCaught*`) + `smsLastStoreTriggerAt`, surfaced in Send Diagnostics (`pipelineHealth.caughtBy`, `lastStoreTriggerAt`). (4) `reconcileMissedSms` gains `source` / `lookbackMs` options and awaits `ensureMigrated()` first. New native code (Kotlin) — needs `npx expo prebuild --clean` + a native rebuild. No new permission, no schema change. Not covered: RCS-only messages (never in the SMS store); a notification-listener path was considered and deferred. No linked `SPEC-UI-UX.md` change.

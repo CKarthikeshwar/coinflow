@@ -45,7 +45,12 @@ export type SettingKey =
   | 'analyticsPeriodMode'
   | 'smsLastRealtimeInvokedAt'
   | 'smsLastReconcileSweepAt'
-  | 'smsLastReconcileMatchCount';
+  | 'smsLastReconcileMatchCount'
+  | 'smsLastStoreTriggerAt'
+  | 'smsCaughtBroadcast'
+  | 'smsCaughtStoreTrigger'
+  | 'smsCaughtSweepOpen'
+  | 'smsCaughtSweepPeriodic';
 
 export function getSetting<T>(key: SettingKey | string, fallback: T): T {
   const row = db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).get();

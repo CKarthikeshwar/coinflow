@@ -28,6 +28,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { getSetting } from '@/db/repositories/settings';
+import { readCatchCounts } from '@/services/tasks/catch-stats';
 import { getRecentLogs } from '@/lib/log';
 import { getSmsPermissions, isSmsCaptureSupported } from '@/services/sms';
 import * as Sharing from 'expo-sharing';
@@ -61,6 +62,10 @@ async function buildDiagnosticsPayload() {
       lastRealtimeInvokedAt: getSetting<number | null>('smsLastRealtimeInvokedAt', null),
       lastReconcileSweepAt: getSetting<number | null>('smsLastReconcileSweepAt', null),
       lastReconcileMatchCount: getSetting<number | null>('smsLastReconcileMatchCount', null),
+      // CR-16 — when the SMS-store watcher last ran, and how many transactions each detection path
+      // was the FIRST to catch (a message caught earlier by another path is a dedupe no-op).
+      lastStoreTriggerAt: getSetting<number | null>('smsLastStoreTriggerAt', null),
+      caughtBy: readCatchCounts(),
     },
     crashReportingEnabled: getSetting<boolean>('crashReportingEnabled', false),
     recentLogs: getRecentLogs(),

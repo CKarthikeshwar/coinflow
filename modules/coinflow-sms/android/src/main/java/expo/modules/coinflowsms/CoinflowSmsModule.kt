@@ -37,6 +37,13 @@ class CoinflowSmsModule : Module() {
       true
     }
 
+    // Arms the SMS-store watcher job (SmsStoreJobService, CR-16). Idempotent: an already-pending job is
+    // left alone. Returns whether a job is scheduled (false, e.g., before READ_SMS is granted).
+    Function("armSmsStoreTrigger") {
+      val ctx = appContext.reactContext ?: return@Function false
+      SmsStoreTrigger.schedule(ctx)
+    }
+
     AsyncFunction("getPermissionsAsync") { promise: Promise ->
       Permissions.getPermissionsWithPermissionsManager(
         appContext.permissions,

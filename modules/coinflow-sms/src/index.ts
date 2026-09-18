@@ -50,3 +50,12 @@ export async function getRecentInboxMessagesAsync(sinceEpochMs: number): Promise
   if (!native) throw new UnavailabilityError(NAME, 'getRecentInboxMessagesAsync');
   return native.getRecentInboxMessagesAsync(sinceEpochMs);
 }
+
+/**
+ * Arms the SMS-store watcher (a JobScheduler job triggered by changes to `content://sms`, CR-16).
+ * Idempotent and cheap — an already-pending job is left alone. Resolves to whether a job is now
+ * scheduled; `false` before READ_SMS is granted or off-Android.
+ */
+export function armSmsStoreTrigger(): boolean {
+  return native?.armSmsStoreTrigger() ?? false;
+}

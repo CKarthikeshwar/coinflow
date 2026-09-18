@@ -53,6 +53,12 @@ export async function requestSmsPermissions(): Promise<PermissionResponse> {
 }
 
 /** Inbox messages at/after `sinceEpochMs` (§17.8); `[]` where capture is unsupported. */
+/** Arms the SMS-store watcher (CR-16). Safe to call often — an already-armed trigger is left alone. */
+export function armSmsStoreTrigger(): boolean {
+  if (!CoinflowSms.isSupported()) return false;
+  return CoinflowSms.armSmsStoreTrigger();
+}
+
 export async function getRecentSmsMessages(sinceEpochMs: number): Promise<InboxMessage[]> {
   if (!CoinflowSms.isSupported()) return [];
   return CoinflowSms.getRecentInboxMessagesAsync(sinceEpochMs);

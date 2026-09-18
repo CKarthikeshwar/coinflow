@@ -36,25 +36,40 @@
  * as `reconcileNotifications`'s own permission-denied early return (§31.7).
  */
 
+import { ensureMigrated } from '@/db/maintenance';
 import { setSetting } from '@/db/repositories/settings';
 import { getRecentSmsMessages, isSmsCaptureSupported } from '@/services/sms';
 
+import type { SmsCatchSource } from './catch-stats';
 import { smsIngestTask } from './sms-ingest';
 
 const LOOKBACK_MS = 48 * 60 * 60 * 1000;
 
-export async function reconcileMissedSms(options: { notify: boolean }): Promise<void> {
+export type ReconcileOptions = {
+  notify: boolean;
+  /** Which trigger this is, for the "which path caught it" counters (CR-16). */
+  source?: Exclude<SmsCatchSource, 'broadcast'>;
+  /** How far back to re-read the SMS store; defaults to 48h. The store-watcher uses less. */
+  lookbackMs?: number;
+};
+
+export async function reconcileMissedSms(options: ReconcileOptions): Promise<void> {
   try {
     if (!isSmsCaptureSupported()) return;
+    // A background trigger can run before the UI ever migrated the database (§17.5 / §20.4).
+    await ensureMigrated();
 
-    const messages = await getRecentSmsMessages(Date.now() - LOOKBACK_MS);
+    const messages = await getRecentSmsMessages(Date.now() - (options.lookbackMs ?? LOOKBACK_MS));
     // §17.10 (CR-12) — proves the sweep ran and how much it found, regardless of which of the
     // two triggers (§17.9) fired it; only stamped once the fetch above has actually succeeded.
     setSetting('smsLastReconcileSweepAt', Date.now());
     setSetting('smsLastReconcileMatchCount', messages.length);
 
     for (const { sender, body, timestampMs } of messages) {
-      await smsIngestTask({ sender, body, timestampMs }, { notify: options.notify });
+      await smsIngestTask(
+        { sender, body, timestampMs },
+        { notify: options.notify, source: options.source ?? (options.notify ? 'sweepPeriodic' : 'sweepOpen') },
+      );
     }
   } catch (e) {
     // No PII in the log — type name only (§17.2 / P-9).

@@ -57,6 +57,7 @@ import { setSetting } from '@/db/repositories/settings';
 import { ensureNotificationChannel } from '@/services/notifications/channel';
 import { registerNotificationCategories } from '@/services/notifications/categories';
 import { handleDiscard, handleSave } from '@/services/notifications/respond';
+import { armSmsStoreTrigger } from '@/services/sms';
 
 import { reconcileMissedSms } from './sms-reconcile';
 import { smsIngestTask, type SmsHeadlessPayload } from './sms-ingest';
@@ -67,8 +68,17 @@ export const SMS_INGEST_TASK = 'CoinflowSmsIngest';
 export const NOTIFICATION_RESPONSE_TASK = 'coinflow.NOTIFICATION_RESPONSE';
 /** Periodic `expo-background-task` id — the reconciliation backstop (§17.9, CR-11). */
 export const SMS_RECONCILE_TASK = 'coinflow.SMS_RECONCILE';
-/** Minimum gap between background reconciliation sweeps (§17.9, CR-15). */
-export const SMS_RECONCILE_INTERVAL_MINUTES = 3 * 60;
+/** Native task name for the SMS-store watcher — must match `CoinflowSmsHeadlessTaskService` (§17.11, CR-16). */
+export const SMS_STORE_CHANGED_TASK = 'CoinflowSmsStoreChanged';
+/**
+ * Minimum gap between periodic background sweeps (§17.9, CR-15 → CR-16). 12h: since CR-16 the
+ * real-time work is done by the broadcast receiver plus the SMS-store watcher, so this job is now
+ * mostly a watchdog — it re-arms the store watcher (which Android drops on reboot) with the 48h
+ * inbox sweep as a last-resort net. Still only a *minimum*.
+ */
+export const SMS_RECONCILE_INTERVAL_MINUTES = 12 * 60;
+/** How far back the store-watcher sweep re-reads (its job is "what just arrived", not a full net). */
+export const STORE_TRIGGER_LOOKBACK_MS = 6 * 60 * 60 * 1000;
 
 // --- SMS ingest (app-killed wake path) ---------------------------------------
 if (Platform.OS === 'android') {
@@ -84,17 +94,40 @@ if (Platform.OS === 'android') {
   });
 }
 
+// --- SMS-store watcher (§17.11, CR-16) — a JobScheduler job that fires when Android's SMS store
+// changes, so a message another app swallowed the broadcast for is still caught within seconds.
+// Android runs it via `CoinflowSmsHeadlessTaskService`; this is the JS half. It must also be
+// (re-)armed from JS: the job fires once, and Android drops it on reboot — arm points are here
+// (every JS start, including headless ones), app open/foreground (SmsReconciler), and the periodic
+// task below. `armSmsStoreTrigger` is a cheap no-op when the job is already pending.
+if (Platform.OS === 'android') {
+  AppRegistry.registerHeadlessTask(SMS_STORE_CHANGED_TASK, () => async () => {
+    try {
+      setSetting('smsLastStoreTriggerAt', Date.now());
+    } catch (e) {
+      console.warn('[tasks] smsLastStoreTriggerAt write failed:', (e as Error)?.name ?? 'unknown');
+    }
+    await reconcileMissedSms({ notify: true, source: 'storeTrigger', lookbackMs: STORE_TRIGGER_LOOKBACK_MS });
+  });
+  try {
+    armSmsStoreTrigger();
+  } catch (e) {
+    console.warn('[tasks] armSmsStoreTrigger failed:', (e as Error)?.name ?? 'unknown');
+  }
+}
+
 // --- Missed-SMS reconciliation backstop (§17.9, CR-11) — opportunistic, OS-batched; the
 // real-time broadcast path and the app-open sweep (SmsReconciler) both run first. --------------
 if (Platform.OS === 'android') {
   TaskManager.defineTask(SMS_RECONCILE_TASK, async () => {
-    await reconcileMissedSms({ notify: true });
+    armSmsStoreTrigger(); // watchdog: Android drops the store watcher on reboot (§17.11)
+    await reconcileMissedSms({ notify: true, source: 'sweepPeriodic' });
     return BackgroundTask.BackgroundTaskResult.Success;
   });
-  // Explicit 3h minimum interval (CR-15). Without it `expo-background-task` falls back to once a
-  // day on Android, far too slow for a backstop covering "another app aborted the SMS broadcast".
-  // Still only a minimum — Android batches/defers background work (Doze, App Standby) — and the
-  // job also no longer requires a network connection (patches/expo-background-task+57.0.16.patch).
+  // Explicit 12h minimum interval (CR-15 → CR-16). Without it `expo-background-task` falls back to
+  // once a day on Android. Still only a minimum — Android batches/defers background work (Doze,
+  // App Standby) — and the job no longer requires a network connection
+  // (patches/expo-background-task+57.0.16.patch).
   BackgroundTask.registerTaskAsync(SMS_RECONCILE_TASK, {
     minimumInterval: SMS_RECONCILE_INTERVAL_MINUTES,
   }).catch((e: unknown) => {

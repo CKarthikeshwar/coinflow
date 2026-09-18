@@ -9,6 +9,11 @@ export type { PermissionResponse };
 export interface CoinflowSmsNativeModule {
   /** `true` on Android where the receiver + headless service are compiled in. */
   isSupported(): boolean;
+  /**
+   * Arms the SMS-store watcher job (CR-16). Idempotent; `false` if it could not be scheduled
+   * (e.g. READ_SMS not granted yet).
+   */
+  armSmsStoreTrigger(): boolean;
   /** Current grant state for `RECEIVE_SMS` + `READ_SMS` (never prompts). */
   getPermissionsAsync(): Promise<PermissionResponse>;
   /** Prompt for `RECEIVE_SMS` + `READ_SMS`; resolves with the post-prompt state. */

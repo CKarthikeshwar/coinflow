@@ -56,6 +56,8 @@ import { parseSms } from '@/domain/parser';
 import { postForSuggestion } from '@/services/notifications/post';
 import { reconcileNotifications } from '@/services/notifications/reconcile';
 
+import { recordCatch, type SmsCatchSource } from './catch-stats';
+
 /** Shape handed over by `CoinflowSmsHeadlessTaskService` (Bundle → JS). */
 export type SmsHeadlessPayload = {
   sender?: string | null;
@@ -85,7 +87,11 @@ async function dedupeKeyFor(
  * pending Suggestion missing one." The Review Queue's own live query surfaces the Suggestion
  * either way; only the push is skipped.
  */
-export type SmsIngestOptions = { notify?: boolean };
+export type SmsIngestOptions = {
+  notify?: boolean;
+  /** Which detection path this message came in on (CR-16); default 'broadcast'. */
+  source?: SmsCatchSource;
+};
 
 export async function smsIngestTask(
   payload: SmsHeadlessPayload | undefined,
@@ -134,6 +140,9 @@ export async function smsIngestTask(
       dedupeKey,
     });
     if (!created) return; // a retry of an already-recorded suggestion — already notified once
+
+    // A genuinely new catch: count which path found it (CR-16).
+    recordCatch(options?.source ?? 'broadcast');
 
     // Step 6 — account-rule lookup.
     const suggestion = getSuggestion(id);

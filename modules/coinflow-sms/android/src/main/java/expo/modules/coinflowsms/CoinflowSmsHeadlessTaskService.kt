@@ -24,11 +24,26 @@ import com.facebook.react.jstasks.HeadlessJsTaskConfig
 class CoinflowSmsHeadlessTaskService : HeadlessJsTaskService() {
   override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig? {
     val extras = intent?.extras ?: return null
+    // The store-watcher job (SmsStoreJobService, CR-16) carries no message — it just asks JS to run
+    // the reconciliation sweep.
+    if (extras.getString(EXTRA_TASK) == TASK_STORE) {
+      return HeadlessJsTaskConfig(
+        "CoinflowSmsStoreChanged",
+        Arguments.createMap(),
+        60_000L,
+        true // allowedInForeground
+      )
+    }
     return HeadlessJsTaskConfig(
       "CoinflowSmsIngest",
       Arguments.fromBundle(extras),
       30_000L,
       true // allowedInForeground
     )
+  }
+
+  companion object {
+    const val EXTRA_TASK = "task"
+    const val TASK_STORE = "store"
   }
 }

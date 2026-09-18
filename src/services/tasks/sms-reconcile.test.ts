@@ -4,6 +4,7 @@
  * (that's `sms-ingest.test.ts`'s job).
  */
 
+import { ensureMigrated } from '@/db/maintenance';
 import { setSetting } from '@/db/repositories/settings';
 import { getRecentSmsMessages, isSmsCaptureSupported } from '@/services/sms';
 
@@ -16,6 +17,7 @@ jest.mock('@/services/sms', () => ({
 }));
 jest.mock('./sms-ingest', () => ({ smsIngestTask: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@/db/repositories/settings', () => ({ setSetting: jest.fn() }));
+jest.mock('@/db/maintenance', () => ({ ensureMigrated: jest.fn().mockResolvedValue(undefined) }));
 
 const isSmsCaptureSupportedMock = isSmsCaptureSupported as jest.Mock;
 const getRecentSmsMessagesMock = getRecentSmsMessages as jest.Mock;
@@ -49,14 +51,32 @@ describe('reconcileMissedSms', () => {
     const second = { ...MESSAGE, sender: 'AD-HSBCIN-S' };
     getRecentSmsMessagesMock.mockResolvedValue([MESSAGE, second]);
     await reconcileMissedSms({ notify: false });
-    expect(smsIngestTaskMock).toHaveBeenNthCalledWith(1, MESSAGE, { notify: false });
-    expect(smsIngestTaskMock).toHaveBeenNthCalledWith(2, second, { notify: false });
+    expect(smsIngestTaskMock).toHaveBeenNthCalledWith(1, MESSAGE, { notify: false, source: 'sweepOpen' });
+    expect(smsIngestTaskMock).toHaveBeenNthCalledWith(2, second, { notify: false, source: 'sweepOpen' });
   });
 
   it('forwards notify:true for the periodic-backstop call site', async () => {
     getRecentSmsMessagesMock.mockResolvedValue([MESSAGE]);
     await reconcileMissedSms({ notify: true });
-    expect(smsIngestTaskMock).toHaveBeenCalledWith(MESSAGE, { notify: true });
+    expect(smsIngestTaskMock).toHaveBeenCalledWith(MESSAGE, { notify: true, source: 'sweepPeriodic' });
+  });
+
+  it('tags each message with the trigger that ran the sweep (CR-16 catch counters)', async () => {
+    getRecentSmsMessagesMock.mockResolvedValue([MESSAGE]);
+    await reconcileMissedSms({ notify: true, source: 'storeTrigger' });
+    expect(smsIngestTaskMock).toHaveBeenCalledWith(MESSAGE, { notify: true, source: 'storeTrigger' });
+  });
+
+  it('honours a shorter lookback window (the store-watcher re-reads only recent messages)', async () => {
+    const now = 1_800_000_000_000;
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    await reconcileMissedSms({ notify: true, source: 'storeTrigger', lookbackMs: 6 * 60 * 60 * 1000 });
+    expect(getRecentSmsMessagesMock).toHaveBeenCalledWith(now - 6 * 60 * 60 * 1000);
+  });
+
+  it('runs migrations first — a background trigger can beat the UI to the database', async () => {
+    await reconcileMissedSms({ notify: false });
+    expect(ensureMigrated as jest.Mock).toHaveBeenCalled();
   });
 
   it('never throws if the native query rejects', async () => {

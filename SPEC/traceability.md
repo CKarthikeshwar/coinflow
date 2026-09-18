@@ -2091,3 +2091,7 @@ on-device** — needs `npx expo prebuild --clean` + `npm run android`.
 ### Missed-SMS backstop cadence (2026-09-19) — CR-15
 
 Background reconcile: 24h default + hard-coded network requirement → **3h minimum, no network constraint** (`patches/expo-background-task+57.0.16.patch` + `minimumInterval` in `src/services/tasks/index.ts`). Static checks only so far; **not yet verified on-device** (needs `prebuild --clean` + a device to inspect the scheduled job / `smsLastReconcileSweepAt`).
+
+### SMS-store watcher (2026-09-19) — CR-16
+
+**Store watcher (CR-16):** new Kotlin `SmsStoreJobService` (JobScheduler content-trigger on `content://sms`) → headless `CoinflowSmsStoreChanged` → `reconcileMissedSms({ source:'storeTrigger', lookbackMs: 6h })`; re-armed on every JS start / app open / periodic task. Periodic background sweep interval **3h → 12h** (final number; the no-network patch from CR-15 stays). Per-path "first catch" counters + `smsLastStoreTriggerAt` added to Send Diagnostics. Tests: `catch-stats.test.ts` (new), extended `sms-ingest.test.ts`, `sms-reconcile.test.ts`, `diagnostics.test.ts`. **Not yet verified on-device** — needs `prebuild --clean` + rebuild; then `adb shell dumpsys jobscheduler` should list a pending job for `SmsStoreJobService`, and `smsLastStoreTriggerAt` should stamp after a real SMS.

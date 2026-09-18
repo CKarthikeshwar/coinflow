@@ -28,6 +28,10 @@ jest.mock('@/services/sms', () => ({
 
 jest.mock('@/db/repositories/settings', () => ({ getSetting: (...args: unknown[]) => mockGetSetting(...args) }));
 
+jest.mock('@/services/tasks/catch-stats', () => ({
+  readCatchCounts: () => ({ broadcast: 5, storeTrigger: 2, sweepOpen: 1, sweepPeriodic: 0 }),
+}));
+
 jest.mock('@/lib/log', () => ({ getRecentLogs: (...args: unknown[]) => mockGetRecentLogs(...args) }));
 
 // `./export` (for `ensureFile`) transitively imports `@/db/client`/`@/db/repositories/categories`,
@@ -66,6 +70,7 @@ beforeEach(() => {
       smsLastRealtimeInvokedAt: 1_700_000_000_000,
       smsLastReconcileSweepAt: 1_700_000_100_000,
       smsLastReconcileMatchCount: 2,
+      smsLastStoreTriggerAt: 1_700_000_200_000,
       crashReportingEnabled: true,
     };
     return key in values ? values[key] : fallback;
@@ -94,6 +99,8 @@ describe('sendDiagnostics', () => {
       lastRealtimeInvokedAt: 1_700_000_000_000,
       lastReconcileSweepAt: 1_700_000_100_000,
       lastReconcileMatchCount: 2,
+      lastStoreTriggerAt: 1_700_000_200_000,
+      caughtBy: { broadcast: 5, storeTrigger: 2, sweepOpen: 1, sweepPeriodic: 0 },
     });
     expect(written.crashReportingEnabled).toBe(true);
     expect(written.recentLogs).toEqual([{ ts: 1, level: 'error', op: 'x', name: 'Error', message: 'boom' }]);
@@ -117,6 +124,8 @@ describe('sendDiagnostics', () => {
       lastRealtimeInvokedAt: null,
       lastReconcileSweepAt: null,
       lastReconcileMatchCount: null,
+      lastStoreTriggerAt: null,
+      caughtBy: { broadcast: 5, storeTrigger: 2, sweepOpen: 1, sweepPeriodic: 0 },
     });
   });
 });

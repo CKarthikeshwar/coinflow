@@ -12,6 +12,8 @@ import { hasDedupeKey } from '@/db/repositories/transactions';
 import { postForSuggestion } from '@/services/notifications/post';
 import { reconcileNotifications } from '@/services/notifications/reconcile';
 
+
+import { recordCatch } from './catch-stats';
 import { smsIngestTask } from './sms-ingest';
 
 jest.mock('@/db/maintenance', () => ({ ensureMigrated: jest.fn().mockResolvedValue(undefined) }));
@@ -42,6 +44,7 @@ jest.mock('@/db/repositories/suggestions', () => ({
 jest.mock('@/services/notifications/post', () => ({
   postForSuggestion: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('./catch-stats', () => ({ recordCatch: jest.fn() }));
 jest.mock('@/services/notifications/reconcile', () => ({
   reconcileNotifications: jest.fn().mockResolvedValue(undefined),
 }));
@@ -53,6 +56,7 @@ const getAccountRuleMock = getAccountRule as jest.Mock;
 const hasDedupeKeyMock = hasDedupeKey as jest.Mock;
 const postForSuggestionMock = postForSuggestion as jest.Mock;
 const reconcileNotificationsMock = reconcileNotifications as jest.Mock;
+const recordCatchMock = recordCatch as jest.Mock;
 
 const QUALIFYING_SMS = {
   sender: 'AD-HDFCBK-S',
@@ -96,11 +100,23 @@ describe('smsIngestTask — IMP-001 (qualifying SMS)', () => {
     expect(reconcileNotificationsMock).toHaveBeenCalledTimes(1);
   });
 
+  it('counts a new catch under the default broadcast path (CR-16)', async () => {
+    await smsIngestTask(QUALIFYING_SMS);
+    expect(recordCatchMock).toHaveBeenCalledWith('broadcast');
+  });
+
+  it('counts a new catch under the path that was passed in', async () => {
+    await smsIngestTask(QUALIFYING_SMS, { source: 'storeTrigger' });
+    expect(recordCatchMock).toHaveBeenCalledWith('storeTrigger');
+  });
+
   it('does not re-notify a retry of an already-recorded suggestion', async () => {
     insertIfNewMock.mockReturnValue({ created: false, id: 'existing-id' });
     await smsIngestTask(QUALIFYING_SMS);
     expect(getSuggestionMock).not.toHaveBeenCalled();
     expect(postForSuggestionMock).not.toHaveBeenCalled();
+    // A dedupe no-op is not a new catch.
+    expect(recordCatchMock).not.toHaveBeenCalled();
   });
 
   it('skips entirely when the dedupe key already exists on a Transaction', async () => {

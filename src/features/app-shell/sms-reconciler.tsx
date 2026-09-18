@@ -26,6 +26,7 @@
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
+import { armSmsStoreTrigger } from '@/services/sms';
 import { reconcileMissedSms } from '@/services/tasks/sms-reconcile';
 
 export function SmsReconciler() {
@@ -35,7 +36,10 @@ export function SmsReconciler() {
     const run = () => {
       if (running.current) return;
       running.current = true;
-      reconcileMissedSms({ notify: false }).finally(() => {
+      // Also (re-)arm the SMS-store watcher (§17.11, CR-16 — Android drops it on reboot, and a fresh
+      // grant of READ_SMS only takes effect once it is armed) at these same two moments.
+      armSmsStoreTrigger();
+      reconcileMissedSms({ notify: false, source: 'sweepOpen' }).finally(() => {
         running.current = false;
       });
     };
