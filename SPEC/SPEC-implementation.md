@@ -3678,3 +3678,15 @@ change in `SPEC-UI-UX.md` §9.
   `extractAccount` name captures stop at `;` and strip trailing punctuation (regression fixture
   `hard-semicolon-after-name`). (4) `SuggestionCard` dismiss icon `more-vertical` → `x`. No
   dependency, permission, or schema change.
+
+- **CR-14** (2026-09-18, paired with `SPEC-UI-UX.md` §9 CR-3) — **app icon + splash assets.**
+  `assets/images/{icon,android-icon-foreground,android-icon-background,android-icon-monochrome,
+  splash-icon,favicon}.png` regenerated from the Manrope Bold ₹ glyph (rendered from
+  `@expo-google-fonts/manrope`'s `Manrope_700Bold.ttf`, non-zero winding fill; 1024px icon, 512px
+  splash, 48px favicon). `app.json`: `android.adaptiveIcon.backgroundColor` `#E6F4FE` → `#0B0B0C`;
+  `expo-splash-screen` `backgroundColor` `#208AEF` → `#0B0B0C`, `imageWidth` 76 → 200.
+  `AnimatedSplashOverlay` (`src/components/animated-icon.tsx`) now renders `splash-icon.png` at
+  200×200 on `#0B0B0C` instead of `expo-logo.png` on `#208AEF`, matching the native splash exactly
+ . `android/` is CNG output — needs
+  `npx expo prebuild --clean` for the new icons to land. iOS `expo.icon` left as-is (iOS is a stub
+  target, D3). No dependency, permission or schema change.

@@ -2079,3 +2079,9 @@ CR-2) — `permissions.tsx` + 4 new/updated tests in `permissions.test.tsx`; `Da
 parser no longer keeps a trailing `;` in account names (corpus fixture `hard-semicolon-after-name`);
 suggestion-card dismiss uses an `x` icon. Typecheck clean; affected suites (parser, date-time-picker,
 onboarding permissions) pass. **Not yet re-verified on-device.**
+
+### App icon & splash (2026-09-18) — CR-14 / UI-UX CR-3
+
+Plain ₹ (Manrope Bold, off-white on `#0B0B0C`) replaces the template icon/splash; `app.json`
+backgrounds updated; splash overlay now shows `splash-icon.png`. Typecheck clean. **Not yet seen
+on-device** — needs `npx expo prebuild --clean` + `npm run android`.

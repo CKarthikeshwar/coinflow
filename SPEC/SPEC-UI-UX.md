@@ -567,7 +567,7 @@ like something being pulled away).
   (`AnimatedSplashOverlay`, using the animation library's `Keyframe` feature — a way of describing
   an animation as a sequence of named steps/poses): the mark (the CoinFlow logo) settles with one
   gentle spring, then the overlay wipes (slides/fades away to reveal the real app underneath).
-  Unchanged — this document isn't asking for any change here, just noting it for completeness.
+  Animation unchanged; the mark itself is now the plain ₹ defined in §9 CR-3.
 
 **Implementation.** (This paragraph is a note to the developers building the real app, translating
 the above into specific code libraries — safe to skim if you're only here for the design intent.)
@@ -1609,3 +1609,14 @@ other way around).
   control is a plain **×** glyph rather than a ⋮ overflow — it dismisses immediately, there is no
   menu; (§6.4–§6.6 sheets) **Date & time** is chosen with a calendar-grid + hour/minute stepper
   picker instead of two typed `yyyy-mm-dd` / `hh:mm` fields.
+
+- **CR-3** (2026-09-18, brand identity — `SPEC/SPEC-implementation.md` §37 CR-14) — **App icon and
+  splash mark defined: a plain ₹.** The spec had no logo or icon definition (§2's illustration policy
+  only covers onboarding graphics; the splash was the unmodified create-expo-app template mark on
+  Expo blue). The CoinFlow mark is now the **₹ character in Manrope Bold** (§3.2's display face),
+  off-white `#F5F5F2` on the app's near-black `#0B0B0C` — black-and-white, consistent with §2's
+  direction. It is the launcher icon (dark tile), the Android adaptive-icon foreground/monochrome
+  layers (kept inside the adaptive safe zone), the web favicon, and the splash mark. The splash
+  background is `#0B0B0C` (was `#208AEF`); the in-app splash overlay shows the same image at the
+  same size as the native splash so the handoff doesn't jump. A custom "C-shaped bowl" ₹ was
+  explored and dropped in favour of the standard glyph. No screen layout change.
