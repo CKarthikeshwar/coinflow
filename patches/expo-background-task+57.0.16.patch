@@ -1,0 +1,26 @@
+diff --git a/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskScheduler.kt b/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskScheduler.kt
+index 74c5719..2739d84 100644
+--- a/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskScheduler.kt
++++ b/node_modules/expo-background-task/android/src/main/java/expo/modules/backgroundtask/BackgroundTaskScheduler.kt
+@@ -7,7 +7,6 @@ import androidx.work.Constraints
+ import androidx.work.Data
+ import androidx.work.ExistingPeriodicWorkPolicy
+ import androidx.work.ExistingWorkPolicy
+-import androidx.work.NetworkType
+ import androidx.work.OneTimeWorkRequestBuilder
+ import androidx.work.Operation
+ import androidx.work.PeriodicWorkRequestBuilder
+@@ -104,9 +103,10 @@ object BackgroundTaskScheduler {
+     val data = Data.Builder()
+       .putString("appScopeKey", appScopeKey)
+       .build()
+-    val constraints = Constraints.Builder()
+-      .setRequiredNetworkType(NetworkType.CONNECTED)
+-      .build()
++    // CoinFlow patch: no network constraint. The default here (NetworkType.CONNECTED) stops the job
++    // running while offline, but CoinFlow's SMS reconciliation only reads the on-device SMS store
++    // and writes local SQLite — it never touches the network (see SPEC-implementation.md §17.9).
++    val constraints = Constraints.Builder().build()
+ 
+     // Get Work manager
+     val workManager = WorkManager.getInstance(context)

@@ -2087,3 +2087,7 @@ backgrounds updated; splash overlay now shows `splash-icon.png`. Typecheck clean
 on-device** — needs `npx expo prebuild --clean` + `npm run android`.
 
 **Sheet dismissal fixes (2026-09-18), verified on device:** swipe-down on a clean Add sheet used to close it and immediately re-open it (`onDismiss` re-presented while `current` was still set); a plain close also left the shared draft `active`, so the next Add could start from stale data; swiping the category picker dismissed only visually. A fourth, found by repeatedly opening Add: closing with **Cancel** re-presented the sheet with no content (or with the keypad pushed off-screen) — same root cause, a stale `current` in `handleDismiss`. All four fixed in `sheet-host.tsx`; 22 alternating swipe/Cancel open-close cycles (10 slow, 12 fast) all rendered correctly. Checked on a Samsung SM-S711B: clean swipe closes and stays closed, edited sheet blocks the swipe (amount kept, Discard dialog on Cancel), picker swipe returns to Add, reopened Add seeds a fresh draft. Confirm-from-notification not exercised on device (needs a real SMS).
+
+### Missed-SMS backstop cadence (2026-09-19) — CR-15
+
+Background reconcile: 24h default + hard-coded network requirement → **3h minimum, no network constraint** (`patches/expo-background-task+57.0.16.patch` + `minimumInterval` in `src/services/tasks/index.ts`). Static checks only so far; **not yet verified on-device** (needs `prebuild --clean` + a device to inspect the scheduled job / `smsLastReconcileSweepAt`).

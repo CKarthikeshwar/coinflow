@@ -67,6 +67,8 @@ export const SMS_INGEST_TASK = 'CoinflowSmsIngest';
 export const NOTIFICATION_RESPONSE_TASK = 'coinflow.NOTIFICATION_RESPONSE';
 /** Periodic `expo-background-task` id — the reconciliation backstop (§17.9, CR-11). */
 export const SMS_RECONCILE_TASK = 'coinflow.SMS_RECONCILE';
+/** Minimum gap between background reconciliation sweeps (§17.9, CR-15). */
+export const SMS_RECONCILE_INTERVAL_MINUTES = 3 * 60;
 
 // --- SMS ingest (app-killed wake path) ---------------------------------------
 if (Platform.OS === 'android') {
@@ -89,7 +91,13 @@ if (Platform.OS === 'android') {
     await reconcileMissedSms({ notify: true });
     return BackgroundTask.BackgroundTaskResult.Success;
   });
-  BackgroundTask.registerTaskAsync(SMS_RECONCILE_TASK).catch((e: unknown) => {
+  // Explicit 3h minimum interval (CR-15). Without it `expo-background-task` falls back to once a
+  // day on Android, far too slow for a backstop covering "another app aborted the SMS broadcast".
+  // Still only a minimum — Android batches/defers background work (Doze, App Standby) — and the
+  // job also no longer requires a network connection (patches/expo-background-task+57.0.16.patch).
+  BackgroundTask.registerTaskAsync(SMS_RECONCILE_TASK, {
+    minimumInterval: SMS_RECONCILE_INTERVAL_MINUTES,
+  }).catch((e: unknown) => {
     console.warn('[tasks] SMS_RECONCILE_TASK registration failed:', (e as Error)?.name ?? 'unknown');
   });
 }

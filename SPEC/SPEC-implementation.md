@@ -1273,10 +1273,11 @@ straight through to every `smsIngestTask` call for that sweep.
 2. **New** — a periodic `expo-background-task` task, `SMS_RECONCILE_TASK` (`'coinflow.SMS_RECONCILE'`),
    defined via `TaskManager.defineTask` and registered with `BackgroundTask.registerTaskAsync` at
    module scope in `src/services/tasks/index.ts` (same file/pattern as `NOTIFICATION_RESPONSE_TASK`,
-   Android-only per D3) → `{ notify: true }`. Uses the package default interval (~12h, 15-minute
-   floor, opportunistic/OS-batched — not exact) rather than tuning it; this is purely a last-resort
-   backstop for "the app hasn't been opened in a while," not a latency-sensitive path, and the
-   default is already what `expo-background-task` recommends for exactly this shape of task.
+   Android-only per D3) → `{ notify: true }`. Registered with an explicit **3-hour minimum interval** (CR-15; `SMS_RECONCILE_INTERVAL_MINUTES`,
+   15-minute floor, opportunistic/OS-batched — not exact) and **no network constraint** (patched out of
+   `expo-background-task`, `patches/expo-background-task+57.0.16.patch`). Still a last-resort backstop, not a
+   latency-sensitive path. (This paragraph used to say the package default was ~12h; on Android the native
+   scheduler's actual default is 24h and it also required a connected network — hence CR-15.)
 
 **Does this reopen D23?** No — D23 rejected `expo-background-task` for the *primary* while-killed
 detection path specifically because its 15-minute floor and OS-batched scheduling can't deliver a
@@ -3694,3 +3695,5 @@ change in `SPEC-UI-UX.md` §9.
  . `android/` is CNG output — needs
   `npx expo prebuild --clean` for the new icons to land. iOS `expo.icon` left as-is (iOS is a stub
   target, D3). No dependency, permission or schema change.
+
+- **CR-15** (2026-09-19, review of the missed-SMS backstop's real cadence) — **background reconcile now runs at a 3-hour minimum interval with no network requirement.** `registerTaskAsync(SMS_RECONCILE_TASK)` passed no options, so `expo-background-task` used its Android default of once every 24h (its doc-comment says 12h; the Kotlin constant is `60L * 24L`), and its scheduler hard-codes `NetworkType.CONNECTED`, so the sweep could not run offline even though it only reads the local SMS store and writes local SQLite. (1) `src/services/tasks/index.ts`: `minimumInterval: SMS_RECONCILE_INTERVAL_MINUTES` (180). (2) New `patches/expo-background-task+57.0.16.patch` (applied by `patch-package` on install and in CI) drops the network constraint from `BackgroundTaskScheduler.kt`. Still only a minimum — Android Doze/App Standby may stretch it — and it only runs while the app is backgrounded (the library reschedules ~1h later if foregrounded). Needs a native rebuild (`npx expo prebuild --clean`) to take effect. No permission or schema change; `no-network.test.ts` unaffected.
