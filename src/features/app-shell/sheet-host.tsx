@@ -28,6 +28,14 @@
  * outcome (can't lose unsaved input by accident), simpler mechanism than spec's literal
  * "swipe wired to requestClose".
  *
+ * `handleDismiss` must read the *live* registry (`useSheetRegistry.getState().current`), never the
+ * `current` in its own closure: gorhom keeps the `onDismiss` it was given when the sheet was
+ * presented, so the closure value is stale. Trusting it re-presented the sheet right after Cancel
+ * (it reappeared with no content) and made every swipe-down bounce back. A swipe/scrim close of a
+ * clean sheet now routes through `requestClose()`, so the category picker returns to its parent and
+ * everything else closes. Closing for good also resets the shared Add/Edit/Confirm draft, which
+ * a plain untouched close never used to clear.
+ *
  * Dismiss/present are serialized, not raced: closing one sheet and opening the next (e.g.
  * cancelling an edit, then immediately tapping a different row) used to silently drop the new
  * sheet's content if the tap landed before the previous one's close *animation* actually
@@ -120,7 +128,21 @@ export function SheetHost() {
     return () => sub.remove();
   }, []);
 
+  // Set by `handleDismiss` when the user closed the sheet themselves (swipe-down / scrim tap), so
+  // the sheet is already gone by the time `current` catches up — the effect below must not
+  // `.dismiss()` a sheet that isn't showing.
+  const closedByUser = useRef(false);
+
   useEffect(() => {
+    const alreadyClosed = closedByUser.current;
+    closedByUser.current = false;
+
+    // The sheet has closed for good (nothing new is opening in its place): drop the shared
+    // Add/Edit/Confirm draft. Save and discard already reset it, but a plain close — swipe,
+    // scrim tap, back, or Cancel on an untouched sheet — used to leave it `active`, so the next
+    // Add could open pre-filled with a previous Confirm/Edit session's data.
+    if (!current) useAddSheetDraft.getState().reset();
+
     if (dismissing.current) {
       // A previous sheet is still mid-close. Presenting now would race gorhom's
       // portal-render gate and silently drop this sheet's content (see file header) —
@@ -131,7 +153,7 @@ export function SheetHost() {
     if (current) {
       hasPresented.current = true;
       ref.current?.present();
-    } else if (hasPresented.current) {
+    } else if (hasPresented.current && !alreadyClosed) {
       // Only dismiss a sheet that has actually been presented before — calling
       // `.dismiss()` on a never-presented `BottomSheetModal` leaves gorhom's internal
       // `statusRef` stuck at `DISMISSING` forever (its `handleDismiss` has no guard for
@@ -144,8 +166,32 @@ export function SheetHost() {
   }, [current]);
 
   const handleDismiss = () => {
+    const closedProgrammatically = dismissing.current;
     dismissing.current = false;
-    if (current) {
+
+    if (!closedProgrammatically) {
+      // The user dismissed the sheet (swipe-down / scrim tap) — nothing here asked for it, so
+      // `current` is still set. Presenting it again (the branch below) made the sheet slide
+      // back up right after every swipe-down. Route it through `requestClose` instead — the
+      // same path hardware back takes — so a sub-sheet like the category picker returns to its
+      // parent rather than dismissing the whole stack, and everything else just closes.
+      // Swipe/scrim are disabled while a sheet is dirty, so no discard prompt can be needed.
+      const before = useSheetRegistry.getState().current;
+      closedByUser.current = true;
+      useSheetRegistry.getState().requestClose();
+      if (useSheetRegistry.getState().current === before) {
+        // The handler didn't change what's open (nothing to return to) — just close it.
+        close();
+      }
+      return;
+    }
+
+    // Read the live registry, not `current` from this closure: gorhom holds on to the `onDismiss`
+    // it was handed when the sheet was presented, so `current` here is the value from back then
+    // (still e.g. 'add') even though the sheet has since been closed. Trusting it re-presented the
+    // sheet straight after Cancel — it came back with no content — and caused the earlier
+    // swipe-down bounce-back too.
+    if (useSheetRegistry.getState().current) {
       // Something new was requested while the previous sheet was still closing —
       // present it now that the close has actually finished, rather than the stale
       // attempt from the effect above (which deferred instead of racing it).

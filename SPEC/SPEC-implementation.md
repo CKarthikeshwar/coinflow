@@ -3676,7 +3676,11 @@ change in `SPEC-UI-UX.md` §9.
   `src/ui/date-time-picker.tsx` (hand-rolled Monday-first calendar grid + hour/minute stepper, no
   native dependency) replaces the typed date/time fields in `transaction-sheet.tsx`. (3) Parser:
   `extractAccount` name captures stop at `;` and strip trailing punctuation (regression fixture
-  `hard-semicolon-after-name`). (4) `SuggestionCard` dismiss icon `more-vertical` → `x`. No
+  `hard-semicolon-after-name`). (4) `SuggestionCard` dismiss icon `more-vertical` → `x`. (5) `SheetHost`: `handleDismiss` read a stale
+  `current` from gorhom's captured `onDismiss` and re-presented the sheet — after every swipe-down, and
+  after Cancel (the sheet came back empty, or with the keypad pushed off-screen). It now reads the live
+  registry and routes user dismissals through `requestClose` (the category picker returns to its
+  parent); closing for good also resets the shared Add/Edit/Confirm draft. Found and verified on a Samsung SM-S711B. No
   dependency, permission, or schema change.
 
 - **CR-14** (2026-09-18, paired with `SPEC-UI-UX.md` §9 CR-3) — **app icon + splash assets.**

@@ -1019,7 +1019,7 @@ paid-for artwork, per §2's illustration policy).
   product term, e.g. something like "Track your spending without lifting a finger"); one
   supporting line (a second, smaller line adding a bit more detail under the value proposition);
   **Get started**. Static (nothing on this step animates or changes; it's just the entry point).
-- **Permissions** — heading "Three quick permissions" *(CR-2)*; three stacked **permission
+- **Permissions** — heading "A few quick things" *(CR-2; was "Two quick permissions")*; three stacked **permission
   cards** (icon, title, one-sentence "why", trailing status pill or **Allow** button — this is the
   "Permission card" component from §3.6); **Continue**; "Skip for now" link. The three are **not
   equal**: **Read transaction SMS** is what makes auto-detection work at all; **Notifications** and
