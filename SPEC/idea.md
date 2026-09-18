@@ -6,23 +6,21 @@ CoinFlow is a personal finance and expense-tracking app designed to make recordi
 
 The primary problem it solves is that manually tracking every transaction is tedious, while many existing finance apps can feel slow, complicated, or disconnected from the way people actually make payments.
 
-CoinFlow's core principle is:
 
-> The user should record as little as possible.
-
-Instead of requiring users to manually enter every transaction, CoinFlow detects transaction SMS messages and turns them into transaction suggestions that the user can quickly confirm.
+Instead of requiring users to manually enter every transaction, CoinFlow detects transaction SMS messages (SMS = "Short Message Service," the plain text messages your phone receives — banks and payment apps send one of these every time money moves in or out of your account) and turns them into transaction suggestions that the user can quickly confirm.
 
 The ideal experience is:
 
 Transaction happens
 → Bank/UPI SMS arrives
-→ CoinFlow detects and parses it
-→ CoinFlow sends a notification
+→ CoinFlow detects and parses it 
+→ CoinFlow sends a notification 
 → User taps the notification
 → User quickly reviews/edits the transaction
 → Transaction is added
 
-Over time, CoinFlow should become increasingly intelligent and require less manual input.
+
+Over time, CoinFlow should become increasingly intelligent (intelligent here means the app gets better at guessing details correctly on its own, based on patterns it has seen before, rather than using any specific AI technology) and require less manual input.
 
 ---
 
@@ -54,14 +52,14 @@ CoinFlow should detect relevant transaction SMS messages.
 
 It should determine information such as:
 
-- Whether money was credited or debited
+- Whether money was credited or debited 
 - Transaction amount
 - Date/time
-- Merchant/person when available
-- Payment method when available
+- Merchant/person when available (merchant = the shop, restaurant, or business the money was paid to)
+- Payment method when available (e.g. UPI, debit card, credit card, net banking)
 - Other useful information that can be extracted from the SMS
 
-CoinFlow should NOT attempt to import the user's entire historical SMS history initially.
+CoinFlow should NOT attempt to import the user's entire historical SMS history initially. In other words, on first setup CoinFlow will not go back and read every old SMS already sitting in the phone's messaging app — it only starts watching for new transaction SMS messages from that point forward (see the "primary workflow" below).
 
 The primary workflow is:
 
@@ -100,7 +98,7 @@ For example:
 
 The user should be able to review and edit the information before adding it.
 
-CoinFlow should avoid asking the user to manually enter information that can already be inferred from the SMS.
+CoinFlow should avoid asking the user to manually enter information that can already be inferred from the SMS but at the same time it should give him an option to edit it if he wants to.
 
 The ideal interaction should be:
 
@@ -134,7 +132,7 @@ The user should be able to specify:
 
 ## 5. Transaction List
 
-CoinFlow should maintain a chronological list of recorded transactions.
+CoinFlow should maintain a chronological list of recorded transactions (chronological = ordered by date/time, the way a diary or a bank statement is ordered).
 
 Each transaction should contain information such as:
 
@@ -209,6 +207,8 @@ Later:
 
 Eventually, CoinFlow should be able to automatically suggest or assign categories based on previous user behavior.
 
+> **ELI5:** It's like a friend who tags along every time you order from Swiggy. The first time, they ask "what kind of expense is this?" and you say "Food." After you've told them "Food" a few times for the same place, they stop asking and just write "Food" for you automatically — they've learned the pattern from watching what you did before.
+
 The goal is:
 
 > The more the user uses CoinFlow, the less they need to manually categorize transactions.
@@ -221,7 +221,7 @@ CoinFlow should provide basic spending statistics.
 
 For a selected period, especially a month, the user should be able to see:
 
-- Total expenditure
+- Total expenditure (expenditure = the total amount of money spent)
 - Total income/credits
 - Spending by category
 - Average spending
@@ -244,7 +244,7 @@ The exact charts/visualizations will be decided later based on what information 
 
 ## 10. Insights
 
-CoinFlow should eventually translate raw transaction data into useful observations.
+CoinFlow should eventually translate raw transaction data (raw data = the plain, unprocessed list of individual transactions, before anyone has summarized or interpreted it) into useful observations.
 
 Examples:
 
@@ -266,11 +266,11 @@ A bank transaction is NOT necessarily the same thing as an expense.
 
 CoinFlow should distinguish between:
 
-- Expenses
-- Income
-- Transfers
-- Reimbursements
-- Refunds
+- Expenses (money that leaves your control for good, e.g. buying lunch)
+- Income (new money coming in, e.g. a salary or gift)
+- Transfers (money you move between your own accounts — it hasn't been "spent," it's still yours)
+- Reimbursements (money someone pays back to you for something you already covered — this is explored in depth in VERSION 1.5 below)
+- Refunds (money a merchant gives back to you, e.g. for a returned order)
 - Other money movements
 
 This distinction is important because simply treating every debit as an expense can produce incorrect spending statistics.
@@ -280,6 +280,8 @@ For example:
 ₹1,000 transferred between the user's own accounts should not count as ₹1,000 of spending.
 
 This underlying transaction model should be designed with these distinctions in mind, even if some advanced functionality is implemented later.
+
+> **ELI5:** A "transaction model" is just the blueprint the app uses to describe what a transaction *is* internally — like the columns on a spreadsheet row (amount, direction, type, category...). If that blueprint only has a simple "money in / money out" column, the app has no way to later say "actually, that ₹1,000 was just me moving money between my own two accounts, not spending it." Building the blueprint with these categories (expense, income, transfer, reimbursement, refund) from the start means the app can tell these apart later, even for features that aren't built yet.
 
 ---
 
@@ -309,7 +311,7 @@ But the user's actual expense is only:
 
 > ₹30
 
-CoinFlow should not treat all three transactions as independent expenses.
+CoinFlow should not treat all three transactions as independent expenses (independent = unrelated to each other — three separate ₹90/₹30/₹30 line items with no idea that they're actually all part of the same momo purchase).
 
 ---
 
@@ -353,7 +355,7 @@ Final effective expense:
 
 > ₹30
 
-The ₹60 received should offset the shared expense.
+The ₹60 received should offset the shared expense (offset = cancel out part of it, reducing the effective/net expense rather than being counted as separate new income).
 
 ---
 
@@ -382,7 +384,7 @@ CoinFlow could suggest:
 >
 > [Confirm] [Keep Separate]
 
-This should initially be based on simple rules/heuristics rather than requiring sophisticated AI.
+This should initially be based on simple rules/heuristics (heuristics = straightforward rules of thumb, like "if a debit is followed within a few minutes by two or more smaller credits that roughly add up to it, treat it as a possible split" — as opposed to a machine-learning/AI model that has to be trained on lots of data) rather than requiring sophisticated AI.
 
 ---
 
@@ -411,7 +413,7 @@ CoinFlow can calculate:
 
 ## 6. Settlement Tracking
 
-CoinFlow could eventually keep track of outstanding amounts.
+CoinFlow could eventually keep track of outstanding amounts (outstanding = money someone still owes you that hasn't been paid back yet).
 
 Example:
 
@@ -461,7 +463,7 @@ Manual tracking
 
 8. Keep the core experience simple before adding advanced financial features.
 
-9. Design the underlying transaction model to support future features such as split expenses, reimbursements, transfers, refunds, and recurring transactions.
+9. Design the underlying transaction model to support future features such as split expenses, reimbursements, transfers, refunds, and recurring transactions (recurring = transactions that repeat on a regular schedule, like a monthly rent payment or a subscription).
 
 10. The ultimate goal is:
 

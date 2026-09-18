@@ -72,19 +72,22 @@ it('tapping the crash-reporting card writes the setting and arms Sentry immediat
   expect(mockArmCrashReporting).toHaveBeenCalledWith(true);
 });
 
-it('Continue does not auto-enable crash reporting — that stays an explicit tap on its own card', async () => {
+it('Continue does not immediately enable crash reporting — it only offers to, via its own dialog', async () => {
   const { getByText } = await render(<PermissionsScreen />);
   await fireEvent.press(getByText('Continue'));
   expect(mockSetSetting).not.toHaveBeenCalled();
   expect(mockArmCrashReporting).not.toHaveBeenCalled();
+  expect(getByText('Send crash reports?')).toBeTruthy();
 });
 
-it('Continue requests every still-askable permission, then refreshes and pushes (regression: used to silently skip both, same as Skip)', async () => {
+it('Continue requests every still-askable permission, then refreshes and (once the crash-report dialog is dismissed) pushes (regression: used to silently skip both, same as Skip)', async () => {
   const { getByText } = await render(<PermissionsScreen />);
   await fireEvent.press(getByText('Continue'));
   expect(mockRequestSmsPermissions).toHaveBeenCalled();
   expect(mockRequestNotificationPermissions).toHaveBeenCalled();
   expect(mockRefresh).toHaveBeenCalled();
+  expect(mockRouterPush).not.toHaveBeenCalled();
+  await fireEvent.press(getByText('Not now'));
   expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
 });
 
@@ -94,6 +97,7 @@ it('Continue skips a request for a permission already granted', async () => {
   await fireEvent.press(getByText('Continue'));
   expect(mockRequestSmsPermissions).not.toHaveBeenCalled();
   expect(mockRequestNotificationPermissions).toHaveBeenCalled();
+  await fireEvent.press(getByText('Not now'));
   expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
 });
 
@@ -103,6 +107,33 @@ it('Continue skips a request for a permanently-denied permission (never opens sy
   await fireEvent.press(getByText('Continue'));
   expect(mockRequestSmsPermissions).not.toHaveBeenCalled();
   expect(mockOpenSettings).not.toHaveBeenCalled();
+  await fireEvent.press(getByText('Not now'));
+  expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
+});
+
+it('Continue skips the crash-report dialog entirely when crash reporting is already on', async () => {
+  mockCrashReportingValue = true;
+  const { getByText, queryByText } = await render(<PermissionsScreen />);
+  await fireEvent.press(getByText('Continue'));
+  expect(queryByText('Send crash reports?')).toBeNull();
+  expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
+});
+
+it('confirming the crash-report dialog enables the setting, arms Sentry, and then pushes', async () => {
+  const { getByText } = await render(<PermissionsScreen />);
+  await fireEvent.press(getByText('Continue'));
+  await fireEvent.press(getByText('Enable crash reports'));
+  expect(mockSetSetting).toHaveBeenCalledWith('crashReportingEnabled', true);
+  expect(mockArmCrashReporting).toHaveBeenCalledWith(true);
+  expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
+});
+
+it('dismissing the crash-report dialog ("Not now") pushes without enabling anything', async () => {
+  const { getByText } = await render(<PermissionsScreen />);
+  await fireEvent.press(getByText('Continue'));
+  await fireEvent.press(getByText('Not now'));
+  expect(mockSetSetting).not.toHaveBeenCalled();
+  expect(mockArmCrashReporting).not.toHaveBeenCalled();
   expect(mockRouterPush).toHaveBeenCalledWith('/category-review');
 });
 

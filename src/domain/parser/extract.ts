@@ -195,10 +195,10 @@ export function extractAccount(
   // The negative lookahead guards against "credited/debited to A/c 1234…" — "to" introducing
   // the user's own account, not a counterparty — which would otherwise swallow it as a name.
   const toAt = body.match(
-    /\b(?:to|at|towards|for|in favour of)\s+(?!(?:on|ref|upi|a\/c)\b)([^.]+?)(?=\s+(?:on|ref|upi|a\/c)\b|\.|$)/i,
+    /\b(?:to|at|towards|for|in favour of)\s+(?!(?:on|ref|upi|a\/c)\b)([^.;]+?)(?=[.;]|\s+(?:on|ref|upi|a\/c)\b|$)/i,
   );
   if (toAt?.[1]?.trim()) {
-    const raw = toAt[1].trim();
+    const raw = trimTrailingPunctuation(toAt[1].trim());
     return { raw, normalizedKey: normalizeAccount(raw) };
   }
 
@@ -206,14 +206,22 @@ export function extractAccount(
   if (upiRef) return { raw: upiRef, normalizedKey: normalizeAccount(upiRef) };
 
   if (direction === 'credit') {
-    const from = body.match(/\bfrom\s+(?!(?:on|ref|upi|a\/c)\b)([^.]+?)(?=\s+(?:on|ref|upi|a\/c)\b|\.|$)/i);
+    const from = body.match(
+      /\bfrom\s+(?!(?:on|ref|upi|a\/c)\b)([^.;]+?)(?=[.;]|\s+(?:on|ref|upi|a\/c)\b|$)/i,
+    );
     if (from?.[1]?.trim()) {
-      const raw = from[1].trim();
+      const raw = trimTrailingPunctuation(from[1].trim());
       return { raw, normalizedKey: normalizeAccount(raw) };
     }
   }
 
   return null;
+}
+
+/** Strips stray trailing punctuation (`;`, `,`, `:`, `-`) a name capture can end up with when
+ * the SMS uses a separator the lookahead's stop-list didn't anticipate. */
+function trimTrailingPunctuation(raw: string): string {
+  return raw.replace(/[;,:\-\s]+$/, '');
 }
 
 /**

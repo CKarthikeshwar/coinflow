@@ -19,8 +19,14 @@
  * path, not an edge case) would sail through onboarding with SMS detection never actually granted,
  * discovering it later as "nothing's being detected" with no clear cause. A permanently-denied
  * permission is left alone here — Continue never opens system settings on its own; that's still
- * the card's own explicit action. Continue does not auto-enable crash reporting — that stays an
- * explicit tap on its own card, same as every other opt-in in this app.
+ * the card's own explicit action.
+ *
+ * Crash reporting (2026-09-18 revision) has no OS-level dialog to piggyback on (it's an app
+ * setting, not a platform permission), so Continue shows its own custom `ConfirmDialog` for it —
+ * after the SMS/notification OS prompts resolve, and only if crash reporting isn't already on —
+ * rather than requiring a separate tap on its card, matching how the SMS/notification cards each
+ * get their own prompt from Continue. "Not now" (or dismissing the dialog) just proceeds without
+ * enabling it, same as leaving the card alone would.
  *
  * Simplification (documented, not silent): skips the per-step abstract graphic §6.1's opening
  * line calls for on every screen — three full `PermissionCard`s plus heading/Continue/Skip
@@ -30,7 +36,7 @@
 
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet } from 'react-native';
 
 import { setSetting, useSetting } from '@/db/repositories/settings';
@@ -42,6 +48,7 @@ import { useOnboarding } from '@/stores';
 import { OnboardingLayout } from '@/features/onboarding/onboarding-layout';
 import { PermissionCard } from '@/features/onboarding/permission-card';
 import { Button } from '@/ui/button';
+import { ConfirmDialog } from '@/ui/confirm-dialog';
 import { ThemedText } from '@/ui/themed-text';
 
 export default function PermissionsScreen() {
@@ -49,6 +56,7 @@ export default function PermissionsScreen() {
   const permission = usePermissionStatus();
   const crashReporting = useSetting<boolean>('crashReportingEnabled');
   const crashReportingOn = crashReporting.value ?? false;
+  const [showCrashPrompt, setShowCrashPrompt] = useState(false);
 
   const handleCrashReportingRequest = () => {
     setSetting('crashReportingEnabled', true);
@@ -85,6 +93,21 @@ export default function PermissionsScreen() {
       await Notifications.requestPermissionsAsync();
     }
     permission.refresh();
+    if (!crashReportingOn) {
+      setShowCrashPrompt(true);
+      return;
+    }
+    router.push('/category-review');
+  };
+
+  const confirmCrashPrompt = () => {
+    handleCrashReportingRequest();
+    setShowCrashPrompt(false);
+    router.push('/category-review');
+  };
+
+  const dismissCrashPrompt = () => {
+    setShowCrashPrompt(false);
     router.push('/category-review');
   };
 
@@ -126,6 +149,16 @@ export default function PermissionsScreen() {
         state={crashReportingOn ? 'granted' : 'idle'}
         optional
         onRequest={handleCrashReportingRequest}
+      />
+      <ConfirmDialog
+        visible={showCrashPrompt}
+        glyph="triangle-alert"
+        title="Send crash reports?"
+        body="Anonymous stack traces only, sent only when the app crashes — never your transactions or messages. Off by default; you can change this anytime in Settings."
+        confirmLabel="Enable crash reports"
+        cancelLabel="Not now"
+        onConfirm={confirmCrashPrompt}
+        onCancel={dismissCrashPrompt}
       />
     </OnboardingLayout>
   );

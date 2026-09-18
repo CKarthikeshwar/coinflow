@@ -31,7 +31,7 @@ and `screen2.png`. **No colour on any foreground element** — black / white / g
 The **ground** carries a faint **cool blue-grey ambient wash** (a soft glow behind
 the top of each screen, settling to near-black) — a V-11 exception, background only.
 
-## Spec changes made in this pass (written into `SPEC-UI-UX.md`)
+## Spec changes made in this pass (written into `SPEC/SPEC-UI-UX.md`)
 
 1. **No colour.** The whole UI is black, white and grey. Direction and state are
    carried by the always-present `+` / `−` sign, by weight and size, and by fill
@@ -66,16 +66,16 @@ the top of each screen, settling to near-black) — a V-11 exception, background
    sentence case now. Weight is no longer a flat 700: ~700 for large figures /
    buttons, ~600 for titles / names / day headers, ~500 for captions and quiet
    labels. Dropped the global negative body tracking; eased the extreme negative
-   tracking on the big numbers. Noted in `SPEC-UI-UX.md` §3.
+   tracking on the big numbers. Noted in `SPEC/SPEC-UI-UX.md` §3.
 5d. **Typeface chosen: Manrope + Geist** (from the earlier font comparison,
    pairing 3). Manrope carries headings and every figure (amounts, balance,
    counts, the clock); Geist carries all other UI text. Bundled with the system
-   stack as fallback. `SPEC-UI-UX.md` §3.2 / §3.7.
+   stack as fallback. `SPEC/SPEC-UI-UX.md` §3.2 / §3.7.
 5e. **In-app keypad is amount-only.** The custom numeric keypad only serves the
    amount; Account / Note / Description raise the OS keyboard (the keypad is
    dismissed, the primary button rides above the keyboard). The amount keeps full
    height at rest and only collapses to a slim sticky summary bar once the sheet
-   body is scrolled to the fields. `SPEC-UI-UX.md` §6.4 / §6.5 / UI-045.
+   body is scrolled to the fields. `SPEC/SPEC-UI-UX.md` §6.4 / §6.5 / UI-045.
 6. **Hero = Balance.** The big figure is **Income − Spent** for the month (a
    computed net, *not* an account balance from SMS — SPEC D2 revised); Income and
    Spent show as components. "So far" tag removed.
@@ -127,13 +127,13 @@ known-account Review Queue cards.
 
 ## Status — UI spec finalized
 
-`SPEC-UI-UX.md` is **frozen** (v1). Every §3 subsection is settled: colour ramp,
+`SPEC/SPEC-UI-UX.md` is **frozen** (v1). Every §3 subsection is settled: colour ramp,
 type (Manrope + Geist), spacing / radius / elevation, iconography (**Lucide**,
 `lucide-react-native`), **motion** (§3.5 — three timing tokens, three easing
 curves, per-surface transitions, Reduce-Motion fallback), the component catalog,
 and the `theme.ts` reconciliation. A light theme is deferred to Future.
 
-Next: implementation per `SPEC-implementation.md`. The prototype stays as the
+Next: implementation per `SPEC/SPEC-implementation.md`. The prototype stays as the
 visual reference — static screens plus `motion.html`, a JS preview of the §3.5
 transitions with the real timing tokens (the RN build tunes them on-device).
 
@@ -141,7 +141,7 @@ transitions with the real timing tokens (the RN build tunes them on-device).
 
 - **Account rules screen** — ship the inspect / edit / delete UI in V1, or keep
   learning silent? Screen is designed (`p1-screens.html`); the call lives in
-  `SPEC-implementation.md` §15 q3 and doesn't change the UI spec.
+  `SPEC/SPEC-implementation.md` §15 q3 and doesn't change the UI spec.
 
 ## Notes
 

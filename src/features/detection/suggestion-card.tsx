@@ -6,7 +6,9 @@
  *
  * Simplification vs. spec: the overflow interaction is a direct tap-to-dismiss icon button
  * rather than a swipe gesture — same functional outcome (removes the row), simpler to build
- * correctly right now. Noted in `SPEC/traceability.md`.
+ * correctly right now. Noted in `SPEC/traceability.md`. Uses a plain `x` glyph, not `more-vertical`
+ * — there's no menu behind it, just an immediate dismiss, so a "more options" dots icon would be
+ * misleading (it looked like it should open something, tapping it just deleted the row).
  */
 
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -81,7 +83,7 @@ export function SuggestionCard({ suggestion, known, onOpen, onSave, onDismiss }:
           hitSlop={8}
           style={styles.overflow}
         >
-          <Icon name="more-vertical" size={18} color="text3" />
+          <Icon name="x" size={18} color="text3" />
         </Pressable>
       </View>
     </Card>

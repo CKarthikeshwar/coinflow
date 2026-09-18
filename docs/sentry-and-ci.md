@@ -136,7 +136,7 @@ You fix bugs you'd otherwise never hear about.
 
 ### Why CoinFlow uses it very carefully
 
-CoinFlow holds financial data, so the spec (`SPEC-implementation.md` §33.4, decision D34) locks
+CoinFlow holds financial data, so the spec (`SPEC/SPEC-implementation.md` §33.4, decision D34) locks
 down Sentry hard:
 
 - **Off by default.** The code only starts Sentry when the user turns on a "Send crash reports"
@@ -221,7 +221,7 @@ to the configured form:
 ```
 
 Keep it **last** in the `plugins` array (it wraps the app's startup code and adds a build hook —
-`SPEC-implementation.md` §35.2). After this, the "Missing config" warning goes away.
+`SPEC/SPEC-implementation.md` §35.2). After this, the "Missing config" warning goes away.
 
 #### 5. Create the auth token (only needed for real release builds)
 
@@ -242,7 +242,7 @@ You can skip this until you're doing an EAS `production` build.
 #### 6. Confirm the wiring later
 
 When feature work reaches the Settings screen and the crash-reporting toggle
-(`SPEC-implementation.md` §33.4), the code path is: toggle ON → `Sentry.init()` runs with the
+(`SPEC/SPEC-implementation.md` §33.4), the code path is: toggle ON → `Sentry.init()` runs with the
 DSN → force a test crash → the event appears in your Sentry dashboard within a minute, carrying
 **no** financial fields. Until that screen exists there's nothing to test.
 
@@ -323,7 +323,7 @@ Do this once you're working with pull requests. For solo direct-to-`master` work
 ### What CI here does NOT do
 
 - No app build, no Android emulator, no Maestro end-to-end tests (Part 1). Those need the native
-  SMS module and a dev client, which are too heavy for CI (`SPEC-implementation.md` §34.0).
+  SMS module and a dev client, which are too heavy for CI (`SPEC/SPEC-implementation.md` §34.0).
   They're run by hand against an EAS `development` build before a release.
 - It doesn't deploy or publish anything — that's a separate workflow, Part 4 below.
 

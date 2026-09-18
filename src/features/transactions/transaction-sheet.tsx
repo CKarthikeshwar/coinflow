@@ -34,9 +34,9 @@
  * differ in how the draft is seeded and how strictly the amount is validated on submit. Splitting
  * them would mean keeping ~200 lines of near-duplicate logic in sync across three files.
  *
- * Date & time is editable via two plain `yyyy-MM-dd`/`HH:mm` text fields revealed on tap, not a
- * calendar/clock picker — same simplification as the Filter sheet's custom date range (no
- * calendar component exists yet, and no native date-picker package is installed).
+ * Date & time is editable via a hand-rolled calendar-grid + hour/minute stepper (`DateTimePicker`,
+ * `src/ui/date-time-picker.tsx`) revealed on tap — no native date-picker dependency, consistent
+ * with the app's other hand-rolled controls.
  *
  * Account autocomplete (`searchByPrefix`) shows past accounts as you type; picking one pre-fills
  * its remembered category (§6.5) — not note/payment method, which is F8's broader "known-rule"
@@ -50,7 +50,7 @@
  */
 
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { format, parse } from 'date-fns';
+import { format } from 'date-fns';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -70,6 +70,7 @@ import { useToast } from '@/stores/toast';
 import { AmountInput } from '@/ui/amount-input';
 import { Button } from '@/ui/button';
 import { ConfirmDialog } from '@/ui/confirm-dialog';
+import { DateTimePicker } from '@/ui/date-time-picker';
 import { Icon } from '@/ui/icon';
 import { NumericKeypad } from '@/ui/numeric-keypad';
 import { SegmentedControl } from '@/ui/segmented-control';
@@ -78,9 +79,6 @@ import { TextField } from '@/ui/text-field';
 import { ThemedText } from '@/ui/themed-text';
 
 import { writeConfirmedTransaction, writeEditedTransaction, type SmsRef } from './write-confirmed-transaction';
-
-const DATE_FMT = 'yyyy-MM-dd';
-const TIME_FMT = 'HH:mm';
 
 const PAYMENT_METHOD_OPTIONS = [
   { value: 'upi', label: 'UPI' },
@@ -128,11 +126,8 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   const accountSuggestions: AccountRule[] =
     draft.account.trim() && draft.account !== pickedAccount ? searchByPrefix(draft.account) : [];
 
-  // Date & time editing — closed by default; opens to two text fields seeded from the current
-  // `occurredAt` when tapped.
+  // Date & time editing — the picker is closed by default, revealed on tap.
   const [editingDate, setEditingDate] = useState(false);
-  const [dateText, setDateText] = useState('');
-  const [timeText, setTimeText] = useState('');
   // `Date.now()` can't be called inline during render (React Compiler purity rule) — a lazy
   // `useState` initializer is the sanctioned one-time-impure-read escape hatch, so "now" here
   // means "whenever this sheet instance was mounted," stable for its lifetime. Good enough for
@@ -251,17 +246,6 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   const pickAccountSuggestion = (rule: AccountRule) => {
     setPickedAccount(rule.displayAccount);
     draft.patch({ account: rule.displayAccount, categoryId: rule.categoryId });
-  };
-
-  const openDateEdit = () => {
-    setDateText(format(draft.occurredAt, DATE_FMT));
-    setTimeText(format(draft.occurredAt, TIME_FMT));
-    setEditingDate(true);
-  };
-
-  const applyDateTime = (nextDateText: string, nextTimeText: string) => {
-    const parsed = parse(`${nextDateText} ${nextTimeText}`, `${DATE_FMT} ${TIME_FMT}`, new Date());
-    if (!Number.isNaN(parsed.getTime())) draft.patch({ occurredAt: parsed.getTime() });
   };
 
   const categoryName =
@@ -386,7 +370,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           />
         </View>
 
-        <Pressable accessibilityRole="button" onPress={editingDate ? () => setEditingDate(false) : openDateEdit}>
+        <Pressable accessibilityRole="button" onPress={() => setEditingDate((v) => !v)}>
           <View style={styles.staticRow}>
             <Icon name="calendar" size={18} color="text3" />
             <ThemedText type="body" themeColor="text" style={styles.staticLabel}>
@@ -398,24 +382,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           </View>
         </Pressable>
         {editingDate ? (
-          <View style={styles.dateEditRow}>
-            <TextField
-              value={dateText}
-              onChangeText={(t) => {
-                setDateText(t);
-                applyDateTime(t, timeText);
-              }}
-              placeholder="yyyy-mm-dd"
-            />
-            <TextField
-              value={timeText}
-              onChangeText={(t) => {
-                setTimeText(t);
-                applyDateTime(dateText, t);
-              }}
-              placeholder="hh:mm"
-            />
-          </View>
+          <DateTimePicker valueMs={draft.occurredAt} onChange={(ms) => draft.patch({ occurredAt: ms })} />
         ) : null}
         {isFutureDate ? (
           <ThemedText type="caption" themeColor="text3">
@@ -518,7 +485,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   staticLabel: { flex: 1 },
-  dateEditRow: { flexDirection: 'row', gap: Spacing.two },
   suggestionList: {
     marginTop: Spacing.one,
     borderRadius: Radius.control,

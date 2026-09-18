@@ -34,6 +34,9 @@ export type ConfirmDialogProps = {
   onCancel: () => void;
   /** Requires typing "CONFIRM" before the confirm action enables (UI-065). */
   twoStep?: boolean;
+  /** Defaults to "Cancel" — override for a dialog where that reads wrong (e.g. "Not now" for an
+   * opt-in prompt, where nothing is actually being cancelled). */
+  cancelLabel?: string;
 };
 
 export function ConfirmDialog({
@@ -45,6 +48,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   twoStep = false,
+  cancelLabel = 'Cancel',
 }: ConfirmDialogProps) {
   const [typed, setTyped] = useState('');
 
@@ -99,7 +103,7 @@ export function ConfirmDialog({
           </Pressable>
           <Pressable accessibilityRole="button" style={styles.cancelButton} onPress={handleCancel}>
             <ThemedText type="label" themeColor="text2">
-              Cancel
+              {cancelLabel}
             </ThemedText>
           </Pressable>
         </Pressable>

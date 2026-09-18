@@ -1,5 +1,5 @@
 # Continuous Integration — runs on GitHub's servers on every push and pull request.
-# See SPEC-implementation.md §34.0. No native build, no emulator, no Maestro here
+# See SPEC/SPEC-implementation.md §34.0. No native build, no emulator, no Maestro here
 # (those run locally against an EAS `development` build before a release).
 
 name: CI

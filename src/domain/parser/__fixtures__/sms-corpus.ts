@@ -345,6 +345,16 @@ export const smsCorpus: SmsFixture[] = [
     expected: tx(fields(45000, 'debit', 'merchant@okhdfcbank', 'merchant@okhdfcbank', 'upi')),
   },
   {
+    // Regression: a semicolon separator right after the name (no space before it) used to be
+    // swallowed into the captured name because the stop-list only watched for whitespace before
+    // its keywords — "John Doe;" instead of "John Doe".
+    id: 'hard-semicolon-after-name',
+    sender: 'AD-SBIINB-S',
+    body: 'Rs.220.00 debited from A/c XX7788 to John Doe; UPI Ref 301234567891.',
+    receivedAt: T,
+    expected: tx(fields(22000, 'debit', 'John Doe', 'john doe', 'upi')),
+  },
+  {
     id: 'hard-trailing-marketing',
     sender: 'AD-SBIINB-S',
     body: 'Rs.310.00 debited from A/c XX5678 to VPA store@oksbi UPI Ref 301234567890. Download YONO SBI for more offers!',

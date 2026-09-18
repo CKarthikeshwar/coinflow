@@ -13,6 +13,22 @@
 > **Traceability target** (`SPEC/PLAN.md` §9): `UI-0xx` (visual, in `SPEC-UI-UX.md`) and `IMP-0xx`
 > (behavior, §13 here) → component / service → test.
 
+> **How to read this document if you're new to software development.** This spec assumes no prior
+> coding background. The first time a piece of software-engineering vocabulary shows up, it gets a
+> short explanation right next to it, in one of two forms:
+> - **Plain-English:** a one-sentence definition for a term that just needs unpacking.
+> - **ELI5** ("explain like I'm 5") — a short blockquote with a concrete, everyday analogy, used
+>   only for the handful of ideas ("what is a database migration", "what is a headless task") that
+>   are genuinely easier to grasp through a comparison than a definition.
+>
+> Once a term has been explained, it is used freely afterward without re-explaining it — if you hit
+> an unfamiliar term with no gloss nearby, it was very likely already explained earlier in the
+> document (use your editor's search). Nothing about the technical content, the decision numbers
+> (`D1`–`D35`), the requirement IDs (`IMP-0xx`), the section numbers (`§1`–`§37`), or any code / SQL
+> block has been changed, shortened, or renumbered — only explanatory text has been added around
+> them, because other documents in this repo (especially `SPEC/traceability.md`) refer back to this
+> file by those exact numbers.
+
 ---
 
 ## Contents
@@ -37,13 +53,101 @@ state *(Phase 2)* · §23 SMS parsing · §24 Account normalization · §25 Cate
 
 ## 1. Decisions log
 
+> This table is the single densest page in the document — 35 numbered engineering decisions
+> (`D1`–`D35`), each with a one-line reason. It leans on a handful of software-engineering terms
+> repeatedly, so they're worth defining once, up front, before the table itself:
+>
+> - **SDK (Software Development Kit):** **Plain-English:** a bundle of tools, code libraries, and
+>   documentation a company publishes so outside developers can build on its platform. "Expo SDK
+>   57" is version 57 of the toolkit this app is built with.
+> - **Native module / native code:** **Plain-English:** code written in the phone's own
+>   programming language (here, **Kotlin**, Android's modern language) rather than in
+>   JavaScript/TypeScript, and compiled directly into the app. It's used only when something needs
+>   access that JavaScript alone can't reach — like being woken up by the Android operating system
+>   to handle an incoming text message.
+> - **Broadcast receiver:** **Plain-English:** a piece of Android code that registers itself to be
+>   notified whenever a specific system event happens (an SMS arriving, the phone finishing boot,
+>   etc.), even if the app that owns it isn't currently open.
+>   > **ELI5:** Think of it like a mail slot in a front door. The house (the app) can be completely
+>   > empty with the lights off, but the mail slot itself still catches every letter (SMS) the
+>   > mail carrier (Android) pushes through, and can nudge someone awake to go read it.
+> - **Headless task / headless JS:** **Plain-English:** a piece of JavaScript that runs in the
+>   background with no visible screen — no app UI is drawn, no user interaction happens, it just
+>   does a job and finishes.
+>   > **ELI5:** It's a chore done for you while you're asleep. Someone (Android) wakes up a worker
+>   > (a small JavaScript program) just long enough to do one job — read a text message, save a
+>   > row to the database, ring the doorbell (post a notification) — and then that worker goes
+>   > straight back to sleep. You never see them; you just see the result the next morning.
+> - **TaskManager:** the Expo library CoinFlow uses to *define* and *register* these background
+>   jobs so Android knows which JavaScript function to run when it wakes the app up headlessly.
+> - **ORM (Object-Relational Mapper) — here, "Drizzle":** **Plain-English:** a code library that
+>   lets you describe and query a database using ordinary TypeScript (typed objects and functions)
+>   instead of writing raw SQL text by hand, while still letting you drop down to raw SQL when you
+>   need to. "Typed schema" means the shape of every database table is written once in TypeScript
+>   and the editor/compiler will then catch mistakes (like a typo'd column name) before the app
+>   ever runs.
+> - **Database migration:** **Plain-English:** a small, versioned script that changes a database's
+>   structure (adding a table, adding a column, etc.) in a repeatable, trackable way, so every
+>   install of the app ends up with an identical, up-to-date database shape no matter which older
+>   version it started from.
+>   > **ELI5:** Imagine your database is a filing cabinet. A migration is the numbered instruction
+>   > sheet that says "add a new drawer labelled X" or "relabel this folder." Every cabinet, no
+>   > matter how old, works through the same numbered sheets in order until it matches the latest
+>   > plan — nobody has to remember what to do by hand.
+> - **WAL (Write-Ahead Logging) mode:** a SQLite database setting that lets one part of the app
+>   read the database at the same moment another part is writing to it, instead of making one wait
+>   for the other. Explained further where it's configured, in §20.1.
+> - **FTS5 (Full-Text Search, version 5):** a SQLite feature that lets you search "does any of
+>   these text fields contain this word" efficiently, the way a search engine does, instead of
+>   slowly scanning every row. Explained further in §19.6 / D27.
+> - **Enum (enumeration):** **Plain-English:** a field whose value must be one of a small, fixed
+>   list of options — e.g. a payment method must be exactly `UPI`, `Card`, `Cash`, `Bank transfer`,
+>   or `Wallet`, never a free-typed string.
+> - **UUID:** a long, effectively-unique random identifier (like `a1b2c3d4-…`) generated for each
+>   new record so it never collides with another record's id, even one created on a different
+>   device with no coordination between them.
+> - **Discriminated union (in TypeScript):** **Plain-English:** a type that can be "one of several
+>   different shapes," where a tag field (like `kind: 'transaction'` vs `kind: 'ignored'`) tells the
+>   code which shape it's actually looking at, so it can safely read the fields that only exist on
+>   that shape.
+> - **Zustand:** a small JavaScript library CoinFlow uses for **state management** — **Plain-
+>   English:** state management just means "where does temporary, in-memory information that the
+>   screen needs to redraw itself live, and how does a change to it get noticed by every part of
+>   the app that cares." Zustand holds short-lived UI state (like what's currently typed into the
+>   Add-transaction keypad); it is never used for data that must survive an app restart — that
+>   always lives in the actual database instead (see §22).
+> - **React hooks:** **Plain-English:** functions (their names conventionally start with `use…`,
+>   like `useState` or this app's own `useLiveQuery`) that let a screen's code plug into React's
+>   rendering and state system — e.g. "re-run this bit of logic whenever the data it reads
+>   changes."
+> - **Deep link:** **Plain-English:** a special URL (here, always starting `coinflow://`) that,
+>   when opened, jumps straight to one specific screen or piece of content inside the app, instead
+>   of just opening the app to its default starting screen. Tapping a notification is the main way
+>   these get used in CoinFlow (§28.3).
+> - **APK (Android Package):** the single installable file format for an Android app — the thing
+>   you'd send someone to let them install CoinFlow without going through an app store.
+> - **EAS (Expo Application Services) / build profile:** Expo's own cloud build service, which
+>   compiles the app into an installable APK. A "build profile" (`development` / `preview` /
+>   `production`, §35.3) is a named configuration — e.g. "the version for daily coding" vs "the
+>   version to actually hand to a real user" — so one command can produce very different kinds of
+>   build.
+> - **R8 / ProGuard, Hermes:** two Android/JavaScript build-time tools explained in full where they
+>   are configured (§33.5 / §35) — in short, they shrink and obscure the shipped code so the app is
+>   smaller and harder to casually reverse-engineer.
+> - **CI (Continuous Integration):** **Plain-English:** an automated robot that runs the project's
+>   checks (type-checking, linting, tests) every time code is pushed, so mistakes are caught
+>   automatically instead of relying on a human to remember to run them.
+>
+> With those in hand, the table below should read as thirty-five decisions, each pairing a *choice*
+> with *why it was made this way instead of some rejected alternative*.
+
 | # | Decision | Rationale |
 |---|---|---|
 | D1 | **Navigation:** 4 bottom tabs — Home, Transactions, Analytics, Settings — plus a visually distinct center **Add** button that opens a sheet and is not a destination. | Keeps the review surfaces + Settings always reachable; manual add is one tap from anywhere. |
 | D2 | **Home hero:** a **running balance = Σ all income − Σ all expenses** (primary, labelled "Total balance", no month). Below it, **Income** and **Spending** as two **non-interactive tiles**, each showing **this month's** total and its **percent change vs last month**. The balance is a *computed net over all recorded transactions*, **not** an account balance read from SMS — CoinFlow still never parses "Avl Bal" text. The top-bar month scopes the tiles, not the balance. | Ref `1.png`. The running net is the "how am I doing overall" number; the month tiles + MoM deltas give the trend at a glance. Both derive cleanly from stored transactions. |
 | D3 | **Platform:** V1 is **Android-only**. | SMS auto-detection is the core value and is realistically Android-only; iOS is Future. |
 | D4 | **Review queue:** detected transactions land in an in-app **pending inbox**; notifications are shortcuts into it, never the only path. | A missed notification must never lose a transaction. |
-| D5 | **Payment method:** fixed enum — `UPI`, `Card`, `Cash`, `Bank transfer`, `Wallet`. No user-configured accounts in V1. | Lowest friction; user-defined accounts are Future. |
+| D5 | **Payment method:** fixed enum (see the "Enum" gloss above) — `UPI` (India's Unified Payments Interface — an instant, bank-to-bank mobile payment system; most of the SMS this app reads are UPI payment confirmations), `Card`, `Cash`, `Bank transfer`, `Wallet`. No user-configured accounts in V1. | Lowest friction; user-defined accounts are Future. |
 | D6 | **Transaction types in the V1 UI:** **Expense** and **Income** only. Transfer, Refund, Reimbursement, Split are **Future**. | User decision. The data model still carries `type` — see P-8. |
 | D7 | **Onboarding:** three steps — value prop → permission priming (SMS + notifications) → default-category review. No name / currency / balance setup. | Enough to make detection work and let the user trim categories; nothing more. |
 | D8 | **Duplicates:** handled **manually** — the user spots and deletes duplicates from the Transactions list. No auto-detection in V1. | Keeps V1 simple; heuristic de-dup is Future. |
@@ -55,7 +159,7 @@ state *(Phase 2)* · §23 SMS parsing · §24 Account normalization · §25 Cate
 | D14 | **Analytics period: Month *and* Week both ship in V1.** Confirms D11. Week reuses the month aggregation; the technical spec (Phase 3) fixes ISO-week boundaries and the comparison wording. | User decision. Resolves §15 Q5. |
 | D15 | **No "exclude from totals" toggle in V1** — deferred to a later version. V1 accepts the P-8 inaccuracy (self-transfers count as spending); the model keeps `type` for real Transfer / Refund types later. | User decision. Resolves §15 Q1 / Q6 (toggle part). |
 | D16 | **Settings › Account rules screen ships in V1** with read + edit + delete. Lowest build priority. | User decision. It is the only window into F8's behaviour; silent-only is frustrating when it learns wrong. Resolves §15 Q3. |
-| D17 | **Export = JSON full backup + CSV transactions.** JSON = transactions + custom categories + account rules; CSV = transactions only. **No import / restore in V1** (Future). | User decision. Resolves §15 Q4. |
+| D17 | **Export = JSON full backup + CSV transactions.** JSON (JavaScript Object Notation — a widely-used plain-text format for structured data, readable by both humans and nearly every programming language; the same format used for the notification payloads in §31.3) = transactions + custom categories + account rules; CSV (Comma-Separated Values — an even simpler plain-text table format, one line per row and commas between columns, that any spreadsheet program can open directly) = transactions only. **No import / restore in V1** (Future). | User decision. Resolves §15 Q4. |
 | D18 | **SMS pipeline: JS-owned, thin native bridge.** A small local Expo module (Kotlin) registers the SMS broadcast receiver and forwards messages to a headless JS / `TaskManager` task; **all** parsing, DB writes, notification posting and notification-action handling are in JS/TS. A hybrid (native posts the notification itself) is the documented contingency, adopted only if field testing shows dropped events. | User decision. One testable codebase for parsing. |
 | D19 | **Persistence: `expo-sqlite` + Drizzle ORM** (typed schema, generated migrations, live queries; raw SQL for analytics). On-device only (D10). | User decision. Rejected: hand-written SQL, WatermelonDB. |
 | D20 | **Distribution: direct install** — EAS-built APK, side-loaded or via EAS internal distribution. **Not** the Play Store, so `READ_SMS` / `RECEIVE_SMS` is not a policy problem. Play Store + an SMS-less fallback build = Future. | User decision. Matches `SPEC/idea.md`'s "creator's own everyday use case". |
@@ -63,16 +167,16 @@ state *(Phase 2)* · §23 SMS parsing · §24 Account normalization · §25 Cate
 | D22 | **Source layout: feature-first.** `src/features/*` own their screens + hooks + local components, over shared `src/ui` (design-system primitives), `src/domain` (pure TS business logic — parser, analytics, formatters), `src/db` (Drizzle), `src/services` (notifications, SMS bridge, headless tasks), `src/stores` (Zustand). `ui` / `domain` / `db` never import from `features`. | Phase 1. Keeps the SMS pipeline cohesive; keeps business logic RN-free and unit-testable. See §18. |
 | D23 | **SMS-while-killed pipeline: native manifest receiver → headless JS.** A Kotlin `BroadcastReceiver` registered in `AndroidManifest.xml` (via the config plugin) fires on `SMS_RECEIVED` even when the app is terminated and starts a **headless JS task**; **all** parsing, the DB write and the notification post run in JS/TS. `expo-background-task` is **rejected** for this path — its WorkManager scheduling has a 15-minute floor and does not run when the app is killed. | Phase 1. Confirms D18. Contingency (native posts a provisional notification) documented in §17, not built. |
 | D24 | **Notification `Save` while killed: all-JS headless task.** The `expo-notifications` background response handler (a TaskManager task) spins up headless JS, reads the `AccountRule` via Drizzle, and writes the `Transaction` — no rule-matching or SQLite logic duplicated in Kotlin. The native module's surface stays "SMS receiver bridge only". | Phase 1. Preserves D18's "one testable codebase". If the rule was deleted between post and tap, the action deep-links into the Confirmation sheet instead of writing blind. |
-| D25 | **Sheets are a root-mounted `@gorhom/bottom-sheet` registry, not `expo-router` modal routes; the tab bar is custom, not `NativeTabs`.** Add / Edit / Confirmation / Filter / Category-picker / Create-Edit-Category are opened imperatively from a `SheetRegistry` mounted once in the root layout. | Phase 1. §6.4's docked keypad + collapse-on-scroll + dirty-discard + OS-keyboard swap need one controlled sheet host; the raised centre **Add** "FAB notch" (§8) isn't expressible with `unstable-native-tabs`, and iOS is Future. |
+| D25 | **Sheets are a root-mounted `@gorhom/bottom-sheet` registry, not `expo-router` modal routes; the tab bar is custom, not `NativeTabs`.** Add / Edit / Confirmation / Filter / Category-picker / Create-Edit-Category are opened imperatively from a `SheetRegistry` mounted once in the root layout. | Phase 1. §6.4's docked keypad + collapse-on-scroll + dirty-discard + OS-keyboard swap need one controlled sheet host; the raised centre **Add** "FAB notch" (a **FAB**, "Floating Action Button," is a common mobile-design pattern for a prominent circular button that floats above the rest of the layout for the single most important action on a screen — here, one is raised up out of a notch cut into the tab bar) (§8) isn't expressible with `unstable-native-tabs`, and iOS is Future. |
 | D26 | **Undo = soft-delete + purge-on-launch.** `transaction.deletedAt` (nullable); delete sets it, Undo clears it, every read filters `deletedAt IS NULL`, and rows are hard-purged on next launch once past a ~60 s grace. **`suggestion` dismiss is a hard `DELETE`** — `suggestion.status` is `pending` \| `confirmed` only (`confirmed` kept ~24 h for stale-tap routing, then purged). | Phase 2. Survives an app-kill mid-window; keeps delete/restore as ordinary writes reachable from any context. See §19.1 / §19.4 / §20.6. |
 | D27 | **Search = FTS5 external-content table + sync triggers.** `transaction_fts` over `note` / `description` / `account`, kept in sync by AFTER INSERT/UPDATE/DELETE triggers, shipped as a hand-written migration. SDK 57 `expo-sqlite` has `enableFTS` on by default. Fallback if a device lacks FTS5: a maintained `searchText` column + `LIKE`. | Phase 2. See §19.6. |
 | D28 | **Money is INTEGER paise end-to-end** (parse → store → `SUM()` → format); zero floating-point in the money pipeline. Timestamps are INTEGER epoch-ms UTC with local-day/week/month math in a domain helper (P-11). IDs are `expo-crypto` UUID `text`; enums are `text` with Drizzle enum guards. | Phase 2. Resolves the §6-sketch ambiguity. See §19.0. |
-| D29 | **Parser = hybrid, no confidence score.** Data tables for the sender seed + keyword sets + VPA shapes; code for assembly. Output is a `ParseResult` discriminated union (`transaction` with `parsedFlags` + `warnings`, or `ignored` with a `reason`). `occurredAt` is the SMS timestamp — **no in-body date parsing** in V1. The sender seed is a curated, code-versioned constant (not a table, not user-editable); expansion is Future. | Phase 3. See §23. The corpus fixture file is the primary unit-test asset. |
+| D29 | **Parser = hybrid, no confidence score.** Data tables for the sender seed + keyword sets + VPA shapes (VPA = Virtual Payment Address, the `name@bank` or `name@app` handle UPI payments use instead of a bank account number — e.g. `swiggy@paytm`); code for assembly. Output is a `ParseResult` discriminated union (`transaction` with `parsedFlags` + `warnings`, or `ignored` with a `reason`). `occurredAt` is the SMS timestamp — **no in-body date parsing** in V1. The sender seed is a curated, code-versioned constant (not a table, not user-editable); expansion is Future. | Phase 3. See §23. The corpus fixture file is the primary unit-test asset. |
 | D30 | **Account matching is exact `normalizedKey` equality only in V1.** The normalization algorithm (§24.1) lower-cases, strips punctuation / `*` / trailing ref-order digits / company suffixes, and preserves VPA structure. Residual near-misses create separate rules — accepted. No fuzzy / substring / ML. | Phase 3. See §24. |
 | D31 | **Analytics Week-mode comparison target = the previous ISO week**, tiles labelled "Last week" (Month mode unchanged: previous calendar month, "Last month"). Resolves D14. Recorded as **CR-1** against `SPEC-UI-UX.md` §6.10 / `UI-055` (wording only — no layout change). Money formatting: hand-rolled Indian grouping (not `Intl`), paise only when non-zero, thin-space sign. | Phase 3. See §26.7 / §27.1 and `SPEC-UI-UX.md` §9. |
 | D32 | **`SheetRegistry` API + custom tab bar + one Reduce-Motion hook.** Root-mounted `SheetRegistryProvider` inside `BottomSheetModalProvider`; imperative `open(name, params)` / `close()` / `requestClose()` (dirty-guarded via the draft stores, V-6); one `<SheetHost>` `BottomSheetModal` switches its child on `current`. `CoinFlowTabBar` is a custom `tabBar` (raised centre **Add** opens `sheets.open('add')`), not `NativeTabs`. `useReducedMotion()` + `resolveMotion()` feed the reanimated motion factories — not per-component checks. | Phase 4. Confirms D25. See §28.2 / §28.4 / §29.5. |
 | D33 | **`theme.ts` rewrite + `<AppBackground>` + Lucide wrapper.** `Colors.dark` = the §3.1 ramp (`Colors.light` mirrors it, V1 dark-only); `use-color-scheme` pins `'dark'`. `CategoryPalette` (9 hues) is scoped to the Analytics "Where it went" only (V-11). `<AppBackground>` draws the §3.1 radial ground with `react-native-svg` `<RadialGradient>` (`expo-linear-gradient` fallback). `Fonts.sans='Geist'` / `Fonts.display='Manrope'` (weights 400/500/600/700 + Manrope 300 for the clock). `src/ui/icon.tsx` wraps `lucide-react-native` at `strokeWidth 1.6`; default-category glyphs per §29.2. `ThemedText`/`ThemedView` move to `src/ui/` with the §3.2 roles / §3.1 surfaces. | Phase 4. See §29.1–§29.3. §16 addendum: `lucide-react-native`, `expo-linear-gradient`. |
-| D34 | **Crash reporting = Sentry, opt-in (default OFF).** `@sentry/react-native ~8.24.0` + the Expo config plugin; `Sentry.init()` runs **only** when `app_setting.crashReportingEnabled === true` (defaults `false`), so nothing transmits and the About-screen "data stays on this device" line stays literally true — no onboarding disclosure. `tracesSampleRate 0`, `sendDefaultPii false`; `beforeSend` + `beforeBreadcrumb` scrub via `scrubText()` and **fail closed** (drop the event if a currency / VPA / long-digit pattern survives); navigation breadcrumbs on financial routes are dropped. Allowed payload = exception name + scrubbed message/stack + OS/app version + op name + counts/enums, nothing else. Source maps + R8 mapping uploaded on the `production` profile only; DSN in `app.json → extra`. | Phase 5. P-9 amendment (D21). See §33.4 / §32.1. |
+| D34 | **Crash reporting = Sentry** (a third-party crash-reporting service — when an app crashes, it can send Sentry a report of exactly what went wrong so a developer can fix it) **, opt-in (default OFF).** `@sentry/react-native ~8.24.0` + the Expo config plugin; `Sentry.init()` (the line of code that actually turns Sentry on) runs **only** when `app_setting.crashReportingEnabled === true` (defaults `false`), so nothing transmits and the About-screen "data stays on this device" line stays literally true — no onboarding disclosure. `tracesSampleRate 0`, `sendDefaultPii false`; `beforeSend` + `beforeBreadcrumb` scrub via `scrubText()` and **fail closed** (drop the event if a currency / VPA / long-digit pattern survives) — a "breadcrumb" is Sentry's term for one small logged step leading up to a crash (e.g. "user opened this screen"), used to reconstruct what happened; navigation breadcrumbs on financial routes are dropped. Allowed payload = exception name + scrubbed message/stack + OS/app version + op name + counts/enums, nothing else. Source maps (a file that lets a minified/compiled error stack trace be translated back into the original, readable source code) + R8 mapping uploaded on the `production` profile only; DSN (Data Source Name — effectively Sentry's address plus a write-only access key that tells the app where to send a report; safe to embed in the app since it can't be used to *read* anything back) in `app.json → extra`. | Phase 5. P-9 amendment (D21). See §33.4 / §32.1. |
 | D35 | **Testing = Jest + RNTL + Maestro; release = direct-install, R8 + Hermes + console-strip.** `jest-expo` unit tests on `src/domain` (the SMS parser corpus fixture file is the centrepiece + acceptance bar for F1); RNTL per-screen tests for the V-3 skeleton/empty/error states; **Maestro** YAML flows for J2 (core loop) / J4 (manual add) / J9 (delete-undo) against an EAS `development` build — **not Detox**. CI = `tsc --noEmit` + `expo lint` + `jest` only (no native build / emulator / Maestro). Release: EAS `production` (autoIncrement, remote `appVersionSource`), R8/ProGuard + resource shrink via `expo-build-properties`, `console.*` stripped in prod, distributed as a signed APK via EAS internal distribution (no Play track, D20). `test-id` convention `screen:element`; traceability grid contract in §34.4. | Phase 5. See §34 / §35. |
 
 Technical decisions (stack, architecture layers, project structure) and the phased plan for
@@ -167,7 +271,9 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
   account. Filter by category, type, payment method, date range. Open a row → Details, where every
   field can be reviewed and edited (Edit sheet, §6.6 / §30.8). Swipe →
   delete (confirm + Undo, ~5 s window).
-- **Edge cases:** zero transactions (empty state); thousands (virtualized); same-second
+- **Edge cases:** zero transactions (empty state); thousands ("virtualized" — the list only
+  actually builds the screen rows currently visible, recycling them as you scroll, so a list of
+  10,000 transactions is just as fast as one of 10 — see `@shopify/flash-list` in §16.3); same-second
   transactions (stable order by insertion); a day with only income.
 
 ### F6 — Categories · P1
@@ -197,8 +303,9 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
   spec'd in Phase 2/3, consumed here regardless of whether F9's own Analytics screen has shipped
   yet — the data-access layer isn't gated behind that screen).
 - **Edge cases:** per §30.4 — new-user zero state (`₹0` hero, `₹0` tiles + "no prior month", no
-  action strip, Recent → its own empty state); a lakh-scale balance must not wrap or shrink
-  illegibly; a negative balance shows a leading `−`; a tile with no previous-month figure shows
+  action strip, Recent → its own empty state); a lakh-scale balance (a "lakh" = 1,00,000 in the
+  Indian numbering system used throughout this app — see D9's Indian digit grouping) must not
+  wrap or shrink illegibly; a negative balance shows a leading `−`; a tile with no previous-month figure shows
   "—"; counts show `99+` past 99; long notes truncate; an all-income month is valid.
 
 ### F7 — Uncategorized handling · P1
@@ -217,7 +324,9 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
   F9's own note below for the reverse pointer.
 
 ### F8 — Account memory · P1
-- **Behavior:** when a transaction is saved with an **account**, upsert an `AccountRule` keyed by a
+- **Behavior:** when a transaction is saved with an **account**, **upsert** (database jargon for
+  "update the existing row if one already matches, otherwise insert a brand-new one" — one
+  operation that covers both cases) an `AccountRule` keyed by a
   **normalized account string** (lower-case; strip punctuation, `*`, trailing reference / order
   numbers; collapse whitespace → `normalizedKey`), storing the **note**, the **category** (when
   not Uncategorized) and the **payment method** just used. The rule powers:
@@ -231,7 +340,9 @@ Priority: **P0** core loop · **P1** useful V1 · **P2** V1 if time allows.
   listed / editable in **Settings › Account rules**.
 - **Edge cases:** account strings that vary between messages ("swiggy@paytm", "SWIGGY LTD",
   "swiggy*order123") — V1 matches on the normalized key only; near-misses create separate rules
-  (acceptable for V1); no fuzzy / partial matching, no ML.
+  (acceptable for V1); no fuzzy / partial matching, no ML (Machine Learning — deliberately not
+  used here; the matching rule is a plain, predictable equality check, not a trained model that
+  could guess wrong in ways that are hard to explain to the user).
 
 ### F8.5 — Settings · P1
 - **Behavior:** the **Settings tab** (§30.15) — a grouped list (**Categories** · **Payment
@@ -410,7 +521,9 @@ Notation: **⇢** step · **✔** success end · **✗** alternate / failure bra
   message in memory, extracts the fields, and discards the body; only the parsed fields, a
   `source` marker, and the sender / received time survive. **One sanctioned exception (D21):**
   crash reporting — stack traces only, no breadcrumbs from financial screens, no transaction /
-  SMS content, no PII; controlled by a Settings opt-out. No other off-device transmission.
+  SMS content, no PII (Personally Identifiable Information — anything that could identify a
+  specific real person, like a name, phone number, or email address); controlled by a Settings
+  opt-out. No other off-device transmission.
 - **P-10 Single currency.** All amounts are INR; no currency selection or conversion;
   foreign-currency SMS are not parsed.
 - **P-11 Time.** Local calendar-day boundaries are used for list day-grouping and for all period
@@ -419,6 +532,16 @@ Notation: **⇢** step · **✔** success end · **✗** alternate / failure bra
 ---
 
 ## 6. Data model (sketch — to be finalized in the technical spec)
+
+> A quick primer on how this section's shorthand reads, since every data-model section from here
+> on reuses it: **"field"** / **"column"** just means one named piece of information a record
+> holds (a `Transaction` record has a `note` field, a `description` field, and so on — like columns
+> in a spreadsheet, one record per row). **"nullable"** means that field is allowed to be empty
+> (technically, hold the special "nothing here" value `null`) — e.g. a manual transaction has no
+> SMS to reference, so its `smsRef` field is nullable. **"enum"** was defined in §1's glossary: a
+> fixed short list of allowed values. `amountMinor` stores the amount in **paise** — India's
+> smallest currency unit, 100 of which make one rupee (₹) — as a whole number, rather than storing
+> rupees with a decimal point; the technical reason this matters is spelled out in D28 / §19.0.
 
 - **Transaction**
   - `id`, `amountMinor` (integer, paise), `direction` (`debit` | `credit`),
@@ -444,13 +567,18 @@ Notation: **⇢** step · **✔** success end · **✗** alternate / failure bra
 
 ## 7. SMS detection & parsing
 
-- Android broadcast receiver on incoming SMS. Match `sender` against a maintained set of
-  bank / UPI sender patterns (DLT header IDs, common short-codes). Non-matching senders are
+- Android broadcast receiver (see the §1 gloss) on incoming SMS. Match `sender` against a
+  maintained set of bank / UPI sender patterns (DLT header IDs — in India, every bulk/transactional
+  SMS sender must register a short alphanumeric ID, like `AD-HDFCBK`, with the government's DLT
+  — Distributed Ledger Technology — platform, so these IDs reliably identify "this text came from
+  a real bank," not a random person; plus common numeric short-codes). Non-matching senders are
   ignored entirely.
 - Extraction targets: direction (debit / spent / paid vs credited / received keywords), amount
   (currency-prefixed number), date/time (message timestamp), **account / counterparty** (VPA /
-  UPI handle, "to <name>", "at <name>"), and payment-method hints (`UPI`, `card`,
-  `IMPS`/`NEFT`/`RTGS` → `Bank transfer`, wallet names → `Wallet`). The message is parsed in
+  UPI handle — see the §1 VPA gloss —, "to <name>", "at <name>"), and payment-method hints (`UPI`,
+  `card`, `IMPS`/`NEFT`/`RTGS` — three interbank electronic-transfer systems used in India, grouped
+  here under the single `Bank transfer` payment method — → `Bank transfer`, wallet names →
+  `Wallet`). The message is parsed in
   memory only; its body is **not persisted** — just the sender and received time (P-9).
 - **No confidence scoring.** Any message that fits the transaction format produces a Suggestion;
   the user vets it through the notification (Discard / Add) or the Review Queue. Fields that did
@@ -480,6 +608,17 @@ Notation: **⇢** step · **✔** success end · **✗** alternate / failure bra
 ---
 
 ## 9. Analytics computation
+
+> This section leans on a few math/notation shorthands used throughout the rest of the document:
+> **Σ** ("sigma") is standard math notation for "add all of these up" — `Σ amountMinor` means "sum
+> the amount of every matching transaction." An **ISO week** is the international standard
+> definition of a calendar week: it always runs Monday through Sunday, regardless of locale (as
+> opposed to some calendars/regions that start the week on Sunday). **MoM** = "month-over-month" —
+> comparing this month's number to last month's. **Mean** is the everyday "average" (add up all the
+> values, divide by how many there are); **median** is the *middle* value once every day's spend is
+> sorted from smallest to largest — it's used alongside the mean specifically because one huge
+> one-off expense (like paying rent) can drag the mean up in a way that doesn't reflect a "typical"
+> day, while the median mostly ignores that outlier.
 
 - **Period:** local calendar **month** (default) or ISO **week**; the stepper moves by one
   period. Custom ranges are Future.
@@ -665,6 +804,28 @@ Notation: **⇢** step · **✔** success end · **✗** alternate / failure bra
 
 ## 16. Technology stack
 
+> **Plain-English before the list starts:** a **package** (also called a **dependency** or
+> **library**) is a chunk of code someone else already wrote and published, that this project pulls
+> in and reuses instead of writing from scratch — e.g. instead of writing its own database engine,
+> CoinFlow depends on the `expo-sqlite` package. Every package has a **version number** (like
+> `~57.0.2`) so the project can pin exactly which release it was built and tested against — the `~`
+> means "this version, or a slightly newer patch release, but not a bigger jump." A
+> **devDependency** is a package only needed *while building/testing* the app (like the testing
+> tools in §16.6) — it never ships inside the app users actually install. A **peer dependency** is a
+> package that a library expects to already be installed alongside it (rather than bundling its own
+> copy), because both need to agree on exactly the same underlying version to work together
+> correctly. **Tree-shakeable** describes a library built so that if the app only uses a small part
+> of it, only that small part ends up in the final app — the unused rest gets automatically cut
+> ("shaken off the tree") rather than bloating the download. A **config plugin** is a small script
+> that a package provides to automatically edit the generated native Android/iOS project files
+> (things like `AndroidManifest.xml`) during the build, so a developer doesn't have to hand-edit
+> native project files themselves. **"New architecture"** refers to React Native's current
+> generation of its underlying bridge between JavaScript and native code — mentioned here only to
+> note that this app targets it exclusively, with no fallback to the older bridge.
+> **TypeScript "strict" mode** turns on the compiler's strictest set of type-checks (for example,
+> refusing to compile code that might accidentally use a value that could be `null`/`undefined`
+> without checking first) — it catches more mistakes at build time, before the app ever runs.
+
 Runtime is fixed by the repo and **not reopened here**: `expo ~57.0.18` · `react-native 0.86.3` ·
 `react` / `react-dom 19.2.3` · `expo-router ~57.0.17` · `typescript ~6.0.3` · TS `strict` ·
 `experiments.reactCompiler` + `typedRoutes` on. Every added library below was checked against the
@@ -704,8 +865,12 @@ for removal.
 | `zustand` | `5.0.15` | ephemeral UI state only — sheet drafts, keypad buffer, filter draft, onboarding step, the sheet registry | Redux / Redux Toolkit (ceremony), Jotai (atom sprawl for this size), React context (re-render cost on the keypad) |
 
 **Persisted preferences** (`onboardingDone`, `bannerDismissed`, category-order override,
-`crashReportingEnabled`) live in a SQLite `app_setting` key/value table, not a separate storage
-engine — the headless task can read them synchronously through `expo-sqlite`. Finalised in §22.
+`crashReportingEnabled`) live in a SQLite `app_setting` key/value table (a **key/value table** is
+the simplest possible table shape — just two columns, a unique "key" name like
+`'onboardingDone'` and its "value" — used here instead of one dedicated column per setting because
+settings get added over time and this shape needs no migration to add a new one), not a separate
+storage engine — the headless task can read them synchronously through `expo-sqlite`. Finalised in
+§22.
 
 ### 16.3 Added — UI infrastructure
 
@@ -731,10 +896,14 @@ design-system concern, not foundations); noted here so §16 stays the single dep
 | `expo-dev-client` | `~57.0.16` | **devDependency** — `READ_SMS` / `RECEIVE_SMS` + a custom native module ⇒ **Expo Go cannot run this app**; `npm run android` needs a `development` build or `expo run:android` |
 | `expo-build-properties` | `~57.0.15` | config-plugin knobs — `android:allowBackup=false` (D21), min/target SDK, R8/ProGuard for release (finalised in §33 / §35) |
 
-**Not used:** `expo-background-task` / `expo-background-fetch` — WorkManager scheduling has a
-**15-minute minimum interval** and **does not execute when the app is killed** (v57 docs), so it
-cannot back the SMS core loop. The manifest-registered native receiver (§17.1) is the wake
-trigger instead.
+**Not used:** `expo-background-task` / `expo-background-fetch` — these are built on Android's
+**WorkManager**, the OS's own system for scheduling background jobs to run "sometime later,
+opportunistically" (it deliberately batches and delays work to save battery) — WorkManager
+scheduling has a **15-minute minimum interval** and **does not execute when the app is killed**
+(v57 docs), so it cannot back the SMS core loop, which needs to react within seconds, not minutes,
+and must work even when the app isn't running at all. The manifest-registered native receiver
+(§17.1) is the wake trigger instead. (WorkManager does get used elsewhere, as a deliberately slow
+last-resort safety net — see §17.9.)
 
 ### 16.5 Added — utilities & observability
 
@@ -768,6 +937,20 @@ trigger instead.
 ---
 
 ## 17. System architecture
+
+> **Reading this diagram.** A "layer" here just means "a group of files that all do a similar kind
+> of job, and are only allowed to talk to the layers directly next to them" — it's a way of keeping
+> a large codebase organized so that, say, the code that calculates analytics never has to know
+> anything about how the SMS receiver works. The arrows show which layer calls into which other
+> layer. The two paths at the bottom (**sync API** for the headless tasks vs. **async + live
+> query** for the UI) are two different ways of talking to the same underlying SQLite database:
+> "sync" means "run this and wait, right here, before doing anything else" (the simplest model,
+> fine for a short-lived background task), while "async" means "start this, and come back to it
+> later without freezing everything else in the meantime" — essential for a screen that has to stay
+> responsive to taps while a slower query is still running. A **"live query"** is a database read
+> that automatically re-runs and updates whatever it's feeding on-screen whenever the underlying
+> data changes — so a screen doesn't have to manually ask "has anything changed yet?" (more in
+> §22.1).
 
 ### 17.0 Layer overview
 
@@ -825,15 +1008,22 @@ for `android.provider.Telephony.SMS_RECEIVED`, `android:exported="true"`,
 manifest-declared receiver **even when the app process is not running**, which is why the core
 loop does not depend on `expo-background-task` (§16.4).
 
-`SmsReceiver.onReceive` has a short window (~10 s) and does only: pull the PDUs, coalesce a
-multipart message into one body, read `sender` / `body` / `timestampMs`, then start a bounded
-**headless JS task** (`HeadlessJsTaskService` / the `expo-task-manager` task host) with that
-payload as data. It never touches SQLite or `expo-notifications`. The body string is handed to JS
-in memory and is **never written to disk by the native side** (P-9).
+`SmsReceiver.onReceive` has a short window (~10 s) and does only: pull the **PDUs** (Protocol Data
+Units — the raw, low-level chunks the phone's SMS radio actually delivers; a single long text
+message is often split across several of these behind the scenes), **coalesce** (stitch back
+together, in the right order) a multipart message into one body, read `sender` / `body` /
+`timestampMs`, then start a bounded **headless JS task** (`HeadlessJsTaskService` / the
+`expo-task-manager` task host) with that payload as data. It never touches SQLite or
+`expo-notifications`. The body string is handed to JS in memory and is **never written to disk by
+the native side** (P-9).
 
 ### 17.2 The headless-JS task layer
 
-Both tasks are registered with `TaskManager.defineTask(...)` at **module scope** in
+Both tasks are registered with `TaskManager.defineTask(...)` at **module scope** ("module scope"
+means this code runs immediately as soon as the file is loaded/imported — not inside a function
+that only runs when something calls it, and not inside a component — so the registration happens
+unconditionally, every single time this JavaScript file is loaded, whether that's because a person
+opened the app or because Android silently woke it up just to handle one SMS) in
 `src/services/tasks/index.ts`, which is imported at the very top of the app entry (before
 `expo-router` mounts) so the definitions exist whether the JS context was started by the UI or by
 a background trigger (v57 requirement).
@@ -856,14 +1046,23 @@ the top level, logged **without** the SMS body / amount / account / any PII, and
    score (§7).
 3. **Transaction gate.** Apply the explicit ignore rules — OTP, promotional, balance-only,
    collect / request-money, foreign-currency (§7). Fail → return.
-4. **Idempotency / retry guard.** Compute `dedupeKey = sha256(sender + '|' + amountMinor + '|' +
-   floor(occurredAt / 60000) + '|' + direction)`. If a `Suggestion` **or** `Transaction` already
-   carries that key, return. This guards against the OS re-delivering the broadcast or the task
-   being retried after a mid-run kill — it is **not** cross-message de-duplication: a bank SMS and
-   a UPI-app SMS for the same payment have different senders / bodies and intentionally produce
-   two Suggestions (D8).
+4. **Idempotency / retry guard.** ("Idempotent" — **Plain-English:** doing something twice has the
+   exact same effect as doing it once; here, that means re-running this same step on the exact same
+   SMS a second time must not create a second, duplicate Suggestion.) Compute
+   `dedupeKey = sha256(sender + '|' + amountMinor + '|' + floor(occurredAt / 60000) + '|' +
+   direction)` — `sha256` is a standard **hash function**: it takes an input (here, those four
+   pieces of the message glued together) and deterministically produces a short, fixed-length
+   "fingerprint" string, such that feeding it the exact same input again always produces the exact
+   same fingerprint. That fingerprint is used as a lookup key rather than storing the full text. If
+   a `Suggestion` **or** `Transaction` already carries that key, return. This guards against the OS
+   re-delivering the broadcast or the task being retried after a mid-run kill — it is **not**
+   cross-message de-duplication: a bank SMS and a UPI-app SMS for the same payment have different
+   senders / bodies and intentionally produce two Suggestions (D8).
 5. **Write the Suggestion.** Insert `Suggestion(status = pending, smsRef = { sender, receivedAt },
-   dedupeKey, parsed fields)`. Discard `body`. One DB transaction.
+   dedupeKey, parsed fields)`. Discard `body`. One **DB transaction** — a group of one or more
+   database writes that the database guarantees will either *all* succeed together or, if
+   anything goes wrong partway through, *all* be undone together, so the database is never left
+   half-updated.
 6. **Rule match.** Look up `AccountRule` by `normalizedKey` of the parsed account (may be absent).
 7. **Notify.** Post via `expo-notifications`: the **known-account** category (`Save` · `Add` ·
    `Discard`) when a rule with a category exists, else the **new-account** category (`Add` ·
@@ -897,8 +1096,9 @@ in **one DB transaction**: insert `Transaction` (amount + `occurredAt` from the 
 refresh the group summary count.
 *Edges:* rule deleted between post and tap → do **not** write blind; deep-link into the
 Confirmation sheet (opens the app) pre-filled from the Suggestion. Suggestion already `confirmed`
-(double-tap / stale) → no-op, open that transaction's Details. Suggestion `dismissed` / deleted →
-open Home. (§10 / §31 formalise stale-tap routing.)
+(double-tap / stale) → **no-op** (Plain-English: do nothing — deliberately take no action, because
+acting again would be wrong or redundant), open that transaction's Details. Suggestion
+`dismissed` / deleted → open Home. (§10 / §31 formalise stale-tap routing.)
 
 **(c) The user opens the app with 5 pending.**
 Root layout mounts → **migrations run to completion before the first query** (§20) → Home's live
@@ -979,11 +1179,17 @@ adopt only if a ~2-week field test on OEM battery-killer devices shows > ~5 % dr
 
 ### 17.8 Missed-broadcast reconciliation (CR-10)
 
-**Trigger found on-device (2026-09-06, Moto Edge 60 Pro, Android 16):** Truecaller registers its
-own `SMS_RECEIVED` receiver at `android:priority = 2147483647` (`Integer.MAX_VALUE`) — the same
-ceiling Google Messages (the actual default SMS app) uses — and its bank/"Insights" feature can
-call `abortBroadcast()` on a message it classifies as a bank SMS, before dispatch ever reaches
-CoinFlow's receiver (priority `999`, confirmed lower via `dumpsys activity broadcasts history` on
+**Trigger found on-device (2026-09-06, Moto Edge 60 Pro, Android 16):** Android lets more than one
+app register a broadcast receiver for the same event, and lets each registration declare a
+**priority** number — higher-priority receivers are offered the broadcast first, in order, before
+lower-priority ones. Any receiver in that chain can also call **`abortBroadcast()`**, which tells
+Android "stop passing this one along — don't deliver it to anyone lower in the priority order."
+Truecaller registers its own `SMS_RECEIVED` receiver at `android:priority = 2147483647`
+(`Integer.MAX_VALUE`, i.e. the highest priority number the field can hold) — the same ceiling
+Google Messages (the actual default SMS app) uses — and its bank/"Insights" feature calls exactly
+that `abortBroadcast()` on a message it classifies as a bank SMS, before dispatch ever reaches
+CoinFlow's receiver (priority `999`, confirmed lower via `dumpsys activity broadcasts history` —
+an Android developer command that dumps a log of recent broadcast deliveries — on
 the test device). When that happens, `SmsReceiver.onReceive` is **never called** — no crash, no
 log, no notification, nothing in the §32 failure matrix catches it, because nothing native or JS
 ever ran. Confirmed on-device: an identical PNB transaction SMS was correctly ingested when
@@ -1004,17 +1210,24 @@ at all:
 
 - `reconcileMissedSms()` (new — `src/services/tasks/sms-reconcile.ts`) calls the native
   `getRecentInboxMessagesAsync(sinceEpochMs)` (§17.6) with a fixed **48-hour lookback** — no
-  persisted "last synced" cursor. A fixed window was chosen over a watermark specifically to avoid
-  cursor-drift / clock-skew edge cases; the existing `dedupeKey` check (§17.3 step 4) already makes
-  re-scanning already-processed messages free of duplicate Suggestions, so the lookback can be
-  generous without cost beyond the query itself.
+  persisted "last synced" cursor. (A **"watermark"** or **"cursor"**, in this sync-tracking sense,
+  would mean remembering exactly the timestamp of the last message already processed, and only
+  asking for anything newer next time — it's the "smarter," more surgical alternative that this
+  design deliberately avoids.) A fixed window was chosen over a watermark specifically to avoid
+  cursor-drift (the remembered timestamp silently falling out of sync with reality after a missed
+  update) / clock-skew (the device's clock and the true time disagreeing) edge cases; the existing
+  `dedupeKey` check (§17.3 step 4) already makes re-scanning already-processed messages free of
+  duplicate Suggestions, so the lookback can be generous without cost beyond the query itself.
 - Every message returned is run through the **exact same `smsIngestTask`** (§17.3, unmodified) used
   by the real broadcast path — not a parallel/duplicated pipeline. This is the same "one pipeline,
   two entry points" shape as F4/F5's manual-vs-headless write paths (§17.0 rule 2): the sender
   gate, parser, transaction gate, dedupe, Suggestion write, rule match, notify, and self-heal steps
   are identical regardless of which path found the message, so there is nothing to keep in sync
   between them.
-- **Trigger:** cold app launch and every `AppState → active` transition, wired from
+- **Trigger:** cold app launch and every `AppState → active` transition (React Native's `AppState`
+  API reports whether the app is currently `active` on-screen, `background`, or `inactive`; "an
+  `AppState → active` transition" means the moment the app comes back to the foreground — e.g. the
+  user switches back to it from another app), wired from
   `src/app/_layout.tsx`. This is a **new** hook — no such lifecycle hook currently exists in the
   codebase for this purpose. It intentionally does **not** also wire up `reconcileNotifications()`
   (§31.8) to the same event — that is a separate, already-flagged gap (see that function's own file
@@ -1148,12 +1361,38 @@ modules/
 ```
 
 **Import rules.** `ui/`, `domain/`, `db/` never import from `features/`. Feature-to-feature
-imports go through a feature's `index.ts` barrel. `domain/` imports nothing from `react-native` /
-`expo-*` (enforced with an ESLint `no-restricted-imports` rule, added in Phase 4). Path aliases
-are unchanged: `@/*` → `src/*`, `@/assets/*` → `assets/*`; add `modules/*` to `tsconfig.json`
+imports go through a feature's `index.ts` **barrel** — a small file whose only job is to
+re-`export` the pieces of that feature meant to be used elsewhere, so other code imports from one
+tidy entry point (`import { X } from '@/features/home'`) instead of reaching directly into that
+feature's internal files. `domain/` imports nothing from `react-native` /
+`expo-*` (enforced with an **ESLint** `no-restricted-imports` rule — ESLint is a tool that scans
+source code for patterns the team has decided to disallow or flag, and can be configured with
+custom rules like "never import this from that," added in Phase 4). **Path aliases** are unchanged:
+`@/*` → `src/*`, `@/assets/*` → `assets/*` — a path alias is a shorthand the TypeScript compiler
+and bundler both understand, so code can write `@/features/home` instead of a fragile relative
+path like `../../../features/home`; add `modules/*` to `tsconfig.json`
 `include` when the module ships TS types.
 
 ### 18.2 Route tree (`src/app/`, `expo-router`, typed routes on)
+
+> **Routing vocabulary used from here on.** `expo-router` is the library that turns files inside
+> `src/app/` into actual navigable screens — the folder structure itself defines the app's
+> navigation map (this is called "file-based routing"). A screen that is **"pushed"** is placed on
+> top of the current screen in a stack, with a Back button/gesture to return — like stacking a new
+> sheet of paper on a pile; a **tab** switches between a small fixed set of top-level screens with
+> no stacking. **"Typed routes"** (`experiments.typedRoutes` in `app.json`) means the TypeScript
+> compiler knows, and will check, every valid route path and its parameters at compile time, so a
+> typo'd or missing route parameter is caught before the app runs rather than failing silently on a
+> real device.
+>
+> One more React concept shows up right away in the tree below: a **Provider** is a component that
+> wraps around a whole subtree of the app and makes some shared value or capability available to
+> every component inside it, no matter how deeply nested, without it having to be manually passed
+> down as a prop through every layer in between (e.g. `ThemeProvider` makes the current color theme
+> available to any component anywhere on screen). A `_layout.tsx` file (an `expo-router`
+> convention) defines the shared wrapper — providers, navigation containers, etc. — around every
+> screen inside its folder; the **root layout** (`src/app/_layout.tsx`) is the outermost one,
+> wrapping the entire app.
 
 ```
 src/app/
@@ -1237,12 +1476,39 @@ Phase 1 list; no other change.
 
 Supersedes the §6 sketch. Frozen for V1 unless a change-request (`SPEC/PLAN.md` §10) reopens it.
 
+> **How to read a table definition like the ones below, if you've never seen one.** A relational
+> database (SQLite here) stores information in **tables** — think of a table as one spreadsheet,
+> where every **row** is one record (one transaction, one category, …) and every **column**
+> ("field") is one named piece of information about that record, with a fixed **type** telling you
+> what kind of value it can hold (`text`, `integer`, and so on — SQLite doesn't have a true
+> boolean or decimal type, which is why the conventions below say booleans and money are stored as
+> plain integers). **PK** = **Primary Key** — the one column (or combination of columns) that
+> uniquely identifies each row in that table, the way a social security number or an order number
+> would. **FK** = **Foreign Key** — a column in one table that holds the PK value of a row in
+> *another* table, which is how two tables get linked together (e.g. a transaction's `categoryId`
+> column holds the `id` of a row in the `category` table — that's how a transaction "points at" its
+> category rather than repeating the category's whole name and icon in every single row). **"ON
+> DELETE SET NULL"** is an instruction to the database about what to do to the *linking* column
+> automatically if the row it points to gets deleted — here, deleting a category doesn't leave
+> orphaned transactions pointing at a category that no longer exists; their `categoryId` is simply
+> set back to empty/`null` instead (which is exactly what "becomes Uncategorized" means). An
+> **index** is an extra, behind-the-scenes structure the database keeps so that a particular kind of
+> lookup or sort (e.g. "give me the most recent transactions first") is fast even with tens of
+> thousands of rows — without one, the database would have to scan every single row every time. A
+> **UNIQUE** constraint tells the database to reject any write that would create two rows with the
+> same value in that column. A **`PRAGMA`** is a special SQLite command that changes a
+> database-wide setting (rather than reading or writing data) — `PRAGMA foreign_keys = ON` below is
+> literally "please actually enforce foreign keys," since SQLite (unusually) leaves that off by
+> default. A **slug** is a short, fixed, machine-friendly identifier for something that also has a
+> human-friendly display name — e.g. `food` is the slug for the category a person sees labelled
+> "Food."
+
 ### 19.0 Conventions
 
 | Concern | Rule |
 |---|---|
 | **Money** | every amount is an **`integer` count of paise** (`amountMinor`, 100 paise = ₹1), always **> 0**; direction is carried by `direction` / `type`, never by the sign of the stored number. **No `REAL` / float anywhere** — parse → store → `SUM()` → format all stay integer (D28). |
-| **Timestamps** | `integer` **Unix epoch milliseconds, UTC** (`occurredAt`, `createdAt`, `updatedAt`, `deletedAt`, `smsReceivedAt`). Local calendar-day / month / ISO-week boundaries (P-11) are computed in the domain `period.ts` helper from the device zone — never stored as local strings (D28). |
+| **Timestamps** | `integer` **Unix epoch milliseconds, UTC** — a single whole number counting milliseconds elapsed since a fixed reference point in 1970 ("the Unix epoch"), always in UTC (Coordinated Universal Time, the one global time reference with no timezone offset applied) rather than any local time zone, so it's completely unambiguous no matter where the phone is set to (`occurredAt`, `createdAt`, `updatedAt`, `deletedAt`, `smsReceivedAt`). Local calendar-day / month / ISO-week boundaries (P-11) are computed in the domain `period.ts` helper from the device zone — never stored as local strings (D28). |
 | **IDs** | `text` UUIDv4 from `expo-crypto.randomUUID()` (D28). Exception: `account_rule` is keyed by its natural `normalizedKey`; `category` also carries a stable `key` slug for the seeded rows. |
 | **Enums** | stored as `text` with a Drizzle `{ enum: [...] }` guard (SQLite has no enum type). Values are the lowercase tokens listed per field. |
 | **Booleans** | `integer` `0` / `1` (Drizzle `integer({ mode: 'boolean' })`). |
@@ -1368,6 +1634,18 @@ last used — optional convenience). **Category order is not here** — it lives
 
 ### 19.6 `transaction_fts` (FTS5)
 
+> A few more SQL terms this section relies on: a **virtual table** is a table that doesn't store
+> data in the normal row-by-row way — instead it's backed by a special engine (here, SQLite's
+> FTS5 full-text-search engine, glossed in §1) that makes advanced search fast, while still being
+> queried with ordinary-looking `SELECT` statements. A **trigger** is a small piece of SQL logic
+> the database runs *automatically* whenever a certain event happens to a table (an `INSERT`,
+> `UPDATE`, or `DELETE`) — used below to keep the search table in sync with the real
+> `transaction` table without the application code having to remember to update both. A **`JOIN`**
+> combines rows from two tables that are related by a matching column, so a single query can pull
+> "the real transaction row that this search-match rowid points to." **Tokenising** text means
+> splitting it into individual words/pieces to search on, and a **prefix term** (`foo*`) means
+> "match anything starting with `foo`," so a partial word still finds results while typing.
+
 External-content FTS5 table for search (§6.7 / IMP-015):
 
 ```sql
@@ -1397,7 +1675,9 @@ coalesce(account,''))`, refreshed on write) queried with `LIKE '%term%'`. SDK 57
 
 ### 20.1 The database handle
 
-One handle in `src/db/client.ts`:
+A **database handle** (or **connection**) is the live, open link a program holds to a database
+file — you open it once, then reuse that same open link for every query, rather than reopening the
+file from scratch each time. One handle in `src/db/client.ts`:
 
 ```ts
 export const sqlite = SQLite.openDatabaseSync('coinflow.db', { enableChangeListener: true });
@@ -1407,7 +1687,10 @@ export const db = drizzle(sqlite, { schema });
 
 `openDatabaseSync` (not the async variant) so the **headless tasks** (§17) and the UI share one
 code path. `enableChangeListener: true` is what makes Drizzle's `useLiveQuery` re-emit (§22).
-WAL for read/write concurrency between an open screen and a background write.
+This is where **WAL** mode (glossed in §1) actually gets turned on, precisely because the app
+needs read/write concurrency between an open screen and a background write — i.e. a screen quietly
+reading from the database must not be blocked just because a headless task is writing to it (or
+vice versa) at the same moment.
 
 ### 20.2 Schema & config
 
@@ -1446,7 +1729,12 @@ The root layout (§18.2) mounts `<MigrationGate>`, which calls `useMigrations(db
 
 ### 20.5 Seed (idempotent)
 
-Runs in the gate after `migrate()`, guarded by `app_setting.schemaSeededVersion`:
+**Seeding** a database means pre-populating it with a starting set of rows the app needs to
+function from the very first launch (here, the default categories) — rather than starting from a
+completely empty database and making the user create every category by hand. "Idempotent" was
+defined in §17.3: running the seed step again on a database that's already seeded must be
+harmless, not create duplicates. Runs in the gate after `migrate()`, guarded by
+`app_setting.schemaSeededVersion`:
 
 1. The **system** row: `category(key='uncategorized', name='Uncategorized', icon='help-circle',
    kind='system', isProtected=1, order=0)`.
@@ -1489,7 +1777,9 @@ then write `lastPurgeAt`. FTS rows follow via the §19.6 delete trigger.
 One transaction: `DELETE` from `suggestion`, `transaction` (FTS follows), `account_rule`, and
 `category WHERE kind = 'custom'`; reset the 10 seeded rows to their §20.5 values; delete every
 `app_setting` row (so `onboardingDone` is absent ⇒ the app returns to onboarding). `VACUUM`
-after. The two-step `CONFIRM`-typed dialog is UI (§6.14 / IMP-065).
+(a SQLite command that rebuilds the database file to reclaim the disk space freed by all those
+deletions — without it, the file can stay large even after everything inside it is gone) after.
+The two-step `CONFIRM`-typed dialog is UI (§6.14 / IMP-065).
 
 ### 20.8 Export (D17 / §12 / IMP-043)
 
@@ -1506,6 +1796,12 @@ leaves the device except through that user-initiated share sheet (P-9 / IMP-045)
 ---
 
 ## 21. Data-access layer
+
+> This whole layer follows the **repository pattern** — a common way of organizing database code
+> where all the reading and writing for one kind of record (one "entity," like `Transaction` or
+> `Category`) is collected into its own module of plain functions (`transactionRepo`,
+> `categoryRepo`, …), so the rest of the app never writes raw queries itself — it just calls
+> `insertTransaction(...)` and trusts the repository to know how.
 
 `src/db/repositories/*.ts` — plain typed functions over the shared `db`. Reads that a screen
 watches are exposed as `use*` hooks built on `useLiveQuery` (`drizzle-orm/expo-sqlite`), which
@@ -1603,10 +1899,18 @@ Three tiers, no overlap.
 
 ### 22.1 SQLite-derived (the single source of truth)
 
+("Single source of truth" — **Plain-English:** there is exactly one place any given fact actually
+lives; every screen reads *that* place directly instead of keeping its own copy that could quietly
+drift out of sync.)
+
 Everything durable — transactions, categories, rules, suggestions, settings — is read **only**
 through §21 live-query hooks. It is never copied into React state or a store beyond what a
-component renders this frame. No optimistic-update cache: writes are local and fast, and the
-live query re-emits within a frame or two.
+component renders this frame. **No optimistic-update cache** — an "optimistic update" is a common
+app pattern where the screen immediately shows a change as if it already succeeded (to feel
+instant), then quietly corrects itself if the real write actually failed; CoinFlow skips that
+complexity entirely because its writes are purely local and fast enough that the real live query
+re-emits (updates every screen watching that data) within a frame or two anyway, so there's nothing
+to "fake" in the meantime.
 
 ### 22.2 Zustand ephemeral stores (`src/stores/`, never persisted)
 
@@ -1702,6 +2006,15 @@ becomes a Suggestion.
 
 ### 23.4 Field extraction (hybrid — data tables + code)
 
+> This section is written largely in **regex** (regular expressions) — **Plain-English:** a regex
+> is a compact, standardized pattern language for describing "text that looks like this," so code
+> can test whether a string matches the pattern, or pull out the matching part. A few of the small
+> pieces used repeatedly below: `\b` means a **word boundary** (the edge between a word character
+> and a non-word character, e.g. a space or punctuation) — used so a pattern like `\bdr\b` matches
+> the standalone abbreviation "dr" but not the "dr" inside "address"; `\d` means "any single digit";
+> `\s` means "any whitespace"; a trailing `i` flag means "case-insensitive" (matches `RS`, `rs`,
+> and `Rs` alike); `?` after something means "optional — zero or one of it."
+
 Each extractor returns `value | null` and never throws.
 
 - **amount → `amountMinor: integer | null`.** INR amount regex: optional `rs`/`rs.`/`inr`/`₹`
@@ -1772,7 +2085,10 @@ a fixture **before** the parser is changed (regression guard).
 
 ### 24.1 Algorithm (ordered)
 
-1. Unicode NFKC; trim; collapse internal whitespace to single spaces.
+1. **Unicode NFKC** (a standard text-normalization rule that converts visually-equivalent but
+   differently-encoded characters — e.g. a fancy full-width "Ａ" vs a plain "A" — into one
+   consistent representation, so two strings that *look* identical to a person also *compare*
+   as identical to code); trim; collapse internal whitespace to single spaces.
 2. Lower-case.
 3. **VPA** (`local@psp`): keep `local@psp`; strip a leading/trailing digit run from `local`
    **only if** `local` also contains letters (`swiggy@paytm` unchanged; `9876543210@ybl` keeps
@@ -1803,8 +2119,10 @@ a fixture **before** the parser is changed (regression guard).
 
 **Exact `normalizedKey` equality only** — `getAccountRule(key)` is a PK lookup. Residual
 near-misses (`namma-metro@upi` vs `namma metro`) create **separate** rules — accepted for V1
-(§8). No fuzzy match, edit-distance, substring, or ML. The §24.2 rows + ~12 more are a
-unit-test table.
+(§8). No fuzzy match, **edit-distance** (a way of scoring "how similar are these two strings" by
+counting the minimum number of single-character edits needed to turn one into the other — a
+common technique for catching near-misses that this app deliberately doesn't use), substring, or
+ML. The §24.2 rows + ~12 more are a unit-test table.
 
 ---
 
@@ -1851,6 +2169,17 @@ row, list style V-4, a filter value).
 
 `src/domain/analytics/` (pure) + `analyticsRepo` raw SQL (§21.5). Integer paise until the
 formatter (§27). `period = { mode:'month'|'week', startMs, endMsExclusive }` from §27.3.
+
+> A few standard SQL keywords used throughout this section: **`COALESCE(x, fallback)`** returns
+> `x` unless it's empty/`null`, in which case it returns `fallback` instead — used below so "no
+> matching transactions" reports as `0` rather than a missing/`null` value. **`GROUP BY`** collapses
+> many rows sharing the same value in a column into one summary row per distinct value (e.g. one
+> row per category, each with its own total). **`CASE WHEN … THEN … END`** is SQL's inline
+> if/else. **`LIMIT n`** caps how many rows a query returns. **`p95`** ("95th percentile") means
+> "the value below which 95% of the data points fall" — used here as a robust way to pick a chart's
+> top scale that isn't distorted by one single extreme outlier day. **`clamp(x, lo, hi)`** forces a
+> number to stay within a range, pulling it up to `lo` or down to `hi` if it would otherwise fall
+> outside.
 
 ### 26.1 Core aggregates (SQL, per period)
 
@@ -1943,8 +2272,11 @@ stepper moves one ISO week; "next" disabled on the current week. Comparison targ
 `formatMoney(amountMinor, opts?: { sign?: 'always'|'none'; withCurrency?: boolean }): string`
 
 - `₹` prefix (unless `withCurrency:false`); **Indian grouping** — `₹1,23,456` (last group 3
-  digits, 2 thereafter). Hand-rolled on the integer rupee string — **not `Intl`** (Hermes `Intl`
-  is partial).
+  digits, 2 thereafter). Hand-rolled on the integer rupee string — **not** JavaScript's built-in
+  **`Intl`** internationalization API (which can normally do this kind of locale-aware number
+  formatting for you), because **Hermes** (RN's JavaScript engine, glossed in §1) only ships a
+  partial implementation of `Intl` that isn't reliable enough here — so this app writes its own
+  small grouping function instead of depending on it.
 - Rupees = `Math.trunc(amountMinor / 100)`; **paise shown only when non-zero**, always 2 digits
   (`₹12.50`, `₹12`).
 - **Sign** (`opts.sign` default `'always'` for transaction amounts, `'none'` for neutral figures):
@@ -2063,11 +2395,16 @@ interface SheetRegistry {
 - A single `<SheetHost>` renders one `<BottomSheetModal>` and switches its child on `current`
   (`AddSheet` / `EditSheet` / `ConfirmSheet` / `FilterSheet` / `CategoryPickerSheet` /
   `CreateCategorySheet` / `EditCategorySheet`). `onDismiss → close()`.
-- `requestClose()` reads the active sheet's `dirty` flag (`useAddSheetDraft` for add/edit/confirm,
+- `requestClose()` reads the active sheet's **`dirty` flag** — a boolean meaning "does this form
+  hold changes the user hasn't saved yet" (`useAddSheetDraft` for add/edit/confirm,
   `useFilterDraft` for filter, local state for the category sheets). Dirty → show the discard
-  `ConfirmDialog` (V-6 / §3.6); not dirty → `close()`. The `@gorhom` swipe-down / scrim-tap are
-  wired to `requestClose`, not `close`.
-- **Snap points:** the keypad sheets (`add`/`edit`/`confirm`) use one large snap (~92% — the
+  `ConfirmDialog` (V-6 / §3.6); not dirty → `close()`. The `@gorhom` swipe-down / **scrim**-tap
+  (a "scrim" is the semi-transparent dark overlay behind a sheet or dialog that dims the rest of
+  the screen — tapping it is a common way to dismiss) are wired to `requestClose`, not `close`.
+- **Snap points:** a bottom sheet can rest at one of several pre-defined heights (e.g. "peek",
+  "half", "full") that it smoothly settles into as it's dragged — a **"snap point"** is one of
+  those defined resting heights, given as a percentage of the screen. The keypad sheets
+  (`add`/`edit`/`confirm`) use one large snap (~92% — the
   amount block + docked keypad + pinned primary button, §6.4); `filter` / `categoryPicker` /
   `createCategory` / `editCategory` size to content (`enableDynamicSizing`).
 - **Keypad ↔ OS keyboard (§6.4 / §3.5):** the keypad-sheet body owns a `keypadMode` in
@@ -2096,7 +2433,10 @@ once. Warm: `Notifications.addNotificationResponseReceivedListener` + a `Linking
 
 ### 28.4 Reduce-Motion
 
-`src/constants/motion.ts` — the three duration tokens (`fast 120 / base 200 / slow 320`) and
+**"Reduce Motion"** is a standard OS-level accessibility setting a person turns on in their phone
+settings when animations cause them discomfort or distraction; an app that respects it should
+replace or skip its usual animated transitions for that person. `src/constants/motion.ts` — the
+three duration tokens (`fast 120 / base 200 / slow 320`) and
 three easings (§3.5) + `resolveMotion(spec, reduced)` returning the spec or an opacity-only /
 instant variant. `useReducedMotion()` (`src/hooks/use-reduce-motion.ts`) wraps reanimated's hook
 with an `AccessibilityInfo.isReduceMotionEnabled` fallback and a listener. **One hook**, consumed
@@ -2161,7 +2501,10 @@ The icon **picker** grid (§6.12) offers a fixed ~30-glyph subset of the same un
 ### 29.3 `ThemedText` / `ThemedView` (moved to `src/ui/`; template `src/components/themed-*` deleted)
 
 `ThemedText` — `type` = a §3.2 role; family + size + weight + tracking + `tabular-nums` fixed per
-role:
+role (**"tabular numerals"** is a font feature where every digit `0`–`9` is drawn at exactly the
+same width, so a number that updates in place — like a running balance — doesn't visibly jiggle
+left and right as its digits change; `tracking` is the amount of extra space added between
+letters, a.k.a. letter-spacing):
 
 | `type` | px / weight / tracking | family | tabular |
 |---|---|---|---|
@@ -2180,6 +2523,17 @@ Optional `themeColor?: ThemeColor` (default `text` for ≥`title`, `text2` for `
 these, not bare `<Text>` / `<View>` (§3.7).
 
 ### 29.4 Component catalog → files + contracts
+
+> **React vocabulary for this table.** A **component** is a reusable, self-contained piece of UI
+> — a button, a card, an entire screen — built as a function that describes what should appear on
+> screen. **Props** ("properties") are the inputs passed into a component from whoever uses it,
+> the same way a function takes arguments — e.g. a `Button` component's `variant` prop tells it
+> whether to render as the filled primary style or the plain ghost style. The "Key props" column
+> below lists each component's most important inputs, with their TypeScript type shown after the
+> colon — a `'primary'|'ghost'|'disabled'` type, for instance, means that prop must be exactly one
+> of those three literal strings, nothing else (this reuses the "enum"/"union" idea from §1's
+> glossary, just expressed directly in the code's type rather than a database column). A trailing
+> `?` on a prop name (`title?`) means that prop is optional.
 
 `src/ui/` = design-system primitives (theme-only deps). `src/features/*/components/` = components
 that read repos/stores. All ~45 of §3.6:
@@ -2231,7 +2585,13 @@ that read repos/stores. All ~45 of §3.6:
 
 ### 29.5 Motion factories
 
-`src/ui/motion/` — reanimated `entering`/`exiting`/`layout` factories, each taking `{ reduced }`
+In `react-native-reanimated`, `entering` / `exiting` / `layout` are three hook-up points where you
+can attach an animation to a component: `entering` plays when the component first appears on
+screen, `exiting` plays as it's removed, and `layout` plays when its position or size changes
+because of something else nearby moving (e.g. a neighboring row collapsing). A **"factory"** here
+is just a small function that builds and returns one of these ready-to-use animation configs
+(rather than a hand-written one-off), so the same motion can be reused consistently across many
+components. `src/ui/motion/` — reanimated `entering`/`exiting`/`layout` factories, each taking `{ reduced }`
 and pulling tokens from `src/constants/motion.ts` (§28.4): `sheetTransition` (slide-up `slow
 decelerate` / scrim `base`; reduced = fade), `snackbarTransition` (`base decelerate` up),
 `listRowTransition` (height+opacity `base` + neighbour layout), `dialogTransition` (scrim `base` +
@@ -2332,7 +2692,10 @@ plain · satisfies UI-044/046, IMP-013/016 · nav: pushed from any row / post-ad
 notification.
 
 ### 30.11 Filter sheet (`FilterSheet`)
-reads `useCategories` for the chips; a debounced count via `useTransactionList(draftQuery).length`
+reads `useCategories` for the chips; a **debounced** (Plain-English: instead of re-running this
+count after every single keystroke/tap, wait a short beat for the input to pause before actually
+running it — avoids wastefully recomputing on every intermediate change while someone is still
+adjusting filters) count via `useTransactionList(draftQuery).length`
 for "Show N results" · stores `useFilterDraft` · actions: adjust blocks; **Reset** (disabled when
 no filters); **Apply** → write the applied filter to Transactions route params, `close()` · edge:
 custom range start>end → inline error on Apply · satisfies UI-041, IMP-015 · nav: over Transactions.
@@ -2404,6 +2767,18 @@ per-screen `test-id` map feeding `IMP-0xx → test` → **§34.4**.
 
 ### 31.1 Channel
 
+> Since Android 8, every notification an app posts must belong to a **notification channel** —
+> a named category of notifications (e.g. "Transaction review") that the *user*, not the app,
+> ultimately controls the behavior of (sound, vibration, importance, whether it's allowed to
+> interrupt Do Not Disturb) from their own system settings. Apps create/configure a channel once;
+> after that, the user's own choice for that channel wins. A few of the settings below: an
+> **"importance"** of `HIGH` lets a notification pop up briefly over whatever's on screen ("heads-
+> up") and show on the lock screen, appropriate here because tapping `Save` right from the lock
+> screen is the whole point of the core loop. **`bypassDnd`** controls whether the notification can
+> break through "Do Not Disturb" mode; **`lockscreenVisibility: PRIVATE`** means the notification's
+> actual title/body are hidden on the lock screen until the phone is unlocked (governed by the
+> user's own lock-screen privacy setting), as opposed to `PUBLIC` which would always show them.
+
 One Android channel, created at first app launch and re-asserted on every launch (idempotent):
 
 | Field | Value |
@@ -2453,7 +2828,9 @@ Built by `buildTxnNotification(suggestion, rule)` in `src/services/notifications
 - **body** — `account` + ` · ` + payment-method label; `Unknown account` when `account` is null
   (§6.15). Example: `Swiggy · UPI`.
 - **`categoryIdentifier`** — `txn-known` or `txn-new` per §31.2.
-- **`data`** (the routing payload, JSON-safe, **no** financial fields beyond ids):
+- **`data`** (the routing payload — "JSON-safe" means restricted to the plain value types JSON can
+  represent: strings, numbers, booleans, null, and plain objects/arrays of those — no financial
+  fields beyond ids):
   ```ts
   { kind: 'suggestion', suggestionId: string, dedupeKey: string,
     ruleKey: string | null, postedAt: number }
@@ -2462,8 +2839,9 @@ Built by `buildTxnNotification(suggestion, rule)` in `src/services/notifications
   the `Suggestion` row by `suggestionId` (it is the source of truth and may have changed).
 - **`identifier`** (the notification's own id) — `sug:<suggestionId>`, so a later run can find and
   update/cancel it deterministically.
-- **`threadId` / group key** — `txn-review-group` on every post, so the OS can visually stack them
-  and the summary (§31.4) owns the same key.
+- **`threadId` / group key** — a shared tag (`txn-review-group`) on every post that tells Android
+  "these notifications belong together," so the OS can visually stack them into one collapsible
+  group instead of listing each separately; the summary (§31.4) owns the same key.
 
 ### 31.4 Posting — single vs group (`SMS_INGEST_TASK` step 7)
 
@@ -2556,6 +2934,16 @@ live in `src/services/tasks/` (§17.2) and call into `respond.ts`.
 
 ## 32. Error handling
 
+> **A couple of programming-language basics used throughout this section.** A **`try/catch`**
+> block is how most programming languages let code attempt something that might fail (the `try`
+> part) and define what to do if it does fail (the `catch` part), instead of letting the whole
+> program crash. When something goes wrong inside a `try`, the language is said to **"throw"** an
+> **error/exception** — a special value describing what broke — which the nearest surrounding
+> `catch` can then "catch" and handle. **`__DEV__`** is a special flag React Native automatically
+> sets to `true` only while running in development (on a developer's machine, connected to Metro)
+> and `false` in a real release build, so code can be written to behave more verbosely/leniently
+> during development without that behavior ever shipping to a real user.
+
 ### 32.0 Principles
 
 1. **The SMS receiver and both headless tasks must never crash the app.** Every task body is
@@ -2624,6 +3012,15 @@ live in `src/services/tasks/` (§17.2) and call into `respond.ts`.
 
 ### 32.3 Error boundaries
 
+> An **error boundary** is a special React component that can catch a rendering error thrown
+> anywhere in the components nested inside it, and show a fallback screen instead of letting the
+> crash take down the entire app — it's the on-screen-rendering equivalent of a `try/catch` for
+> the whole component tree below it. React currently requires an error boundary specifically to be
+> written as a **class component** — an older style of writing a React component (as a class with
+> lifecycle methods) predating today's more common function-component style used almost everywhere
+> else in this app — because only a class component can implement the particular lifecycle hook
+> React relies on to detect a rendering error.
+
 - **Root boundary** (built — `src/features/app-shell/root-error-boundary.tsx`, CR-8) — a class
   component just inside the providers in `_layout.tsx`, above the navigator. Catches
   render/lifecycle throws, shows the E20 screen (`RecoveryScreen`), offers **Reload app** via
@@ -2660,6 +3057,18 @@ No red, no error iconography beyond the neutral alert glyph (V-7 / UI-004).
 
 ### 33.0 Scope (recap of D21)
 
+> Three terms in the "Not in V1" list, for context on what's deliberately being skipped and why it
+> would matter: **SQLCipher** is a well-known add-on that encrypts an entire SQLite database file
+> at rest (i.e. while sitting on disk, not just in transit), so that even someone with direct
+> access to the phone's file system couldn't read the raw database without a key — CoinFlow
+> doesn't add this in V1, relying instead on Android's own app-private storage sandboxing.
+> **Certificate pinning** is a technique for hardening network connections against
+> man-in-the-middle interception, by having the app itself remember exactly which server
+> certificate(s) it should trust rather than any certificate a normal device would accept — it
+> doesn't apply here because the app has essentially nothing to pin: opt-in crash reporting is its
+> only optional network connection ("**egress**" — data leaving the device — glossed alongside
+> "ingress," data coming in, though only egress is relevant here).
+
 **In V1:** app-private storage, `android:allowBackup="false"`, no network except opt-in crash
 reporting, SMS body never persisted, scrubbed logs. **Not in V1 (Future):** biometric / PIN app
 lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — one optional egress).
@@ -2688,18 +3097,24 @@ lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — o
   device-specific bugs; it does not require any change to §33.2's no-network assertion, since
   `Sharing.shareAsync` is user-driven and outside `no-network.test.ts`'s scope, same as the other
   three exports.
-- No `MediaStore`, no clipboard writes of financial data.
+- No `MediaStore` (Android's shared, cross-app index of media files like photos — writing there
+  would make a file visible to other apps, the opposite of app-private storage), no clipboard
+  writes of financial data.
 
 ### 33.2 No-network assertion
 
 - The Android manifest requests **no `INTERNET`-adjacent capability beyond what the OS grants by
   default**; there is no backend, no analytics SDK, no ad SDK, no font CDN (fonts are bundled,
   §29.1), no remote config.
-- The **only** code path that can open a socket is `@sentry/react-native`, and only after
+- The **only** code path that can open a **socket** (the low-level network connection a program
+  opens to actually send/receive data over the internet — everything from a `fetch()` call to a
+  crash-reporting SDK ultimately opens one of these) is `@sentry/react-native`, and only after
   `Sentry.init()` — which CoinFlow calls **only** when `crashReportingEnabled === true` (§33.4).
   Default state: `init` is never called, the transport is never constructed.
 - **Verified by:** (a) a manifest review checklist item in §35.7; (b) built —
-  `src/__tests__/no-network.test.ts` (CR-9), a unit test that greps the `src/domain`, `src/db`,
+  `src/__tests__/no-network.test.ts` (CR-9), a unit test that **greps** (searches text for a
+  pattern — "grep" is a classic Unix tool name that's become shorthand for "search for this
+  string/pattern across a bunch of files") the `src/domain`, `src/db`,
   `src/features`, `src/services` trees for `fetch(`, `XMLHttpRequest`, `WebSocket`, `axios` and
   fails on a hit outside `src/services/crash/`, one assertion per file so a violation names the
   exact file; (c) IMP-045 (manual: run the core loop with a network monitor, assert zero egress
@@ -2721,14 +3136,14 @@ lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — o
 
 | Aspect | Decision |
 |---|---|
-| SDK | **`@sentry/react-native ~8.24.0`** + the Expo config plugin (`@sentry/react-native/expo`); native crash capture on; `tracesSampleRate: 0` (no performance tracing); `enableAutoSessionTracking: false`; `sendDefaultPii: false` |
+| SDK | **`@sentry/react-native ~8.24.0`** + the Expo config plugin (`@sentry/react-native/expo`); native crash capture on; `tracesSampleRate: 0` (Sentry can also record ongoing "performance traces" — timing data about how long operations take, separate from crash reports; this setting turns that off entirely, at `0` = 0% of operations traced); `enableAutoSessionTracking: false`; `sendDefaultPii: false` |
 | Default | **OFF — opt-in.** `app_setting.crashReportingEnabled` defaults `false` (§22.3). `Sentry.init()` is called from `src/services/crash/index.ts` **only** if the setting is `true` at launch; toggling it on in Settings › Data calls `init` immediately, toggling off calls `Sentry.close()` and takes effect fully on next launch. |
-| Disclosure | Because nothing transmits by default, there is **no onboarding step** and the About-screen line **"All your data stays on this device."** stays literally true. Settings › Data carries the toggle with one sentence: *"Send anonymous crash reports (stack traces only — never your transactions or messages)."* |
+| Disclosure | Because nothing transmits by default, there is **no mandatory onboarding disclosure** (onboarding carries an optional, explicit opt-in — CR-7, CR-13) and the About-screen line **"All your data stays on this device."** stays literally true. Settings › Data carries the toggle with one sentence: *"Send anonymous crash reports (stack traces only — never your transactions or messages)."* |
 | `beforeSend(event)` | drop `event.contexts.device.name`, `event.user`, `event.request`, `event.server_name`; run every `exception.value` + every frame `filename`/`function` через `scrubText()` (§32.1); drop the event entirely if any `value` still matches a currency / VPA / long-digit pattern after scrubbing (fail closed) |
 | `beforeBreadcrumb(b)` | **return `null` for every breadcrumb whose category is `navigation` and whose route is in the financial set** (`transaction/*`, `analytics`, `review-queue`, any sheet); drop all `console` and `xhr`/`fetch` breadcrumbs; keep only `app.lifecycle` and `error` categories |
 | Allowed payload | exception name + scrubbed message + scrubbed stack; `Platform.OS` + version; app version + build number; the failing op name (§32.1); `pendingCount` / enum values. **Nothing else.** |
 | Release plumbing | source maps uploaded by the Sentry EAS build hook **on the `production` profile only**; `SENTRY_AUTH_TOKEN` is an EAS secret, never committed; the DSN sits in `app.json → extra.sentryDsn` (a DSN is a write-only ingest key — safe to ship) |
-| ProGuard mapping | R8 mapping file uploaded alongside for native stack symbolication |
+| ProGuard mapping | R8 mapping file uploaded alongside for native stack **symbolication** — R8 (§1's gloss) renames and shrinks code for release, so a crash's raw stack trace from a real user's phone would otherwise be an unreadable list of shrunken names; the mapping file lets Sentry translate ("symbolicate") that back into the real function/file names during debugging |
 
 ### 33.5 Release hardening
 
@@ -2736,9 +3151,14 @@ lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — o
   `enableShrinkResourcesInReleaseBuilds = true`) via `expo-build-properties`. Keep rules for
   Expo modules, Reanimated, `@shopify/flash-list`, `react-native-svg`, the `coinflow-sms` module,
   and Sentry (its plugin adds them).
-- **Hermes** engine (RN 0.86 default) — bytecode, not readable JS, in the APK.
+- **Hermes** engine (RN 0.86 default) — the app's JavaScript is pre-compiled to **bytecode** (a
+  compact, lower-level instruction format that Hermes runs directly) rather than shipped as
+  readable JS source text, which is both faster to start up and much less convenient for anyone to
+  casually read by unpacking the APK.
 - **Strip `console.*` in production** — `babel-plugin-transform-remove-console` (keep `error` +
-  `warn` so `log.ts` can still route them) in the release Babel env.
+  `warn` so `log.ts` can still route them) in the release **Babel** environment (Babel is the tool
+  that transforms/compiles the app's JavaScript/TypeScript source before it's bundled — plugins
+  like this one can, e.g., delete every `console.log(...)` call specifically from release builds).
 - No debug flags: `expo-dev-client` and Sentry `debug:false` in release; `EXPO_PUBLIC_*` carries
   nothing sensitive.
 - The app sets `WindowManager.LayoutParams.FLAG_SECURE`? **No** in V1 (blocks screenshots
@@ -2759,6 +3179,26 @@ lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — o
 ---
 
 ## 34. Testing strategy
+
+> **Testing vocabulary used throughout this section.** A **unit test** checks one small, isolated
+> piece of logic (a single function, typically) in complete isolation from the rest of the app —
+> fast to run, easy to pin down exactly what broke. **RNTL** = React Native Testing Library — a
+> tool for testing a whole screen/component roughly the way a user would experience it (rendering
+> it and simulating taps/typing), without a real device. **E2E** = "End-to-End" testing — running
+> the *actual, fully-built* app on a real or emulated device and driving it through a whole
+> real-feeling user journey, the slowest but most realistic tier. **Maestro** is the specific tool
+> chosen for that E2E tier here, using **YAML** (a simple, human-readable text format for writing
+> structured data/configuration — indentation-based, no braces) files to describe each flow step by
+> step; **Detox** is a rival E2E tool for React Native that this project considered and rejected
+> (D35). To **mock** something in a test means replacing a real dependency (a real database, a
+> real network call) with a fake, controlled stand-in, so the test only exercises the one thing
+> it's meant to check, predictably. **Test coverage** is the percentage of the actual code that
+> ran at least once while the test suite executed — a rough proxy for "how much of this code has
+> any test looking at it at all." **DST** = Daylight Saving Time — the seasonal clock shift some
+> regions observe; "DST-free" below means the date math is built to be correct regardless of it
+> (a classic source of date bugs). A **"gate"** in a CI pipeline is a check that must pass before
+> the pipeline is allowed to continue/succeed. **Kebab-case** is a naming style using lowercase
+> words joined by hyphens, like `home:balance-hero`.
 
 ### 34.0 Tooling (recap §16.6) & CI
 
@@ -2889,6 +3329,32 @@ start latency (the D18 field-test metric) · visual parity against `design-proto
 ---
 
 ## 35. Build & release
+
+> **A handful of build/release terms this section relies on.** **`expo prebuild`** is the command
+> that generates the actual native Android (and iOS) project folders from the app's Expo
+> configuration + plugins — it's how config-plugin edits (like the ones `coinflow-sms` and
+> `expo-notifications` make to `AndroidManifest.xml`) actually get applied to real native project
+> files. A **"managed" project** (sometimes called **CNG**, "Continuous Native Generation," per
+> `CLAUDE.md`) means those generated native folders (`android/`, `ios/`) are treated as disposable
+> build output — never hand-edited, never committed to git — regenerated fresh from configuration
+> and plugins every time, which is why this repo's `android/` is git-ignored. A **keystore** is
+> the cryptographic signing key/certificate every Android app must be signed with before it can be
+> installed — Android uses the signing key to verify that an update to an already-installed app
+> genuinely comes from the same developer as the original install. **"Sideloading"** means
+> installing an app's APK file directly onto a device (from a downloaded file, a cable, etc.)
+> rather than through an app store like the Play Store. An **App Bundle** (`.aab`) is Google Play's
+> preferred alternative packaging format to a plain `.apk` — irrelevant here since this app isn't
+> shipping through the Play Store at all (D20). **OTA** ("over-the-air") update, in the Expo world,
+> means pushing a new JS bundle to already-installed users remotely without them re-downloading a
+> whole new build — CoinFlow explicitly does not use this (§35.4). **`versionCode`** is the plain
+> internal integer Android uses to determine "is this update newer than what's installed," distinct
+> from the human-readable version string like `1.0.0` a person actually sees. **`adb`** (Android
+> Debug Bridge) is the standard command-line tool for talking directly to a connected Android
+> device or emulator — used in the pre-release checklist below to verify a backup claim.
+> **Metro** is React Native's JavaScript bundler and local dev server (the thing that serves fresh
+> JS to the app while you're actively coding) — mentioned below because only the `development`
+> build profile connects to it live; other profiles ship a JS bundle that's already been built and
+> frozen in.
 
 ### 35.1 `app.json` changes required
 
@@ -3118,8 +3584,11 @@ change in `SPEC-UI-UX.md` §9.
   gained `captureBoundaryError()`, sharing its scrub/send pipeline with the existing generic
   `capture()` via a new internal `sendToSentry()`. New dependency: `expo-clipboard` (Copy
   details) — needs a native rebuild before it works on a real device. Full detail in
-  `SPEC/traceability.md`'s "Root error boundary built" entry, including a test-suite flakiness
-  note unrelated to this change. No linked `SPEC-UI-UX.md` change — the screen isn't in it yet;
+  `SPEC/traceability.md`'s "Root error boundary built" entry, including a **test-suite flakiness**
+  note unrelated to this change ("flaky" describes a test that sometimes passes and sometimes
+  fails against the exact same, unchanged code — usually from a timing assumption or shared state
+  between tests rather than a real bug, and is called out specifically so it isn't mistaken for
+  one). No linked `SPEC-UI-UX.md` change — the screen isn't in it yet;
   worth a follow-up CR there if/when it's folded in.
 
 - **CR-9** (2026-09-04, closing the remaining §32/§33 deferrals CR-7/CR-8 flagged, minus the
@@ -3196,3 +3665,16 @@ change in `SPEC-UI-UX.md` §9.
   scope. **Explicitly out of scope:** any automatic/background telemetry to a backend for a beta
   tester cohort — that idea was discussed and deliberately deferred, not built; this CR is the
   manual, pull-only tier only. No linked `SPEC-UI-UX.md` change beyond the one new Data-screen row.
+
+- **CR-13** (2026-09-18, on-device testing; paired with `SPEC-UI-UX.md` §9 CR-2) — **onboarding
+  crash-report opt-in prompt + three small polish fixes.** (1) `permissions.tsx`: **Continue**, after
+  the SMS/notification OS prompts, shows a `ConfirmDialog` "Send crash reports?" (Enable crash
+  reports / Not now) unless `crashReportingEnabled` is already true; confirming writes the setting
+  and arms Sentry (same path as the card), "Not now" advances with nothing enabled. Amends CR-7's
+  "not auto-fired by Continue": still never enabled without an explicit tap, D34's default-OFF
+  unchanged. `ConfirmDialog` gains an optional `cancelLabel` prop. (2) New
+  `src/ui/date-time-picker.tsx` (hand-rolled Monday-first calendar grid + hour/minute stepper, no
+  native dependency) replaces the typed date/time fields in `transaction-sheet.tsx`. (3) Parser:
+  `extractAccount` name captures stop at `;` and strip trailing punctuation (regression fixture
+  `hard-semicolon-after-name`). (4) `SuggestionCard` dismiss icon `more-vertical` → `x`. No
+  dependency, permission, or schema change.
