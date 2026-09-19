@@ -49,6 +49,12 @@ and per-feature notes are in `SPEC/traceability.md`.
 CR entry in its change log (UI/UX changes → `SPEC-UI-UX.md` §9; technical → `SPEC-implementation.md`
 §37), then change the code. If a product/UX/architecture decision is ambiguous, ask.
 
+**V2 (in progress — phases 0–1 done: spikes + data/domain layer built and tested; phase 2 next):** split payments + three home-screen widgets, planned in
+`SPEC/V2-PLAN.md`; specified in `SPEC-UI-UX.md` §6.17–§6.24 (CR-4/CR-5) and `SPEC-implementation.md` Part III
+§38–§45 (CR-17/18/19); matrix rows in `SPEC/traceability.md` ("V2"). Release = `v2.0.0`; auto split detection is
+v2.1. Design gate UI-099 is **cleared** (2026-09-19, UI-UX CR-6); implementation follows `SPEC/V2-IMPLEMENTATION-PLAN.md`. `v2-idea.md` (repo root) is the
+original split-workflow notes.
+
 Remaining for V1: on-device verification of F8.5, F9, F12 and `SPEC/PLAN.md` §11's final review.
 Split payments (V2) are only sketched in `v2-idea.md` — spec first, no code yet.
 

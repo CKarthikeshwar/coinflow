@@ -2095,3 +2095,76 @@ Background reconcile: 24h default + hard-coded network requirement → **3h mini
 ### SMS-store watcher (2026-09-19) — CR-16
 
 **Store watcher (CR-16):** new Kotlin `SmsStoreJobService` (JobScheduler content-trigger on `content://sms`) → headless `CoinflowSmsStoreChanged` → `reconcileMissedSms({ source:'storeTrigger', lookbackMs: 6h })`; re-armed on every JS start / app open / periodic task. Periodic background sweep interval **3h → 12h** (final number; the no-network patch from CR-15 stays). Per-path "first catch" counters + `smsLastStoreTriggerAt` added to Send Diagnostics. Tests: `catch-stats.test.ts` (new), extended `sms-ingest.test.ts`, `sms-reconcile.test.ts`, `diagnostics.test.ts`. **Not yet verified on-device** — needs `prebuild --clean` + rebuild; then `adb shell dumpsys jobscheduler` should list a pending job for `SmsStoreJobService`, and `smsLastStoreTriggerAt` should stamp after a real SMS.
+
+---
+
+## V2 — splits & widgets (planned 2026-09-19) — CR-17 / CR-18 / CR-19 / UI-UX CR-4 / CR-5
+
+**Status: specified, nothing built.** Source plan: `SPEC/V2-PLAN.md`. Every row below starts as **Not started**; it flips to `Pass` only under the contract at the top of this file (implemented + the test tier it names, green), and `Partial` only with a named trigger. Auto split detection (F17) is **v2.1** and has no rows yet.
+
+**Features:** F13 Split (manual, local) · F14 Settlements & merge · F15 Split-request messaging · F16 Widgets (design-gated by UI-099) · F17 Auto split detection (v2.1, deferred).
+
+**Phase 0 items still open (recorded so they are not forgotten):** widget-approach spike (D42 addendum in §44.1) · SMS send/receive spike on the real phone · widget prototype approval (UI-099) · open defaults: default SIM (D41), hide-amounts default off (D44), Balance = Income − Spent (D43/UI CR-5).
+
+### Behaviour rows (`IMP-0xx | criterion | UI-0xx | component/service | test kind | test id / file | status`)
+
+| IMP | Criterion | UI | Component / service | Test kind | Test id / file | Status |
+|---|---|---|---|---|---|---|
+| IMP-070 | Split invariant: amount = your share + Σ shares; shares > 0 | UI-072 | src/domain/split.ts (`validateSplit`); `splits` repo | unit + repo | split.test.ts, splits.test.ts | Pass |
+| IMP-071 | Equal split in whole paise; remainder to you | UI-072 | src/domain/split.ts (`equalShares`) | unit (property) | split.test.ts | Pass |
+| IMP-072 | Percent → paise by largest remainder, sums exactly | UI-072 | src/domain/split.ts (`percentToMinor`) | unit (property) | split.test.ts | Pass |
+| IMP-073 | Effective spending everywhere; identical to V1 with no splits | UI-075, UI-081 | analyticsRepo fragments (§41); Home/Analytics | unit + repo (V1 fixtures unchanged) | analytics.test.ts (+ new cases) | Not started |
+| IMP-074 | Effective income nets settlements; debit settling a request ≠ spending change | UI-074 | analyticsRepo fragments; `settlements` repo | unit + repo | analytics.test.ts, settlements.test.ts | Not started |
+| IMP-075 | Settlement capped by remaining + unallocated; no leftover flow | UI-077 | src/domain/settlement.ts (`allocate`) | unit | settlement.test.ts, settlements.test.ts | Pass |
+| IMP-076 | Share/split status derived, never stored | UI-074 | src/domain/split.ts (`shareState`, `splitState`) | unit | split.test.ts, splits.test.ts | Pass |
+| IMP-077 | Person identity by normalised number; contacts optional | UI-071 | src/domain/person.ts; `persons` repo; People picker | unit + RNTL | person.test.ts, persons.test.ts; people-picker.test.tsx (phase 3) | Partial — closes when the People picker lands (phase 3) |
+| IMP-078 | Request SMS: GSM-7, ≤160, token, readable without CoinFlow | UI-073 | src/domain/split-message.ts (`encodeRequest`) | unit (round-trip, fuzz) | split-message.test.ts (round-trip, fuzz, GSM-7, length) | Pass |
+| IMP-079 | Strict decode, numeric sender only, never a bank suggestion, never the Sent box | UI-079 | split-message.ts (`decodeRequest`); `smsIngestTask` request branch | unit + integration | split-message.test.ts, person.test.ts; sms-ingest.test.ts (phase 5) | Partial — decode + numeric-sender rule done; closes when the ingest branch + Sent-box guard land (phase 5) |
+| IMP-080 | Idempotent receipt per (sender, ref); update / withdraw; rate limit | UI-079 | `split-requests` repo; receive-request.ts | repo + unit | split-requests.test.ts; receive-request.test.ts (phase 5) | Partial — repository rules done; closes when the ingest branch wires it (phase 5) |
+| IMP-081 | Per-recipient send results; SMS-app fallback; split never lost | UI-073 | src/services/splits/send-requests.ts; `SmsSender.kt` | unit (mocked native) + manual | send-requests.test.ts; on-device QA | Not started |
+| IMP-082 | Received request stored Unattended; headless Accept/Reject; silent reject | UI-079 | notification category `split-request`; `NOTIFICATION_RESPONSE_TASK` | unit + manual | split-requests.test.ts; respond.test.ts (phase 5) | Partial — Unattended storage done; closes with headless Accept/Reject (phase 5) |
+| IMP-083 | Merge = one DB transaction; undoable | UI-077 | `settlements` repo (`settle`/`unsettle`); Merge sheet | repo + RNTL | settlements.test.ts; merge-sheet.test.tsx (phase 4) | Partial — atomic settle/unsettle done; closes when the Merge sheet + Undo land (phase 4) |
+| IMP-084 | Soft-delete/Undo hides split & settlements; purge cascades | UI-074 | schema FKs; purge job (§20.6) | repo | splits.test.ts, settlements.test.ts, maintenance-v2.test.ts | Pass |
+| IMP-085 | Suggested settlement is only a suggestion | UI-077, UI-078 | src/domain/suggest-settlement.ts | unit | suggest-settlement.test.ts | Pass |
+| IMP-086 | Additive migration; V1 DB unchanged | — | migration `0002_v2_splits` | migration snapshot | migration-v2.test.ts | Pass |
+| IMP-087 | Clear all data / Export include V2 tables | UI-065 | maintenanceRepo; export | repo | maintenance-v2.test.ts, export.test.ts | Pass |
+| IMP-088 | Only ref/amount/note/sender stored; never the body | — | receive-request.ts | unit | split-requests.test.ts (no body column) | Pass |
+| IMP-089 | Editing split amount recomputes your share; blocked if < 0 | UI-070 | src/domain/split.ts (`recomputeYourShare`); Edit sheet | unit + RNTL | split.test.ts, splits.test.ts; Edit-sheet test (phase 3) | Partial — domain + repo done; closes with the Edit sheet (phase 3) |
+| IMP-090 | Widget snapshot v1 published, debounced, on every change + sweeps | UI-091, UI-092 | src/services/widgets/publish.ts | unit + manual | publish.test.ts; on-device QA | Not started |
+| IMP-091 | Widgets render from snapshot only | UI-090 | Kotlin providers | manual | on-device QA | Not started |
+| IMP-092 | Widget taps → add / review[?open] / root links, cold start | UI-092, UI-093 | providers; `src/app/add.tsx`; deep-link handling | unit + manual | deep-link.test.ts; on-device QA | Not started |
+| IMP-093 | Hide amounts masks ₹ figures, never labels | UI-094, UI-095 | snapshot `hideAmounts`; providers | unit + manual | publish.test.ts; on-device QA | Not started |
+| IMP-094 | Past-month snapshot renders — | UI-097 | providers (`periodEndMs`) | manual | on-device QA | Not started |
+| IMP-095 | Three providers registered with previews | UI-090 | app.plugin.js; `res/xml/widget_*_info.xml` | manual | on-device QA | Not started |
+| IMP-096 | Widget Balance = Analytics month card | UI-091 | publish.ts via analyticsRepo | unit | publish.test.ts | Not started |
+| IMP-097 | No permissions beyond IMP-098 | — | app.json / plugins | build check | manifest assertion | Not started |
+| IMP-098 | SEND_SMS / READ_CONTACTS optional, just-in-time | UI-071, UI-080 | Split sheet; Settings › Splits & people | RNTL + manual | people-picker.test.tsx; on-device QA | Not started |
+
+**Phase 1 (data & domain) — built 2026-09-19:** migration `0002_v2_splits`, five tables, `src/domain/{split,settlement,person,split-message,suggest-settlement}.ts`, repositories `persons` / `splits` / `settlements` / `split-requests`, `maintenance.ts` + export extended. +234 tests (844 total, all green), typecheck and lint clean. Rows below are updated where phase 1 satisfies them; the rest close in the phase named.
+
+### Visual rows (UI-UX §7)
+
+| UI | Criterion | Verified by | Status |
+|---|---|---|---|
+| UI-070 | Split… in Confirm/Edit/Details; row shows "Split with N" | RNTL + on-device | Not started |
+| UI-071 | People stage: search, chips, saved, contacts row, add a number | RNTL + on-device | Not started |
+| UI-072 | Amounts stage: You first, equal default, ₹|%, Remaining gating | RNTL + on-device | Not started |
+| UI-073 | Send result list; failure never discards the split | RNTL + on-device | Not started |
+| UI-074 | Details: Split card + Settlements section | RNTL + on-device | Not started |
+| UI-075 | List rows: split badge + "Your share" | RNTL + on-device | Not started |
+| UI-076 | Splits page: 3 segments, grouped, empty states, Show settled | RNTL + on-device | Not started |
+| UI-077 | Merge sheet: open candidates, Suggested, caps, no leftover | RNTL + on-device | Not started |
+| UI-078 | Suggested-settlement banner | RNTL + on-device | Not started |
+| UI-079 | Request notification: Accept/Reject, channel, grouping, Unattended | RNTL + on-device | Not started |
+| UI-080 | Settings › Splits & people | RNTL + on-device | Not started |
+| UI-081 | Home "Owed to you" row only when > 0 | RNTL + on-device | Not started |
+| UI-090 | Three widgets in the picker | design-prototype review (widgets) + on-device | Not started |
+| UI-091 | Money summary content/sizes | design-prototype review (widgets) + on-device | Not started |
+| UI-092 | Queued transactions content + taps | design-prototype review (widgets) + on-device | Not started |
+| UI-093 | Quick add opens the Add sheet (cold start too) | design-prototype review (widgets) + on-device | Not started |
+| UI-094 | Hide amounts masks ₹ figures | design-prototype review (widgets) + on-device | Not started |
+| UI-095 | Labels never masked | design-prototype review (widgets) + on-device | Not started |
+| UI-096 | Greyscale tokens only | design-prototype review (widgets) + on-device | Not started |
+| UI-097 | Past-month widget shows — | design-prototype review (widgets) + on-device | Not started |
+| UI-098 | Settings › Widgets page | design-prototype review (widgets) + on-device | Not started |
+| UI-099 | Design gate: widget designs approved before implementation | design canvas review | **Pass** (approved 2026-09-19, CR-6) |

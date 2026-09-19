@@ -45,6 +45,12 @@
 > `design-references/` (`screen1.png` / `screen2.png` — real photographs/screenshots of other apps
 > collected as inspiration, separate from the coded prototype above).
 
+> **V2 amendment (2026-09-19, CR-4 / CR-5 in §9).** V2 adds **split payments** (Track A) and **home-screen
+> widgets** (Track B) — see `SPEC/V2-PLAN.md`. New screens are §6.17–§6.24, new acceptance criteria
+> `UI-070`–`UI-099` in §7, and a short "**V2 (CR-4)**" pointer sits at the end of each V1 screen section a V2
+> feature touches. Everything else in this document is unchanged. **The widget layouts in §6.22–§6.24 are
+> PROVISIONAL until you approve the widget prototypes** (`UI-099`); no widget code is written before that.
+
 ---
 
 ## 1. Screen inventory & priority
@@ -107,6 +113,15 @@ screen, etc. See §4 for the precise behavior of each type; the short version:
 | Settings · About | Pushed page | P1 | Version, privacy note, links. |
 | Transaction notification | System surface | P0 | Route the user into confirmation. |
 | Global components | — | P0 | Nav bar, snackbar, banner, empty state, skeleton, confirm dialog. |
+| **V2** · Split (sheet, 2 stages: People → Amounts) | Bottom sheet | V2 | Share a transaction between people and (optionally) send them requests. |
+| **V2** · Merge (sheet) | Bottom sheet | V2 | Say which split(s) a payment settled. |
+| **V2** · Splits | Pushed page | V2 | Owed to you · You owe · Requests (incoming). |
+| **V2** · Request notification | System surface | V2 | "X requested ₹N" with Accept / Reject. |
+| **V2** · Settings · Splits & people | Pushed page | V2 | Contacts access, your name in requests, saved people. |
+| **V2** · Settings · Widgets | Pushed page | V2 | Hide-amounts switch, how to add a widget. |
+| **V2** · Widget · Money summary | Home-screen widget | V2 | Balance, income, spent for the month. |
+| **V2** · Widget · Queued transactions | Home-screen widget | V2 | Detected transactions waiting for review. |
+| **V2** · Widget · Quick add | Home-screen widget | V2 | One tap to the Add sheet. |
 
 ---
 
@@ -1080,6 +1095,10 @@ launch; Home tab.
   (i.e. this isn't treated as an error or an unusual/broken state — the screen just displays it
   plainly).
 
+- **V2 (CR-4):** when any split has money outstanding, a compact **"Owed to you ₹N"** row sits under the
+  month card (tap → **Splits**, §6.19). Hidden when nothing is outstanding. Amounts follow the *effective*
+  rules of §6.17 (Spent already excludes the part other people owe).
+
 ### 6.3 Review Queue · P0
 
 **Plain-English:** this is the screen that lists SMS-detected transactions the app isn't fully
@@ -1146,6 +1165,12 @@ Review a detected transaction and add it, fast. Entry: notification body tap; Re
 - Edge: amount `₹0` or `> ₹10,00,000` (10 lakh — see the "lakh" explanation in §6.2) → helper text
   under the amount (bold, not coloured); **Income** selected → category row hidden.
 
+- **V2 (CR-4):** a quiet **Split…** text-button row sits below the Description field (Confirmation and Edit
+  sheets only — a transaction must exist to be split). It opens the Split sheet (§6.17) on top of this one;
+  closing/cancelling Split returns here with no change. A transaction that already has a split shows
+  **"Split with N · ₹X yours"** in that row instead (tap → Split sheet in edit mode). For a *credit* whose
+  amount matches an open share the sheet shows the **Suggested settlement** banner (§6.20).
+
 ### 6.5 Add Transaction (sheet) · P0
 
 **Plain-English:** this is the sheet for typing in a transaction by hand — as opposed to §6.4,
@@ -1175,6 +1200,10 @@ call-to-action, a prominent actionable button, per the §3.6 decoder).
 Identical to Add (§6.5), pre-populated; title "Edit transaction"; primary **Save** pinned below the
 keypad. **Cancel** shows a discard confirm if anything was changed. States: *default* · *invalid*
 (a cleared required field disables **Save**) · *submitting* · *save error*.
+
+- **V2 (CR-4):** same **Split…** row as §6.4 (Edit sheet). Editing the **amount** of a split transaction keeps
+  every other person's share fixed and recomputes *your* share (= amount − the others); if that would go
+  below ₹0, Save is disabled with the inline error "Others' shares are more than the amount — edit the split."
 
 ### 6.7 Transactions (list) · P0
 
@@ -1207,6 +1236,11 @@ pre-set — arriving here already filtered to the category/period that was tappe
   zero transactions, its date header disappears too, rather than being left behind empty); a day
   with only income (is a perfectly valid, plainly-rendered case, not a special/error state).
 
+- **V2 (CR-4):** a transaction that carries a split shows a small **users** icon + `Split · 2 of 3 paid`
+  under its note, and (in the amount column) a second muted line **"Your share ₹30"**. The headline amount is
+  still the real amount paid. A credit that settled a split shows `Settled Rahul's share` in the same place.
+  Filter sheet (§6.9) gains a single **Splits** chip: *Has split · Settled a split*.
+
 ### 6.8 Transaction Details · P0
 
 See everything about one transaction and act on it. Entry: any transaction row; post-add toast
@@ -1231,6 +1265,20 @@ notification some time after the transaction inside it has already been reviewed
 - Edge: missing note → "Add a note" inline control in place of the heading; Uncategorized → a
   prominent **Set category** control in the meta row; a future date is shown plainly (i.e. treated
   as a perfectly normal, valid value with no warning/error styling).
+
+- **V2 (CR-4):** two new sections in Details, below the existing fields and above the provenance line:
+  - **Split** (when the transaction has one): a card titled **Split** — first row **You · ₹30 · your share**,
+    then one row per person: name · amount · a status chip (**Pending**, **Partly paid ₹100 of ₹300**,
+    **Settled**, **Waived**) · a request line (`Requested by SMS · 14 Sep`, `Not sent`, `Sending failed`).
+    Tapping a row opens a small actions menu: *Mark as paid…* (→ Merge sheet), *Resend request*, *Waive*,
+    *Edit split*. Card footer: **Edit split**. Overflow gains **Remove split** (confirm dialog; deletes the
+    shares and any settlements recorded against them — the settling transactions themselves stay).
+  - **Settlements** (when a credit settled shares, or a debit settled requests): lines like
+    `₹450 of this settled Rahul's share of "Momos"` / `₹200 of this paid Priya's request "Cab"`; each line
+    links to the other transaction / request. A credit shows `Effective income ₹50` under the amount when part
+    of it was used up.
+  - Overflow gains **Split…** for any transaction without one (a debit, or a credit — credits can be split
+    too, e.g. a shared refund) and **Merge into a split…** (§6.20).
 
 ### 6.9 Filter (sheet) · P0
 
@@ -1378,6 +1426,9 @@ page; app version in the footer. Static.
 - **About (P1):** version; the line "All your data stays on this device."; a licenses link;
   source / help links.
 
+- **V2 (CR-4):** two new rows, **Splits & people** and **Widgets** (both specified in §6.24). The
+  Settings hub gains no other change.
+
 ### 6.15 Transaction notification (system surface) · P0
 
 **This is the core loop** — a bank SMS lands, CoinFlow reads it, and the user acts from the lock
@@ -1410,6 +1461,9 @@ screen: one tap for a known account, or **Add** to review a new one — without 
   user's real Android notification theme uses, since notifications are drawn by the OS, not fully
   controlled by CoinFlow).
 
+- **V2 (CR-4):** a second notification kind — the **split request** (§6.21) — with its own channel
+  ("Split requests"). It follows the same rules as this section (OS-drawn, monochrome in the prototype).
+
 ### 6.16 Global components
 
 - **Bottom navigation bar** — four icon tabs (Transactions = clock / history) + a raised, filled
@@ -1423,6 +1477,161 @@ screen: one tap for a known account, or **Add** to review a new one — without 
 - **Loading skeleton** — neutral blocks matching the target layout; no spinners on full screens.
 - **Confirm dialog** — quiet glyph, title, short body; **stacked** actions — the confirm on top
   (filled + bold when destructive, no colour), a plain-text **Cancel** below.
+
+### 6.17 Split (sheet) · V2
+
+**Entry:** the **Split…** row in the Confirmation / Edit sheets (§6.4, §6.6), the Details overflow / card
+(§6.8). Same sheet chrome as §6.4 (grabber, swipe-down and Cancel close it; §3.6 sheet rules). Two
+**stages** inside one sheet, with a slim two-dot step indicator: **1 · People**, **2 · Amounts**.
+
+**Terms (used everywhere in V2 UI copy):** the **split** is the transaction being shared; a **share** is one
+person's portion; a **request** is the SMS asking them to pay it. Copy says "share" and "request", never
+"debt".
+
+**Stage 1 — People**
+- Header: **Split ₹90** · a one-line echo of the note (`Momos`). Search field (filters all lists below).
+- Selected people appear as removable chips in a row above the list.
+- Sections, in order: **Saved people** (people already used in CoinFlow, most recent first) · **Contacts**
+  (device contacts; **only shown once contacts access is granted**) · an **Add a number** row (opens a small
+  inline form: optional name + 10-digit mobile → adds a chip). Multi-select via a trailing check.
+- **Contacts access is optional and asked just-in-time:** if not granted, the Contacts section is replaced by
+  one row **"Choose from contacts"** with a one-line reason ("Only used to pick who to ask — nothing is
+  uploaded"). Denied/permanently denied → the row stays, its action opens system settings (same behaviour as
+  IMP-042). Everything except that row works without contacts.
+- Primary **Continue** (disabled until ≥ 1 person). No hairline/tint tricks: same button as §3.6.
+
+**Stage 2 — Amounts**
+- A **₹ | %** segmented control (default ₹). Rows: **You** first (fixed, shown but not removable), then one
+  row per person. Each row: avatar initial · name · an amount (or percent) field.
+- **Default = equal split.** Any edit makes that row "custom"; the rest re-share the remainder equally; an
+  **Equal** text-button resets. Rounding: leftover paise go to **You** (IMP-071).
+- Live footer: **Remaining ₹0** (muted) or **Remaining ₹12** / **Over by ₹12** (bold, no colour — §3.1 has
+  no error colour outside destructive). Primary is disabled unless remaining is exactly 0.
+- Primary **Send requests** (label becomes **Save split** when SMS sending is unavailable or the user turned
+  it off for this split with the small **Don't send now** text-button). Secondary text-button **Back**.
+- **Send flow:** on tap, if SEND_SMS is not granted the OS prompt is shown with a one-line rationale; if it
+  is denied, each recipient's message is opened in the user's SMS app pre-filled, one at a time (decided —
+  V2-PLAN §5.5). A **result list** replaces the stage: per person `Sent`, `Sending failed · Retry`, or
+  `Opened in Messages`; **Done** closes the sheet. A failure never loses the split — it is saved first, the
+  request just stays `Not sent` and can be resent from Details.
+- (CR-7: the footnote "don't appear in Messages" was removed — on tested hardware the sent text *is* stored in the
+  Sent box, so the claim is not reliable.)
+- **Edit mode** (opened on an existing split): same two stages, pre-filled. Changing an amount that was
+  already requested shows `Changed since requested` on that person and offers **Resend** on Done. Removing a
+  person who has settlements is blocked (their row is disabled with the reason).
+- States: empty search · no contacts · permission denied · sending · partial failure · offline-irrelevant
+  (SMS needs no data connection). Edge: a person's number equals your own → inline "That's this phone";
+  a duplicate number merges into one chip.
+
+### 6.18 People & the "You" row — copy and edge rules · V2
+
+- A person is shown by **name**, falling back to the number (`98•••• 4521` masked to the last 4 in lists,
+  full number only on the person's own action menu). Initials avatar on the neutral surface — no photos, no
+  colour (§2 illustration policy).
+- Two people may share a name; the number is the identity. Renaming updates everywhere.
+- **You** is always row 1 of any split and can be ₹0 (someone else paid entirely for you, or you're just
+  collecting). It cannot be negative.
+
+### 6.19 Splits (pushed page) · V2
+
+**Entry:** the Home "Owed to you" row (§6.2), Settings › Splits & people, and the request notification (body
+tap). Top bar: back · title **Splits**. A three-segment control (same component as Month / Week, §3.6):
+**Owed to you · You owe · Requests**.
+
+- **Owed to you** — grouped **by person** (largest outstanding first). Group header: name · **₹450 owed**.
+  Rows under it: the split's note · that share's amount · status chip · date. Tap a row → that transaction's
+  Details (Split card). Group action menu: *Mark all paid…*, *Send reminder* (resends the request SMS text).
+- **You owe** — accepted incoming requests (§6.21) grouped by requester, same row shape, with a **Merge…**
+  button per row (→ §6.20). Header total: **₹N you owe**.
+- **Requests** — two sub-groups: **Unattended** (received, not yet accepted or rejected — includes ones the
+  user swiped off the notification) and **Accepted**. An unattended row shows **Accept** and **Reject**
+  buttons inline; Reject is one tap with an Undo snackbar (the request is discarded silently — the sender is
+  **not** told). A badge with the Unattended count shows on the segment.
+- States: empty per segment ("Nobody owes you anything." / "You don't owe anyone." / "No requests."),
+  loading skeleton, settled items hidden behind a **Show settled** row at the bottom of each segment.
+
+### 6.20 Merge (sheet) · V2
+
+Answers "which split did this payment settle?". **Entries:** Details › **Merge into a split…** / the person
+action *Mark as paid…* / the **Suggested settlement** banner / the **Merge…** button in Splits › You owe.
+
+- Header: **Merge ₹450** and the transaction's note/account.
+- Body — a checklist of **candidates** (open items only):
+  - a **credit** merges into **shares people owe you** (Owed to you), grouped by person; a **debit** merges
+    into **requests you owe** (You owe).
+  - The best match, if any (§6.20 "match"), sits on top under a **Suggested** label with its box pre-ticked.
+- Each ticked row shows an amount field defaulting to the item's remaining amount, capped by what's left of
+  the transaction. Footer: **₹450 of ₹450 used** (muted). **No leftover handling (decided):** if the payment
+  is larger than what is ticked, the rest simply stays an ordinary transaction — nothing to choose, nothing
+  to discard.
+- Primary **Settle** (disabled until ≥ 1 ticked with amount > 0). Result: the sheet closes and a snackbar says
+  `Settled Rahul's share — ₹450` with **Undo**.
+- **Match rule (display side):** the top suggestion is an open item whose remaining amount equals this
+  transaction's amount exactly, and (if the transaction has an account/name) whose person's name matches it;
+  otherwise the list is ordered by |remaining − amount|. It is only ever a suggestion (impl. §40.4).
+- The **Suggested settlement** banner (Confirmation sheet and Details, credits only): a quiet card,
+  `Looks like Rahul paying ₹450` · **Settle** · **Not this** (dismiss = hide for this transaction).
+
+### 6.21 Split request notification (system surface) · V2
+
+- **Received request:** title `Rahul requested ₹450`; body `for Momos · CoinFlow split`. Two actions:
+  **Accept** (adds it to *You owe*, no app open) and **Reject** (discards silently, no app open). **Body tap**
+  → Splits › Requests (Unattended). Number not among saved people → the body adds `· not in your people`.
+- **Grouped (2+):** `3 split requests` → Splits › Requests.
+- **Swiping the notification away never loses it:** the request is stored as *Unattended* at the moment it
+  arrives, whatever the user does with the notification.
+- Own channel **Split requests** (importance default — quieter than the transaction channel, no heads-up).
+- **Withdrawn request** (the sender cancelled): the notification is removed and, if it was Accepted, the row
+  moves to *Settled*-hidden with `Withdrawn by sender`.
+- **Never auto-acted:** nothing in this flow pays, accepts or replies without a tap.
+
+### 6.22 Widget · Money summary · V2 (PROVISIONAL)
+
+- Header line: **September** (the calendar month — same period as the Analytics "This month" card).
+- **Balance** large (`₹12,480`, negative with leading `−`) — defined as **Income − Spent** for the month,
+  identical to the Analytics card (§6.10, UI-051), i.e. it uses *effective* amounts (§6.17). Under it two
+  columns: **Income** and **Spent**, each `₹` amount in the secondary text size.
+- **Sizes:** 4×2 (default; all three numbers) and 2×2 (Balance + Spent only). Resizable between the two.
+- **Look:** near-black `#0B0B0C` tile, `#F5F5F2` text, hairline border, 24 dp radius (`§3.3` card radius),
+  Manrope Bold for the balance, Geist for labels. No colour, no chart, no category palette (`UI-054`).
+- **Tap** anywhere → Home. **Hide amounts** on → every ₹ figure shows `••••`.
+- **States:** *empty month* (`₹0` figures — not an error); *stale month* (the phone rolled into a new month
+  and CoinFlow hasn't refreshed the data yet) → figures show `—` and the header shows the new month until the
+  app next runs (impl. §44.5); *never opened* → the tile shows **"Open CoinFlow to set up"**.
+
+### 6.23 Widget · Queued transactions · V2 (PROVISIONAL)
+
+- Header: **To review** with a count pill (`3`). Body: up to **3** rows — account/label · `₹450` · debit/credit
+  arrow glyph — newest first; a footer line `+2 more` when there are more.
+- **Sizes:** 4×2 (count + 2 rows; the default) and 4×3 (count + 3 rows). **No 2×2 variant** (dropped by the user, 2026-09-19).
+- **Tap:** a row → that suggestion's Confirmation sheet (`coinflow://review?open=<id>`, the existing §28.3
+  link); anywhere else → Review Queue.
+- **States:** *empty* → checkmark glyph + **"All caught up"**; *hide amounts* → `••••` in place of amounts,
+  labels stay visible (UI-095).
+- Same look tokens as §6.22.
+
+### 6.24 Widget · Quick add · V2 (PROVISIONAL) — and Settings pages
+
+- **Widget:** a single tile with a **+** glyph (1×1); at 2×1 it adds the label **Add transaction**. Same
+  tokens as §6.22 (the tile is `#F5F5F2` with a `#0B0B0C` glyph — the same inversion as the tab-bar Add FAB,
+  §6.16). **Tap** → opens the Add sheet directly (`coinflow://add`); if the app was closed it cold-starts
+  straight to Home with the sheet already presented. No data is shown, so **Hide amounts** has no effect.
+- **Settings › Widgets** (pushed page): a **Hide amounts on widgets** switch (default **off**, decided as
+  the default — V2-PLAN §5 open item; flip the default here if you prefer) with one line "Amounts show as
+  •••• on the home screen. Labels stay visible."; a short **How to add a widget** card (long-press the home
+  screen → Widgets → CoinFlow) — there is no in-app "pin widget" prompt in V2.
+- **Settings › Splits & people** (pushed page): **Contacts access** row (Not asked / Granted / Denied with
+  Enable, same visual states as `UI-063`); **Your name in requests** text field (optional, ≤ 20 chars; empty ⇒
+  requests carry no name); **Requests are sent from** — read-only row "Default SIM" (decided; V2-PLAN §5
+  open item); **Saved people** list (name, masked number, a delete swipe — disabled with a reason while the
+  person has an open share or request); **Unattended requests** row → Splits › Requests.
+
+### V2 design gate
+
+The widget tiles (§6.22–§6.24) are built as a coded prototype first — `design-prototype/01-midnight/widgets.html`,
+one frame per widget per size, per state, on a mock launcher — and shown to the user. **No widget Kotlin or
+layout XML is written until the user approves the prototype** (`UI-099`); changes they ask for are folded back
+into this spec through a follow-up CR before implementation.
 
 ---
 
@@ -1532,6 +1741,39 @@ Settings "SMS & notifications" row shows an On / Off subtitle and a warning icon
 `UI-065` Settings › Data › Clear all data requires a
 two-step confirm.
 
+**Splits (V2, CR-4)** — `UI-070` the Confirmation and Edit sheets and Transaction Details each offer **Split…**
+(and **Merge into a split…** in Details) and a transaction with a split shows **Split with N · ₹X yours** in
+that row · `UI-071` the Split sheet's People stage has search, chips for the selection, **Saved people**,
+**Contacts** (only once access is granted, otherwise a single "Choose from contacts" row) and **Add a number**,
+and **Continue** is disabled with nobody selected · `UI-072` the Amounts stage lists **You** first, defaults to
+an equal split, has a ₹ | % toggle, shows **Remaining / Over by**, and enables **Send requests** only when
+remaining is exactly ₹0 · `UI-073` after sending, the result list shows a per-person `Sent` / `Sending failed ·
+Retry` / `Opened in Messages` state and a failed send never discards the split · `UI-074` Details shows a
+**Split** card (You + each person with a Pending / Partly paid / Settled / Waived chip and a request line) and
+a **Settlements** section · `UI-075` list rows show the split badge and a muted **Your share ₹N** line while
+the headline amount stays the real amount · `UI-076` the **Splits** page has Owed to you / You owe / Requests
+segments, grouped by person, with the per-segment empty states and a **Show settled** row · `UI-077` the
+**Merge** sheet lists only open candidates, pre-ticks a single best **Suggested** match, caps each amount by
+what remains, and shows **₹X of ₹Y used** with no leftover step · `UI-078` a credit that matches an open share
+shows the **Suggested settlement** banner with **Settle** / **Not this** · `UI-079` a received request
+posts a notification with **Accept** and **Reject**, on its own channel, grouped when 2+; swiping it away
+leaves the request under Splits › Requests › Unattended · `UI-080` Settings › **Splits & people** shows
+Contacts access (with visual states), Your name, the read-only SIM row, and Saved people · `UI-081` Home shows
+an **Owed to you ₹N** row only when N > 0.
+
+**Widgets (V2, CR-5)** — `UI-090` **Money summary**, **Queued transactions** and **Quick add** all appear in
+the launcher's widget picker with a preview and a one-line description · `UI-091` Money summary shows the
+month's Balance (Income − Spent, effective) with Income and Spent, in 4×2 and 2×2 · `UI-092` Queued
+transactions shows a count and up to three rows, `+N more`, and an "All caught up" empty state; a row tap opens
+that suggestion's Confirmation sheet and any other tap opens the Review Queue · `UI-093` Quick add opens the
+Add sheet directly, including from a cold start · `UI-094` with **Hide amounts on widgets** on, every ₹ figure
+on the two data widgets reads `••••` · `UI-095` labels (account names, month) are never masked by that switch ·
+`UI-096` widgets use only the greyscale tokens — no category-palette colour (extends `UI-054`) · `UI-097` a
+widget whose data belongs to a past month shows `—`, never last month's numbers under this month's name ·
+`UI-098` Settings › **Widgets** has the Hide-amounts switch and the how-to-add card · `UI-099` **design gate:**
+the widget designs have been reviewed and approved by the user before any widget implementation begins —
+**cleared 2026-09-19** (CR-6).
+
 ---
 
 ## 8. Resolved visual decisions
@@ -1620,3 +1862,29 @@ other way around).
   background is `#0B0B0C` (was `#208AEF`); the in-app splash overlay shows the same image at the
   same size as the native splash so the handoff doesn't jump. A custom "C-shaped bowl" ₹ was
   explored and dropped in favour of the standard glyph. No screen layout change.
+
+- **CR-4** (2026-09-19, V2 planning — `SPEC/V2-PLAN.md`; linked `SPEC/SPEC-implementation.md` §37 CR-17 /
+  CR-18) — **Split payments UI added.** New: Split sheet (People → Amounts stages, §6.17), people rules
+  (§6.18), Splits page (§6.19), Merge sheet + suggested-settlement banner (§6.20), split-request notification
+  (§6.21), Settings › Splits & people (§6.24), and criteria `UI-070`–`UI-081`. Edited V1 screens (pointer
+  paragraphs only, no layout regressions): Home gains an "Owed to you" row (§6.2), Confirmation / Edit gain
+  **Split…** (§6.4, §6.6), the list rows gain a split badge + "Your share" line (§6.7), Details gains a Split
+  card, Settlements section and overflow items (§6.8), Filter gains a Splits chip (§6.9), Settings gains two
+  rows (§6.14), the notification section notes the second kind (§6.15). **Decisions recorded from the plan:**
+  Split is available in the Confirm/Edit sheets **and** on Details; if SMS sending is denied the message is
+  opened pre-filled in the SMS app; a payment larger than what it settles has **no leftover handling** — the
+  transaction just records how much of it settled which split; auto split detection is deferred to **v2.1** (not
+  in this CR). **Defaults chosen for the still-open items** (flip via a follow-up CR): requests go from the
+  **default SIM**; the request text is readable without CoinFlow.
+
+- **CR-5** (2026-09-19, V2 planning — linked `SPEC/SPEC-implementation.md` §37 CR-19) — **Home-screen widgets
+  added (three).** §6.22 Money summary (Balance = Income − Spent for the month, + Income, Spent), §6.23 Queued
+  transactions (count + up to 3 rows), §6.24 Quick add (+ tile), Settings › Widgets (§6.24), criteria
+  `UI-090`–`UI-099`. The plan's fourth idea ("Owed to you" widget) is **dropped**. Layouts, sizes and colours are
+  **provisional** and subject to the design gate (`UI-099`): prototype first, approval second, code third.
+  "Hide amounts on widgets" is a Settings switch, **default off** (open item — flip if you prefer private by
+  default). "Balance" is defined as **Income − Spent** so the widget matches the Analytics card.
+
+- **CR-6** (2026-09-19, design review of the V2 canvas) — **V2 designs approved; the Queued-transactions 2×2 widget is dropped.** The user reviewed the coded design canvas ("CoinFlow V2 Design": widgets on a home screen, widget sizes/states, the split flow, Details with a split, Splits page, Merge sheet, request notification, Home with the "Owed to you" row) and approved it. The only change: **Queued transactions has no 2×2 size** — it is 4×2 and 4×3 only (§6.23; the Money summary keeps 4×2 and 2×2). The design gate `UI-099` is **cleared**; the design source of truth for V2 screens is that canvas plus §6.17–§6.24. The prototype path named in §6.24 (`design-prototype/01-midnight/widgets.html`) is superseded by the canvas.
+
+- **CR-7** (2026-09-19, phase-0 spike 0b — `SPEC/SPEC-implementation.md` §45.5) — **Split sheet result list: footnote removed.** §6.17 said requests sent by CoinFlow "don't appear in Messages". Measured on a motorola edge 60 pro (Android 16) the message is written to the Sent box, so the sentence is not reliable and is dropped. No other UI change.

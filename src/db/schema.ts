@@ -53,7 +53,8 @@
  *   actually import (`transactions`, `categories`) are plural, matching normal JS naming.
  */
 
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 const nowMs = () => Date.now();
 
@@ -153,13 +154,141 @@ export const suggestions = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------------------------------
+// V2 — split payments (SPEC-implementation.md §39, CR-17). Additive: nothing above changes.
+//
+// D36: no stored "your share" and no stored status anywhere. Your share = transaction amount − Σ shares;
+// a share's status derives from Σ its settlements (+ `waivedAt`). Only facts are stored.
+// ---------------------------------------------------------------------------------------------------
+
+/** Someone you split with, or who asked you to split. Identity = the 10-digit mobile number. */
+export const persons = sqliteTable(
+  'person',
+  {
+    id: text('id').primaryKey(),
+    displayName: text('displayName').notNull(),
+    // last 10 digits; NULL only for a person added without a number (SQLite allows many NULLs under UNIQUE)
+    phoneKey: text('phoneKey'),
+    phoneDisplay: text('phoneDisplay'), // +91XXXXXXXXXX — the form used to send an SMS
+    contactRef: text('contactRef'), // opaque device-contact id, only when picked from contacts
+    source: text('source', { enum: ['contact', 'manual', 'sms'] }).notNull(),
+    createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
+    updatedAt: integer('updatedAt').notNull().$defaultFn(nowMs),
+  },
+  (t) => [uniqueIndex('uniq_person_phone').on(t.phoneKey)],
+);
+
+/** "This transaction was shared." One per transaction; carries the `ref` quoted in the request SMS. */
+export const splits = sqliteTable(
+  'split',
+  {
+    id: text('id').primaryKey(),
+    ref: text('ref').notNull(), // 6 chars a-z2-7
+    transactionId: text('transactionId')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'cascade' }),
+    createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
+    updatedAt: integer('updatedAt').notNull().$defaultFn(nowMs),
+  },
+  (t) => [uniqueIndex('uniq_split_ref').on(t.ref), uniqueIndex('uniq_split_txn').on(t.transactionId)],
+);
+
+/** One other person's portion of a split. */
+export const splitShares = sqliteTable(
+  'split_share',
+  {
+    id: text('id').primaryKey(),
+    splitId: text('splitId')
+      .notNull()
+      .references(() => splits.id, { onDelete: 'cascade' }),
+    personId: text('personId')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    amountMinor: integer('amountMinor').notNull(), // paise, > 0
+    requestState: text('requestState', { enum: ['not_sent', 'sent', 'failed', 'opened_in_sms_app'] })
+      .notNull()
+      .default('not_sent'),
+    requestSentAt: integer('requestSentAt'),
+    requestedAmountMinor: integer('requestedAmountMinor'), // what the last request said (powers "changed since requested")
+    waivedAt: integer('waivedAt'), // set => you absorbed this share
+    createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
+    updatedAt: integer('updatedAt').notNull().$defaultFn(nowMs),
+  },
+  (t) => [
+    uniqueIndex('uniq_share_split_person').on(t.splitId, t.personId),
+    index('idx_share_person').on(t.personId),
+    check('chk_share_amount_positive', sql`${t.amountMinor} > 0`),
+  ],
+);
+
+/** A request someone else sent YOU (the received side). Body text is never stored (P-9). */
+export const splitRequestsIn = sqliteTable(
+  'split_request_in',
+  {
+    id: text('id').primaryKey(),
+    fromPhoneKey: text('fromPhoneKey').notNull(),
+    fromPersonId: text('fromPersonId').references(() => persons.id, { onDelete: 'set null' }),
+    fromLabel: text('fromLabel').notNull(), // name or number as shown at receipt
+    remoteRef: text('remoteRef').notNull(), // the sender's ref
+    amountMinor: integer('amountMinor').notNull(), // paise, > 0
+    forNote: text('forNote'), // <= 24 chars
+    receivedAt: integer('receivedAt').notNull(),
+    // rejected / withdrawn rows are kept as hidden tombstones (so a repeat does not re-notify) and purged later
+    status: text('status', { enum: ['unattended', 'accepted', 'rejected', 'withdrawn'] })
+      .notNull()
+      .default('unattended'),
+    updatedAt: integer('updatedAt').notNull().$defaultFn(nowMs),
+  },
+  (t) => [
+    uniqueIndex('uniq_reqin_sender_ref').on(t.fromPhoneKey, t.remoteRef),
+    index('idx_reqin_status').on(t.status, t.receivedAt),
+    check('chk_reqin_amount_positive', sql`${t.amountMinor} > 0`),
+  ],
+);
+
+/**
+ * "`amountMinor` of `transactionId` settled this share / request." Exactly one of `shareId` (money coming
+ * TO you - a credit) or `requestId` (money you owe - a debit) is set (D37).
+ */
+export const settlements = sqliteTable(
+  'settlement',
+  {
+    id: text('id').primaryKey(),
+    shareId: text('shareId').references(() => splitShares.id, { onDelete: 'cascade' }),
+    requestId: text('requestId').references(() => splitRequestsIn.id, { onDelete: 'cascade' }),
+    transactionId: text('transactionId')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'cascade' }),
+    amountMinor: integer('amountMinor').notNull(), // paise, > 0
+    createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
+  },
+  (t) => [
+    index('idx_settlement_txn').on(t.transactionId),
+    index('idx_settlement_share').on(t.shareId),
+    index('idx_settlement_request').on(t.requestId),
+    check('chk_settlement_amount_positive', sql`${t.amountMinor} > 0`),
+    check('chk_settlement_one_target', sql`(${t.shareId} IS NULL) <> (${t.requestId} IS NULL)`),
+  ],
+);
+
 export const appSettings = sqliteTable('app_setting', {
   key: text('key').primaryKey(),
   value: text('value').notNull(), // JSON-encoded scalar / small object
   updatedAt: integer('updatedAt').notNull().$defaultFn(nowMs),
 });
 
-export const schema = { categories, transactions, accountRules, suggestions, appSettings };
+export const schema = {
+  categories,
+  transactions,
+  accountRules,
+  suggestions,
+  appSettings,
+  persons,
+  splits,
+  splitShares,
+  splitRequestsIn,
+  settlements,
+};
 
 export type Category = typeof categories.$inferSelect;
 export type NewCategory = typeof categories.$inferInsert;
@@ -170,6 +299,18 @@ export type NewAccountRule = typeof accountRules.$inferInsert;
 export type Suggestion = typeof suggestions.$inferSelect;
 export type NewSuggestion = typeof suggestions.$inferInsert;
 export type AppSetting = typeof appSettings.$inferSelect;
+export type Person = typeof persons.$inferSelect;
+export type NewPerson = typeof persons.$inferInsert;
+export type Split = typeof splits.$inferSelect;
+export type NewSplit = typeof splits.$inferInsert;
+export type SplitShare = typeof splitShares.$inferSelect;
+export type NewSplitShare = typeof splitShares.$inferInsert;
+export type SplitRequestIn = typeof splitRequestsIn.$inferSelect;
+export type NewSplitRequestIn = typeof splitRequestsIn.$inferInsert;
+export type Settlement = typeof settlements.$inferSelect;
+export type NewSettlement = typeof settlements.$inferInsert;
+export type ShareRequestState = SplitShare['requestState'];
+export type RequestInStatus = SplitRequestIn['status'];
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export type TransactionType = Transaction['type'];

@@ -33,7 +33,16 @@ import { format } from 'date-fns';
 import { isNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { accountRules, categories, transactions } from '@/db/schema';
+import {
+  accountRules,
+  categories,
+  persons,
+  settlements,
+  splitRequestsIn,
+  splitShares,
+  splits,
+  transactions,
+} from '@/db/schema';
 
 /** Also reused by `diagnostics.ts` (§33.1, CR-12) — same cache-write-then-share pattern. */
 export function ensureFile(name: string): File {
@@ -51,6 +60,19 @@ export async function exportJson(): Promise<void> {
   const liveTransactions = db.select().from(transactions).where(isNull(transactions.deletedAt)).all();
   const customCategories = db.select().from(categories).where(isNull(categories.key)).all();
   const rules = db.select().from(accountRules).all();
+  // V2 (IMP-087): people, splits, shares, settlements and received requests travel with the export.
+  const liveIds = new Set(liveTransactions.map((t) => t.id));
+  const liveSplits = db.select().from(splits).all().filter((s) => liveIds.has(s.transactionId));
+  const liveSplitIds = new Set(liveSplits.map((s) => s.id));
+  const liveShares = db.select().from(splitShares).all().filter((s) => liveSplitIds.has(s.splitId));
+  const liveShareIds = new Set(liveShares.map((s) => s.id));
+  const liveRequests = db.select().from(splitRequestsIn).all().filter((r) => r.status === 'unattended' || r.status === 'accepted');
+  const liveRequestIds = new Set(liveRequests.map((r) => r.id));
+  const liveSettlements = db
+    .select()
+    .from(settlements)
+    .all()
+    .filter((s) => liveIds.has(s.transactionId) && ((s.shareId && liveShareIds.has(s.shareId)) || (s.requestId && liveRequestIds.has(s.requestId))));
 
   const payload = {
     version: Constants.expoConfig?.version ?? '0.0.0',
@@ -58,6 +80,11 @@ export async function exportJson(): Promise<void> {
     transactions: liveTransactions,
     customCategories,
     accountRules: rules,
+    people: db.select().from(persons).all(),
+    splits: liveSplits,
+    splitShares: liveShares,
+    splitRequests: liveRequests,
+    settlements: liveSettlements,
   };
 
   const file = ensureFile('coinflow-export.json');

@@ -38,7 +38,19 @@ import { db, sqlite } from './client';
 import { isFtsAvailable } from './fts';
 import migrationsBundle from './migrations/migrations';
 import { resetSeededCategories, seedDatabase } from './seed';
-import { accountRules, appSettings, categories, suggestions, transactions } from './schema';
+import { purgeRequestTombstones } from './repositories/split-requests';
+import {
+  accountRules,
+  appSettings,
+  categories,
+  persons,
+  settlements,
+  splitRequestsIn,
+  splitShares,
+  splits,
+  suggestions,
+  transactions,
+} from './schema';
 
 // well past the 5 s Undo window + snackbar (§20.6)
 const PURGE_GRACE_MS = 60_000;
@@ -59,6 +71,9 @@ export function purge(nowMs: number = Date.now()): void {
   db.delete(suggestions)
     .where(and(eq(suggestions.status, 'confirmed'), lt(suggestions.createdAt, nowMs - CONFIRMED_SUGGESTION_TTL_MS)))
     .run();
+  // V2 (§20.6, CR-17): rows that cascade with a purged transaction (split, shares, settlements) go with it via
+  // the foreign keys; received-request tombstones (rejected / withdrawn) expire 30 days after their last change.
+  purgeRequestTombstones(nowMs);
   db.insert(appSettings)
     .values({ key: 'lastPurgeAt', value: JSON.stringify(nowMs), updatedAt: nowMs })
     .onConflictDoUpdate({ target: appSettings.key, set: { value: JSON.stringify(nowMs), updatedAt: nowMs } })
@@ -78,6 +93,12 @@ export async function runLaunchMaintenance(): Promise<LaunchMaintenanceResult> {
 /** §20.7 — wipe everything, reset the seeded rows, drop all settings (⇒ back to onboarding). */
 export function clearAllData(): void {
   db.transaction((tx) => {
+    // V2 tables first, children before parents (IMP-087) — the FKs cascade anyway, this keeps it explicit.
+    tx.delete(settlements).run();
+    tx.delete(splitRequestsIn).run();
+    tx.delete(splitShares).run();
+    tx.delete(splits).run();
+    tx.delete(persons).run();
     tx.delete(suggestions).run();
     tx.delete(transactions).run(); // FTS rows follow via the §19.6 delete trigger
     tx.delete(accountRules).run();

@@ -13,3 +13,7 @@ export * from './account-rules';
 export * from './suggestions';
 export * from './settings';
 export * from './analytics';
+export * from './persons';
+export * from './splits';
+export * from './settlements';
+export * from './split-requests';

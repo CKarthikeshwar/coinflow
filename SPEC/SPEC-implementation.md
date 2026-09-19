@@ -10,6 +10,12 @@
 > done. From here, a change is a change-request (`SPEC/PLAN.md` §10) — update the spec first, then
 > the implementation — logged in §37. See §36 for the final-review pass.
 >
+> **V2 amendment (2026-09-19, CR-17 / CR-18 / CR-19 in §37).** V2 adds split payments and home-screen widgets
+> (`SPEC/V2-PLAN.md`). The V2 technical design is **Part III, §38–§45** (after the change log); requirements
+> are `IMP-070`–`IMP-098` (§13) and features `F13`–`F16` (§38.2). Nothing in §1–§37 is renumbered; the few V1
+> sections V2 edits carry a "V2" note or are changed by the CR entries. Auto split detection is **not** in
+> this amendment (v2.1).
+>
 > **Traceability target** (`SPEC/PLAN.md` §9): `UI-0xx` (visual, in `SPEC-UI-UX.md`) and `IMP-0xx`
 > (behavior, §13 here) → component / service → test.
 
@@ -48,6 +54,10 @@ state *(Phase 2)* · §23 SMS parsing · §24 Account normalization · §25 Cate
 §28 Navigation · §29 Component architecture · §30 Screen specs *(Phase 4)* · §31 Notifications ·
 §32 Error handling · §33 Security & privacy · §34 Testing strategy · §35 Build & release *(Phase 5)* ·
 §36 Specification status *(freeze)* · §37 Change log (post-freeze)
+
+**V2 (Part III — CR-17…CR-19, 2026-09-19):** §38 V2 overview, decisions & features · §39 Data model (splits) ·
+§40 Domain logic · §41 Analytics changes · §42 Split-request messaging · §43 App integration (repos, state,
+navigation, notifications) · §44 Widgets · §45 Security, permissions, testing, build & release (V2)
 
 ---
 
@@ -743,15 +753,48 @@ Notation: **⇢** step · **✔** success end · **✗** alternate / failure bra
 | IMP-044 | Clear all data removes transactions, suggestions, account rules, and custom categories, and returns to onboarding. | Pending |
 | IMP-045 | No transaction or SMS data is transmitted off the device. | Pending |
 
+### Splits · Messaging · Widgets (V2 — CR-17/18/19)
+| ID | Criterion | Status |
+|---|---|---|
+| IMP-070 | A split obeys `amount = your share + Σ shares`; every share > 0, your share ≥ 0; a violating write is rejected. | Pending |
+| IMP-071 | Equal split divides in whole paise; leftover paise go to **you**. | Pending |
+| IMP-072 | Percent input converts to paise by largest-remainder so the shares sum to the total exactly. | Pending |
+| IMP-073 | Effective spending = debit amount − Σ non-waived share amounts, in **every** aggregate (Home, Analytics tiles, arc, category breakdown, daily series, largest expenses). With no splits, results are identical to V1. | Pending |
+| IMP-074 | Effective income = credit amount − Σ settlements recorded against that credit; settlement credits never count as income; a debit that settles a request does **not** change spending. | Pending |
+| IMP-075 | A settlement is capped by the share's/request's remaining amount and by the transaction's unallocated amount; leftover stays an ordinary transaction (no extra flow). | Pending |
+| IMP-076 | Share status (pending / partial / settled / waived) and split state (open / settled) are **derived**, never stored. | Pending |
+| IMP-077 | A person is identified by normalised mobile number; duplicates merge; contacts access is optional and manual entry always works. | Pending |
+| IMP-078 | The request SMS encodes to GSM-7 text ≤ 160 chars carrying a `{cf1\|ref\|paise\|note}` token, and is readable without CoinFlow. | Pending |
+| IMP-079 | Only a strict-match message from a numeric sender is a request; alphanumeric (bank) senders and malformed tokens are ignored; a request never creates a bank-transaction suggestion and is never parsed from the Sent box. | Pending |
+| IMP-080 | Receipt is idempotent per (sender number, ref); a repeat with a new amount updates an unsettled request; amount `0` withdraws it; per-sender rate limit applies. | Pending |
+| IMP-081 | Sending reports per-recipient results; SEND_SMS denied ⇒ the message is opened pre-filled in the SMS app; a failure never loses the saved split. | Pending |
+| IMP-082 | A received request is stored **Unattended** at arrival; Accept / Reject work headlessly from the notification; Reject is silent (nothing is sent back); swiping the notification away keeps it Unattended. | Pending |
+| IMP-083 | Merge writes all its settlements in one DB transaction (all or nothing) and is undoable. | Pending |
+| IMP-084 | Deleting a transaction hides its split and settlements (soft-delete/Undo); hard purge cascades and derived state recomputes. | Pending |
+| IMP-085 | The suggested settlement is a suggestion only (exact-remaining-amount, then name); nothing is ever settled or accepted without a tap. | Pending |
+| IMP-086 | The V2 migration is additive; an existing V1 database opens, migrates and reads unchanged. | Pending |
+| IMP-087 | Clear all data and Export include the V2 tables. | Pending |
+| IMP-088 | Only `ref`, amount, a ≤ 24-char note and the sender number are stored from a request; the raw SMS body is never stored (P-9). | Pending |
+| IMP-089 | Editing a split transaction's amount keeps others' shares and recomputes yours; blocked if yours would be < 0. | Pending |
+| IMP-090 | The widget snapshot (schema v1) is republished, debounced, after every change that alters it, and after each background sweep. | Pending |
+| IMP-091 | Widgets render from the snapshot only — they never open SQLite or start the JS engine. | Pending |
+| IMP-092 | Widget taps resolve to the `coinflow://add`, `…/review[?open=id]` and `…/` links, including cold start. | Pending |
+| IMP-093 | "Hide amounts" masks every ₹ figure in the snapshot-rendered widgets and never masks labels. | Pending |
+| IMP-094 | A snapshot for a past month renders `—` figures, never stale numbers under the new month. | Pending |
+| IMP-095 | Three `AppWidgetProvider`s are registered via the config plugin with picker previews and descriptions. | Pending |
+| IMP-096 | Widget Balance = Income − Spent (effective) for the current calendar month and equals the Analytics month card. | Pending |
+| IMP-097 | Widgets and splits add no permission beyond IMP-098's. | Pending |
+| IMP-098 | `SEND_SMS` and `READ_CONTACTS` are optional, requested just-in-time with a rationale; the app is fully usable without either. | Pending |
+
 ---
 
 ## 14. Future scope (documented, not built in V1)
 
 - **Transaction types:** Transfer, Refund, Reimbursement — with exclusion from spending totals and
   refund-offsets-expense logic (model already carries `type` — P-8).
-- **V1.5 — Split expenses & settlements:** mark an expense as shared; compute your share; track
-  who owes you; associate incoming payments as settlements; manual split; heuristic split
-  detection (`SPEC/idea.md` V1.5).
+- **V1.5 — Split expenses & settlements → now V2 (§38–§45, CR-17/18):** mark an expense as shared; compute
+  your share; track who owes you; associate incoming payments as settlements; manual split. Only the
+  **heuristic split detection** (`SPEC/idea.md` V1.5 §4) remains future — scheduled as **v2.1**.
 - **User-defined accounts:** replace the payment-method enum with real accounts / cards;
   account-to-account transfers; per-account views.
 - **Auto-categorization beyond exact match (F8):** bulk "apply to all from this account", fuzzy /
@@ -1336,12 +1379,16 @@ reliable thing to watch.
 the observer and wakes us — nothing of ours has to be running. New native pieces, all in
 `modules/coinflow-sms` (the D18/D24 rule holds: Kotlin only does the wake trigger, no parsing/DB/notification):
 
-- `SmsStoreJobService` (`JobService`) — job id `7301`; `setTriggerContentUpdateDelay(5s)` /
+- `SmsStoreJobService` (`JobService`) — **two alternating job ids `7301` / `7302`** (CR-20: the running job arms the *other* id,
+  because re-scheduling the id that is running makes Android cancel that very run); `setTriggerContentUpdateDelay(5s)` /
   `setTriggerContentMaxDelay(30s)` so a burst of messages becomes one run. `onStartJob` **re-arms first**
-  (a trigger job fires once), then starts the existing `CoinflowSmsHeadlessTaskService` with
-  `task=store` and returns.
-- `CoinflowSmsHeadlessTaskService.getTaskConfig` — routes `task=store` to the headless JS task
-  `CoinflowSmsStoreChanged` (60s budget); anything else is the unchanged `CoinflowSmsIngest` path.
+  (a trigger job fires once), then **runs the `CoinflowSmsStoreChanged` headless JS task itself** (CR-20): the job
+  boots/reuses the React Native context and starts the task through `HeadlessJsTaskContext`, keeps the job alive
+  (`onStartJob` returns `true`) and calls `jobFinished` when the task's finish event arrives (the task's own 60 s
+  timeout also fires it). It must **not** call `startService`: on Android 12+ an app that has been idle in the background is
+  refused (`BackgroundServiceStartNotAllowedException`) — seen on-device (Android 16), the original design's flaw.
+- `CoinflowSmsHeadlessTaskService.getTaskConfig` — unchanged; now serves only the `SmsReceiver` broadcast path
+  (`CoinflowSmsIngest`), which *is* allowed to start it (an `SMS_RECEIVED` broadcast is a start-exempt trigger).
 - `SmsStoreTrigger.schedule(context, force)` — idempotent: an already-pending job is left alone unless
   `force` (used by the job re-arming itself), because replacing it would discard a change it had recorded.
 - Module function `armSmsStoreTrigger()` → JS wrapper `armSmsStoreTrigger()` (`modules/coinflow-sms/src`,
@@ -3226,6 +3273,8 @@ lock, SQLCipher at-rest DB encryption, certificate pinning (nothing to pin — o
 |---|---|---|---|
 | `android.permission.RECEIVE_SMS` | `coinflow-sms` plugin | wake on incoming SMS (F1) | yes — app fully usable manually without it (§11) |
 | `android.permission.READ_SMS` | `coinflow-sms` plugin | read the message body to parse (F1) | yes |
+| `android.permission.SEND_SMS` | `coinflow-sms` plugin (**V2**) | send split requests (F14) | yes — falls back to the SMS app (§42.3) |
+| `android.permission.READ_CONTACTS` | `expo-contacts` plugin (**V2**) | pick people for a split (F13) | yes — manual number entry always works |
 | `android.permission.POST_NOTIFICATIONS` | `expo-notifications` plugin | the core-loop notification (F2) | yes — queue + badge cover it (P-7) |
 | `android.permission.RECEIVE_BOOT_COMPLETED` | — | **not requested** (no boot receiver, §31.8) | n/a |
 | `INTERNET` | Android default (implicitly granted) | used **only** by Sentry, **only** when opted in (§33.4) | n/a |
@@ -3754,3 +3803,430 @@ change in `SPEC-UI-UX.md` §9.
 - **CR-15** (2026-09-19, review of the missed-SMS backstop's real cadence) — **background reconcile now runs at a 3-hour minimum interval with no network requirement.** `registerTaskAsync(SMS_RECONCILE_TASK)` passed no options, so `expo-background-task` used its Android default of once every 24h (its doc-comment says 12h; the Kotlin constant is `60L * 24L`), and its scheduler hard-codes `NetworkType.CONNECTED`, so the sweep could not run offline even though it only reads the local SMS store and writes local SQLite. (1) `src/services/tasks/index.ts`: `minimumInterval: SMS_RECONCILE_INTERVAL_MINUTES` (180). (2) New `patches/expo-background-task+57.0.16.patch` (applied by `patch-package` on install and in CI) drops the network constraint from `BackgroundTaskScheduler.kt`. Still only a minimum — Android Doze/App Standby may stretch it — and it only runs while the app is backgrounded (the library reschedules ~1h later if foregrounded). Needs a native rebuild (`npx expo prebuild --clean`) to take effect. No permission or schema change; `no-network.test.ts` unaffected. *(The 3h interval was raised to 12h by CR-16.)*
 
 - **CR-16** (2026-09-19, closing the Truecaller-class detection gap properly) — **SMS-store watcher added, background sweep interval set to 12h.** Full design in the new **§17.11**; summary: (1) a `JobScheduler` content-trigger job on `content://sms` (`SmsStoreJobService`, `SmsStoreTrigger`, module function `armSmsStoreTrigger`, config-plugin `<service … BIND_JOB_SERVICE>`) starts the existing headless host with `task=store`, which runs the §17.8 sweep with a 6h lookback and `notify:true` — catching a message whose `SMS_RECEIVED` broadcast another app aborted, within seconds when the phone is awake (later in Doze); it re-arms itself each run and is re-armed on every JS start, app launch/foreground and periodic task because Android drops it on reboot. (2) **Amends CR-15:** the periodic `expo-background-task` interval goes **3h → 12h** (`SMS_RECONCILE_INTERVAL_MINUTES = 12 * 60`) — with the store watcher doing the real-time catching, that task is a watchdog + last-resort net, so a shorter interval buys little battery-for-benefit; the no-network-constraint patch from CR-15 stands. (3) "Which path caught it" counters (`smsCaught*`) + `smsLastStoreTriggerAt`, surfaced in Send Diagnostics (`pipelineHealth.caughtBy`, `lastStoreTriggerAt`). (4) `reconcileMissedSms` gains `source` / `lookbackMs` options and awaits `ensureMigrated()` first. New native code (Kotlin) — needs `npx expo prebuild --clean` + a native rebuild. No new permission, no schema change. Not covered: RCS-only messages (never in the SMS store); a notification-listener path was considered and deferred. No linked `SPEC-UI-UX.md` change.
+
+- **CR-17** (2026-09-19, V2 planning — `SPEC/V2-PLAN.md`; linked `SPEC/SPEC-UI-UX.md` §9 CR-4) — **Split
+  payments: data model and logic.** New Part III §38–§41 and §43: five additive tables (`person`, `split`,
+  `split_share`, `settlement`, `split_request_in`; migration `0002`), pure domain modules for share maths /
+  effective amounts / settlement matching, and the analytics changes (§41). Requirements `IMP-070`–`IMP-076`,
+  `IMP-083`–`IMP-089`. Two deliberate refinements of V2-PLAN §2.2: (1) **no stored `myShareMinor` or status
+  columns** — your share and every status are derived (no drift, D36); (2) a settled credit stays `type=income`
+  and analytics nets the settled amount, instead of re-typing it `reimbursement`, so a *partly* used credit
+  works with one mechanism (D38; `reimbursement` stays reserved). No V1 table changes.
+
+- **CR-18** (2026-09-19, V2 planning; linked UI-UX CR-4) — **Split-request messaging.** §42: SMS format
+  (`{cf1|ref|paise|note}` token in human-readable text), send path (`SmsManager`, default SIM, per-recipient
+  results, pre-filled-SMS-app fallback), receive path (a request branch in `smsIngestTask` ahead of the bank
+  sender gate, numeric senders only), trust rules, notification channel `split-requests` with Accept / Reject.
+  Requirements `IMP-078`–`IMP-082`, `IMP-088`, `IMP-098`. New permissions `SEND_SMS`, `READ_CONTACTS` (§33.6).
+
+- **CR-19** (2026-09-19, V2 planning; linked UI-UX CR-5) — **Home-screen widgets.** §44: three
+  `AppWidgetProvider`s in `modules/coinflow-sms` (native Kotlin `RemoteViews`; **provisional pending the phase-0
+  spike**, D42), a JSON snapshot in SharedPreferences published by JS, deep links `coinflow://add` /
+  `review` / root, hide-amounts, month-rollover staleness. Requirements `IMP-090`–`IMP-097`. **Gated on the
+  design approval `UI-099`** — no widget code before it.
+
+---
+
+# Part III — V2 technical design (CR-17 … CR-19, 2026-09-19)
+
+> Part III extends the frozen design; it does not rewrite it. Read it against §17 (architecture), §19 (data),
+> §21 (data access), §26 (analytics), §31 (notifications), §33 (security). Section numbers continue from §37.
+
+## 38. V2 overview, decisions & features
+
+### 38.1 Decisions (D36–D46)
+
+| # | Decision | Note |
+|---|---|---|
+| D36 | Split state is **derived**: your share = amount − Σ non-waived shares; share status from Σ settlements; split open/settled from its shares. Only `split`, `split_share.amountMinor`, `waivedAt`, `settlement` are stored. | Refines V2-PLAN §2.2 |
+| D37 | One `settlement` table serves both sides, linking a transaction to **either** a `split_share` (money coming to you) **or** a `split_request_in` (money you owe) — `CHECK` exactly one is set. | |
+| D38 | A credit that settles shares keeps `type=income`; analytics nets Σ settlements out of income. `reimbursement` stays reserved. | Partial use works |
+| D39 | Request text = readable sentence + a machine token `{cf1\|ref\|paise\|note}`; ASCII/GSM-7 only ("Rs", not "₹") so it stays in one 160-char segment. | §42.1 |
+| D40 | A request is accepted only from a **numeric** sender (a phone number). Alphanumeric senders (banks) are never requests. | Anti-spoof, §42.4 |
+| D41 | Requests are sent from the **default SIM**. | Open item — flippable |
+| D42 | Widgets: **native Kotlin `RemoteViews`** in `modules/coinflow-sms`, fed by a JSON snapshot in SharedPreferences. **Confirmed by the phase-0 spike** (§45.5). | §44.1 |
+| D43 | Widget period = the current calendar month (same as Analytics "This month"). | |
+| D44 | Widget "Hide amounts" default **off**. | Open item — flippable |
+| D45 | Contacts via `expo-contacts`, optional; verify the SDK-57 version at install (§16.7 rule). | |
+| D46 | Nothing about a request is ever automatic: no auto-accept, auto-pay, auto-reply, or auto-settle. | Trust rule |
+
+### 38.2 Features
+
+| ID | Feature | Pri | Ships |
+|---|---|---|---|
+| **F13** | Split a transaction between people (manual, local) — Split sheet, people, effective expense, badges | P0-V2 | v2.0 |
+| **F14** | Settlements & merge — receivables/payables, Merge sheet, suggested match | P0-V2 | v2.0 |
+| **F15** | Split-request messaging — send, receive, notification, Unattended queue | P0-V2 | v2.0 |
+| **F16** | Home-screen widgets — Money summary, Queued transactions, Quick add | P1-V2 | v2.0 (design-gated) |
+| F17 | Automatic split detection | P2 | **v2.1 — not in this amendment** |
+
+### 38.3 Screens ↔ requirements
+UI-070…UI-081 (`SPEC-UI-UX.md` §6.17–§6.21, §6.24) ↔ IMP-070…IMP-089, 098 · UI-090…UI-099 (§6.22–§6.24) ↔
+IMP-090…IMP-097. The matrix rows are in `SPEC/traceability.md` ("V2").
+
+## 39. Data model (V2 — migration `0002_v2_splits`)
+
+Conventions of §19.0 apply (paise integers > 0, epoch-ms UTC timestamps, UUIDv4 ids, `PRAGMA foreign_keys=ON`).
+**Additive only** (IMP-086): no existing table or column changes.
+
+### 39.1 `person`
+| Field | Type | Null | Notes |
+|---|---|---|---|
+| `id` | text uuid | no | PK |
+| `displayName` | text | no | as typed / from contact; never empty (falls back to the number) |
+| `phoneKey` | text | yes | **UNIQUE** when not null — last 10 digits of the mobile number (India-only, D3); the identity |
+| `phoneDisplay` | text | yes | `+91XXXXXXXXXX` — the form used to send |
+| `contactRef` | text | yes | opaque device-contact id, only if picked from contacts |
+| `source` | text `contact`\|`manual`\|`sms` | no | `sms` = created when a request arrived from an unknown number |
+| `createdAt`, `updatedAt` | integer ms | no | |
+
+### 39.2 `split`
+`id` (PK) · `ref` text **UNIQUE** (6 chars, base32 `a-z2-7`, generated; quoted in the SMS token) · `transactionId`
+text FK → `transaction.id` **ON DELETE CASCADE**, **UNIQUE** (one split per transaction) · `createdAt` · `updatedAt`.
+No amount, no status — both derive (D36).
+
+### 39.3 `split_share`
+`id` (PK) · `splitId` FK → `split.id` **CASCADE** · `personId` FK → `person.id` **RESTRICT** · `amountMinor` integer
+> 0 · `requestState` text `not_sent`\|`sent`\|`failed`\|`opened_in_sms_app` (default `not_sent`) ·
+`requestSentAt` integer ms null · `requestedAmountMinor` integer null (what the last request said — powers
+"Changed since requested") · `waivedAt` integer ms null · `createdAt` · `updatedAt`.
+Index `(splitId)`, `(personId)`. `UNIQUE (splitId, personId)`.
+
+### 39.4 `split_request_in` (the received side)
+`id` (PK) · `fromPhoneKey` text not null · `fromPersonId` FK → `person.id` **SET NULL** · `fromLabel` text (the
+name/number shown at receipt) · `remoteRef` text (the sender's `ref`) · `amountMinor` integer > 0 · `forNote`
+text null (≤ 24 chars) · `receivedAt` integer ms · `status` text `unattended`\|`accepted`\|`rejected`\|`withdrawn`
+· `updatedAt`. **UNIQUE `(fromPhoneKey, remoteRef)`** (idempotent receipt, IMP-080). `rejected` rows are kept as
+hidden tombstones (so a repeat doesn't re-notify) and purged 30 days after `updatedAt` (§20.6 pattern).
+
+### 39.5 `settlement`
+`id` (PK) · `shareId` FK → `split_share.id` **CASCADE** null · `requestId` FK → `split_request_in.id` **CASCADE**
+null · `transactionId` FK → `transaction.id` **CASCADE** not null · `amountMinor` integer > 0 · `createdAt`.
+`CHECK ((shareId IS NULL) <> (requestId IS NULL))` (D37). Index `(transactionId)`, `(shareId)`, `(requestId)`.
+Meaning: "`amountMinor` of `transactionId` settled this share/request" — the sentence shown in Details.
+
+### 39.6 Migration & guards
+Generated with `drizzle-kit generate` (§20.3) as `0002_…`; `src/db/schema.ts` gains the five tables and inferred
+types. A V1-database snapshot test (IMP-086) opens a fixture DB made by migrations `0000`–`0001` (the V1 set), runs `0002`, and asserts
+all V1 reads are byte-identical. **Clear all data (§20.7)** and **Export (§20.8)** are extended to the new tables
+(IMP-087); `search text` (§19.6) is unaffected. `app_setting` keys added: `splitYourName`,
+`widgetHideAmounts`, `widgetSnapshotAt`.
+
+## 40. Domain logic (pure, `src/domain/`, unit-tested first)
+
+### 40.1 `split.ts`
+- `equalShares(totalMinor, peopleCount)` → `{ you, each[] }` — divides in whole paise; the remainder goes to
+  **you** (IMP-071). Example: ₹100 among you + 2 → you ₹34, others ₹33 each.
+- `percentToMinor(totalMinor, percents[])` → paise by **largest remainder**; sums to `totalMinor` exactly (IMP-072).
+- `validateSplit(totalMinor, shares[])` → `{ ok, yourMinor, remainingMinor }` enforcing IMP-070.
+- `effectiveAmount(txn, splitShares, settlements)` → debit: `amount − Σ(non-waived shares)`; credit: `amount −
+  Σ(settlements)` (IMP-073/074). Waived shares count as **yours** (you absorbed them).
+- `shareState(share, settledMinor)` → `waived | settled | partial | pending`; `splitState(shares)` → `open | settled`.
+- `recomputeYourShare(newAmountMinor, shares[])` → for IMP-089.
+
+### 40.2 `settlement.ts`
+`allocate(txnAmountMinor, alreadyAllocated, picks[{targetId, remainingMinor, requestedMinor}])` → per-target
+amounts each ≤ remaining and Σ ≤ unallocated (IMP-075); rejects anything that would exceed. No leftover output —
+what is not allocated is simply not allocated.
+
+### 40.3 Person identity — `person.ts`
+`normalizePhone(raw)` → `{ phoneKey, phoneDisplay } | null` (strips spaces/dashes/`+91`/`0`; 10-digit mobile
+only). Two inputs with the same key are one person (IMP-077).
+
+### 40.4 Suggested settlement — `suggest-settlement.ts`
+Input: a transaction + open candidates (shares for a credit, requests for a debit). Output: an ordered list plus an
+optional `best`. `best` exists only when exactly one candidate's remaining amount **equals** the transaction's
+amount and (when the transaction has an `account`) that candidate's person name is a normalised-substring match
+(§24 normaliser reused); otherwise `best` is null and the list is ordered by |remaining − amount|. Pure; never
+writes (IMP-085).
+
+## 41. Analytics changes (extends §26)
+
+All of §26's aggregates switch from `amountMinor` to an **effective** amount; `analyticsRepo` gains two reusable
+SQL fragments and every statement uses them:
+
+```sql
+-- effective debit amount (spending): amount minus non-waived shares
+t.amountMinor - COALESCE((SELECT SUM(ss.amountMinor) FROM split sp
+                          JOIN split_share ss ON ss.splitId = sp.id AND ss.waivedAt IS NULL
+                          WHERE sp.transactionId = t.id), 0)
+-- effective credit amount (income): amount minus settlements recorded against it
+t.amountMinor - COALESCE((SELECT SUM(st.amountMinor) FROM settlement st
+                          WHERE st.transactionId = t.id AND st.shareId IS NOT NULL), 0)
+```
+
+- **Spent / Income / Balance** (§26.1, §26.2, the arc §6.10): built on the effective amounts. **Balance =
+  Income − Spent is therefore "effective"** — outstanding receivables are not in it (they are shown separately as
+  "Owed to you").
+- **A debit that settles a request** (`settlement.requestId`) does **not** reduce spending — it is your genuine
+  expense (your share of what someone else paid). Only `shareId` settlements net income.
+- **By category (§26.4), Largest expenses (§26.5), Daily series (§26.6), Week mode (§26.7), MoM deltas
+  (§26.3), running balance (§27.5)** all use the same fragments. Rows whose effective amount is 0 are dropped
+  from "Largest expenses".
+- **Fast path:** when the `split` table is empty (every V1 user), the fragments collapse to `t.amountMinor`
+  (`COALESCE(…,0)` over an empty subquery) — IMP-073 requires identical V1 results, asserted by re-running the
+  V1 `analytics.test.ts` fixtures unchanged.
+- New reads: `owedToYouMinor()` = Σ over non-waived shares of `max(0, amount − Σ settlements)`;
+  `youOweMinor()` = the same over `accepted` requests; both drive Home (§6.2) and Splits (§6.19).
+
+## 42. Split-request messaging
+
+### 42.1 Format (v1)
+
+```
+[<Name> requests ]Rs 450.00 for <note> (CoinFlow split). {cf1|ab12cd|45000|Momos}
+```
+- The sentence is for humans (works without CoinFlow); `<Name>` is the optional setting `splitYourName`; the
+  amount is `Rs` + rupees with 2 decimals (never `₹` — not GSM-7, would force UCS-2 and halve the length).
+- The **token** is the only part that is parsed: `\{cf1\|([a-z2-7]{6})\|(\d{1,9})\|([^|{}]{0,24})\}` — `ref` =
+  the `split.ref`; the number is **paise**; `note` sanitised: non-GSM-7 characters, `| { }`, and newlines
+  removed, trimmed to 24 chars (empty allowed).
+- **Withdraw:** the same token with amount `0`. **Update:** same `ref`, new amount (IMP-080).
+- Domain module `src/domain/split-message.ts`: `encodeRequest({ name?, ref, amountMinor, note })` (asserts ≤ 160
+  chars, else truncates the note first) and `decodeRequest(body)` → `{ ref, amountMinor, note } | null`. Round-trip
+  and adversarial fuzz tests (IMP-078/079).
+
+### 42.2 Receive (F15)
+`smsIngestTask` (§17.3) gains a branch **before** the bank sender gate (§23.2):
+1. If the SMS's `address` is **numeric** (≥ 10 digits after stripping `+`/spaces) — D40 — and `decodeRequest`
+   matches → `receiveRequest()`; **stop** (never a bank suggestion — IMP-079). Otherwise fall through to the
+   unchanged V1 path.
+2. `receiveRequest`: `normalizePhone(address)` → `phoneKey`; upsert by `(fromPhoneKey, remoteRef)`:
+   new → insert `unattended` + post the notification (§43.4); existing `unattended|accepted` with a different
+   amount → update; amount `0` → `withdrawn`; existing `rejected|settled` → ignore. Amount bounds: 1 paise …
+   ₹10 lakh (`100_000_000` paise), else ignored. **Rate limit:** ≤ 5 new requests per sender per hour and ≤ 100
+   `unattended` in total; excess is dropped silently.
+3. Person: link to an existing `person` by `phoneKey`, else create one with `source='sms'` (name = the number).
+4. **Never the Sent box:** ingest by broadcast already only sees incoming; the reconcile/store-watcher sweeps
+   (§17.8, §17.11) read the **inbox** only — a test asserts that a locally sent request text is not re-ingested
+   (IMP-079).
+5. Stored fields: `ref`, `amount`, `note`, sender number — never the body (IMP-088, P-9).
+
+### 42.3 Send (F15)
+New native function in `modules/coinflow-sms`: `sendSms(phone: string, text: string): Promise<'sent' | 'failed'>`
+using `SmsManager` for the **default SIM's subscription** (D41) with `sentIntent` → the promise resolves on the
+system result, timing out at 30 s as `failed`. Requires `SEND_SMS` (config plugin adds it, §33.6).
+- **Orchestration** (`src/services/splits/send-requests.ts`): the split + shares are **written first**, then each
+  share is sent sequentially; each result updates `requestState` / `requestSentAt` / `requestedAmountMinor`
+  (IMP-081).
+- **Fallback** when `SEND_SMS` is denied (or the user picks the fallback): `Linking.openURL('sms:<phone>?body=…')`
+  for each recipient one at a time; `requestState = opened_in_sms_app` (we cannot know it was sent).
+- Messages sent via `SmsManager` by a non-default SMS app are **not** stored in the phone's Sent box — the UI says
+  so (§6.17). **Dual-SIM:** default SIM only in v2.0 (D41).
+
+### 42.4 Trust & abuse rules (summary; §45.1 has the security view)
+Untrusted input; numeric senders only; strict regex; bounds; rate limit; the note is rendered as plain text
+(no linking, no markup); the requester's number is always shown; no automatic action of any kind (D46); a request
+from a number not in **Saved people** is labelled so in the UI.
+
+## 43. App integration (V2)
+
+### 43.1 Repositories (`src/db/repositories/`, `.test.ts` each)
+`persons.ts` (find-or-create by `phoneKey`, list, rename, delete-if-unused) · `splits.ts` (`createSplit`,
+`replaceShares`, `waiveShare`, `getSplitForTransaction`, `removeSplit`, `listOwed()` grouped by person) ·
+`settlements.ts` (`settle(picks, txnId)` — **one DB transaction**, IMP-083 — and `unsettle(ids)` for Undo) ·
+`split-requests.ts` (`upsertFromMessage`, `accept`, `reject`, `listByStatus`, `purge`). All follow §21
+conventions (sync API, Drizzle, `deletedAt IS NULL` on transaction joins).
+
+### 43.2 State & sheets
+- New `SheetRegistry` kinds (§28.2): `split` `{ transactionId }`, `merge` `{ transactionId | shareId | requestId }`.
+  The Split sheet mounts **on top** of Confirm/Edit through the existing single-`SheetHost` (D25) and returns
+  to the parent on close (same mechanism as the pickers, CR-14 fix).
+- Draft state (`useSplitDraft`, zustand, never persisted, §22.2): selected people, mode (₹|%), per-row values,
+  custom-edited flags; reset on close (same rule as `useAddSheetDraft`).
+- Live queries (§21.7) drive Details' Split card and the Splits page.
+
+### 43.3 Navigation
+New route `src/app/splits/index.tsx` (pushed, typed routes). New deep links (extends §28.3):
+
+| Link | Target |
+|---|---|
+| `coinflow://splits[?tab=requests]` | Splits page (request-notification body tap) |
+| `coinflow://add` | Home, then `sheets.open('add')` — a `src/app/add.tsx` redirect route (widget Quick add) |
+| `coinflow://review[?open=<id>]` | unchanged — reused by the widgets |
+| `coinflow://analytics` | Analytics tab |
+
+### 43.4 Notifications (extends §31)
+- **Channel** `split-requests` (importance **DEFAULT**, private lock-screen visibility), created by
+  `ensureNotificationChannel` alongside `txn-review` (idempotent).
+- **Category** `split-request` with two background actions: `ACCEPT` and `REJECT` (`opensAppToForeground:false`,
+  handled by `NOTIFICATION_RESPONSE_TASK` next to `SAVE`/`DISCARD`). Payload `{ kind:'split-request',
+  requestId }`.
+- **Content:** title `<name|number> requested ₹450`; body `for <note> · CoinFlow split`. Grouping: 2+ ⇒ summary
+  `N split requests`. Stale tap: an already-decided request routes to Splits (never to a dead sheet) — the same
+  re-read-the-row rule as §31.6.
+- Permission off ⇒ silent, exactly as P-7: requests still land in **Unattended** and the Home/Splits badge.
+
+### 43.5 Files
+`src/domain/{split,settlement,person,split-message,suggest-settlement}.ts(+test)` · `src/db/repositories/…` (§43.1)
+· `src/services/splits/{send-requests,receive-request}.ts` · `src/features/splits/` (Split sheet, People
+picker, Merge sheet, Splits page, Details card) · native: `modules/coinflow-sms/android/…/SmsSender.kt`.
+
+## 44. Widgets (F16 — design-gated by UI-099)
+
+### 44.1 Approach (D42, provisional)
+Native Kotlin `AppWidgetProvider` + `RemoteViews` XML in `modules/coinflow-sms` (no JS runtime is needed to
+draw). **Phase-0 spike** (must finish before this section is frozen): (a) build one provider with a snapshot
+round-trip on the real Samsung One UI launcher; (b) evaluate `react-native-android-widget` against SDK 57 / RN
+0.86 / new architecture. Decision rule: prefer native unless the library proves compatible **and** materially
+cheaper to maintain; record the result here as an addendum to D42.
+
+### 44.2 Snapshot (schema v1 — the only data path)
+JS writes JSON to `SharedPreferences("coinflow_widgets")` key `snapshot`:
+```json
+{ "v": 1, "updatedAt": 0, "periodStartMs": 0, "periodEndMs": 0, "periodLabel": "September",
+  "incomeMinor": 0, "spentMinor": 0, "balanceMinor": 0,
+  "pending": { "count": 0, "items": [ { "id": "", "amountMinor": 0, "direction": "debit", "label": "" } ] },
+  "hideAmounts": false }
+```
+`items` holds at most 3 (newest first). Numbers are the **effective** month figures (§41), computed by the same
+`analyticsRepo` calls as the Analytics card so IMP-096 holds by construction.
+
+### 44.3 Publishing (IMP-090)
+`src/services/widgets/publish.ts` → `publishWidgetSnapshot()`: computes the snapshot and calls the native
+`publishWidgetSnapshot(json)` (`Function` in `CoinflowSmsModule`), which stores it and sends an
+`ACTION_APPWIDGET_UPDATE` to all three providers. **Debounced 1 s**, triggered by: repository writes that change
+transactions/suggestions/splits/settlements, the `widgetHideAmounts` setting, app open/foreground
+(`SmsReconciler`), and the end of every headless task (`smsIngestTask`, `CoinflowSmsStoreChanged`, the periodic
+sweep) — so a detected SMS updates the queue widget with the app closed. Failure is swallowed and logged (never
+blocks a write).
+
+### 44.4 Native pieces
+- `CoinflowWidgetProviders.kt`: `SummaryWidgetProvider`, `QueueWidgetProvider`, `QuickAddWidgetProvider` (IMP-095).
+- Layouts `res/layout/widget_*.xml`, `res/xml/widget_*_info.xml` (min size, `resizeMode`, `previewLayout`,
+  `description`), colours from the frozen dark tokens (`theme.ts` values copied to `res/values/colors.xml`, with
+  a comment naming the source — one place to update).
+- `updatePeriodMillis = 1800000` (30 min floor; Android throttles anyway) as a safety refresh that just re-reads
+  the stored snapshot — providers never compute.
+- Registration: declared in the module's manifest merged through `app.plugin.js` (same route as
+  `SmsStoreJobService`, §17.11); **no new permission** (IMP-097).
+- Tap targets (IMP-092): `PendingIntent.getActivity` with `ACTION_VIEW` on the §43.3 links, `FLAG_IMMUTABLE`;
+  queue rows carry `coinflow://review?open=<id>`; cold start relies on expo-router's initial-URL handling.
+
+### 44.5 Staleness & rollover (IMP-094)
+Each provider compares `now` with `periodEndMs`. If past it, the figures render `—` and the header shows the
+current month's name computed natively; the tile stays tappable. The next app open / headless task republishes.
+The spike must confirm this on-device (risk: launchers that don't tick the widget after midnight — the 30-min
+periodic update covers it).
+
+### 44.6 Hide amounts (IMP-093)
+`hideAmounts` is inside the snapshot; providers substitute `••••` for every ₹ figure and never touch labels.
+Quick add shows no data.
+
+## 45. Security, permissions, testing, build & release (V2)
+
+### 45.1 Security & privacy (extends §33)
+- **P-9 holds:** request bodies are never stored (IMP-088). Contacts data is read on demand for the picker and only
+  the chosen name / number is saved as a `person` row; nothing else is copied. Outbound traffic is only the SMS the
+  user triggers (`INTERNET` still Sentry-only, §33.2 unchanged).
+- Requests are **untrusted** (D40, D46): numeric sender only, strict token, bounds, rate limit, plain-text render,
+  never auto-actioned; an attacker can at worst place an *Unattended* row the user may reject.
+- Widgets expose data on the home screen: the snapshot lives in the app-private SharedPreferences (not exported),
+  `hideAmounts` masks it, and providers are `exported=false` except the required launcher `APPWIDGET_UPDATE`.
+- `allowBackup=false` (§33.1) already keeps the new tables out of cloud backup.
+
+### 45.2 Permissions (extends §33.6)
+`SEND_SMS` and `READ_CONTACTS` — optional, just-in-time, each with a one-line rationale (IMP-098). Denied ⇒ SMS-app
+fallback / manual number entry. No change to onboarding (§30.2).
+
+### 45.3 Testing (extends §34)
+- **Unit (first, per the V1 rule):** `split`, `settlement`, `person`, `split-message` (round-trip, fuzz, GSM-7
+  check, length), `suggest-settlement` — including remainder/percent property tests (Σ = total for random inputs).
+- **Repositories / migration:** `0002` on a V1 fixture (IMP-086), cascades and Undo (IMP-084), one-transaction merge
+  (IMP-083), uniqueness of `(fromPhoneKey, remoteRef)` (IMP-080).
+- **Analytics:** the existing V1 `analytics.test.ts` fixtures **unchanged** must still pass (IMP-073); new cases:
+  split debit, waived share, credit partly settled, debit that settles a request (no change).
+- **Ingest:** request branch — numeric vs alphanumeric sender, malformed tokens, own Sent text not re-ingested,
+  rate limit; notification actions Accept/Reject headless.
+- **Component (RNTL):** Split sheet stages, Remaining/Over gating, Merge caps, Splits segments, Details card.
+- **On-device (documented manual QA, §34.5):** real second phone: send → receive → Accept → pay → settle; SEND_SMS
+  denied fallback; dual-SIM phone uses the default SIM; widgets on One UI: add, tap targets, cold start, hide
+  amounts, month rollover, headless SMS updating the queue widget.
+
+### 45.4 Build & release (extends §35)
+`app.json`/plugin: add `SEND_SMS`, `READ_CONTACTS` (via `expo-contacts` plugin), the widget receivers and
+resources; `npx expo prebuild --clean` needed once. Version **`2.0.0`** in `app.json` + `package.json`, tag
+`v2.0.0` (§35.4–§35.5). Pre-release checklist (§35.7) gains: V1-data upgrade check on the real device, widget
+add/remove on the real launcher, second-phone request round trip. **v2.1** (auto split detection) is a separate
+CR set and tag.
+
+### 45.5 Phase-0 spike findings (2026-09-19, `SPEC/V2-IMPLEMENTATION-PLAN.md`)
+
+Test device: motorola edge 60 pro, Android 16 (API 36), dual-SIM (one Vi SIM), dev client from `prebuild --clean`.
+
+**0c — Contacts (`expo-contacts`)**
+- Version for SDK 57: **`~57.0.4`** (from `expo/bundledNativeModules.json`); `npx expo install` itself fails on this machine
+  (npm 11.19 rejects the `--allow-scripts` flag Expo passes), so it is installed with `npm install expo-contacts@~57.0.4`;
+  `expo-doctor` reports nothing new about it (its one existing warning is the 19 out-of-date Expo packages).
+- **API:** in SDK 57 the package root exports a new object API (`Contact` class) and the old function API throws at runtime.
+  The classic `requestPermissionsAsync` / `getContactsAsync` live at **`expo-contacts/legacy`** — the People picker (§43) uses those.
+- **Permissions:** the package's config plugin adds **both** `READ_CONTACTS` and `WRITE_CONTACTS`. CoinFlow must only ever
+  hold `READ_CONTACTS` (IMP-097/098), so `WRITE_CONTACTS` is removed with `android.blockedPermissions` in `app.json`
+  when the plugin is wired in (phase 5). §33.6 already lists READ only.
+
+**0b — Sending SMS (`SmsManager`)**
+- `sendTextMessage` from the app works: result callback reports `sent`; the default-SMS-SIM subscription id was resolved
+  (`SubscriptionManager.getDefaultSmsSubscriptionId()` → `1`); `SEND_SMS` is a normal runtime permission.
+- **Correction to §42.3 / UI §6.17 footnote:** on this device the sent message **is written to the phone's Sent box**
+  (`content://sms/sent`, `type=2`). "Don't appear in Messages" is therefore *not guaranteed* — the footnote is dropped
+  (UI-UX CR-7). Consequences: the inbox-only rule in §42.2(4) matters (the store-watcher job, §17.11, will fire on
+  our own outgoing text; it reads the inbox only, so nothing is re-ingested), and IMP-079's "never parsed from the Sent
+  box" stays a required test.
+- **Second device (Samsung SM-S711B, Android 16, Jio SIM):** same result — `sent`, default-SMS subscription id **`2`** (so the id is
+  device-specific and must always be resolved at send time, never cached), and the text is again stored in the Sent box.
+- **Delivery:** the message sent from the Motorola arrived on the second phone (`9845897555`) as readable text.
+- **Receive path (verified):** with RCS chats switched off on the sender, a plain SMS from a numeric sender
+  (`+919742590888`) reached the Samsung's inbox and **woke `SmsReceiver`, which started
+  `CoinflowSmsHeadlessTaskService`** — so the native side sees a person-to-person SMS exactly as it sees a bank SMS. Lesson
+  for the product: if the sender's phone delivers the text as **RCS** (Google Messages' default between two Android
+  phones) it never becomes an SMS and CoinFlow cannot see it. The request message is sent through `SmsManager` (always
+  SMS), so CoinFlow→anyone is fine; the risk is only the *reverse* direction and only for a non-CoinFlow reply. Document
+  in Settings › Splits & people help text; nothing to build.
+- **Two failures seen in the log (not caused by V2, recorded for the phase-5 verification plan):**
+  1. `Cannot start headless task, CatalystInstance not available` (`HeadlessJsTaskContext`) when the SMS arrived while the
+     dev-client app was in the background. The **debug dev client does not reliably host headless JS**; the JS half of the
+     request branch (§42.2) must therefore be verified on a **release-style build** (the GitHub release APK or
+     `assembleRelease`), not on the dev client.
+  2. `BackgroundServiceStartNotAllowedException` — the **SMS-store watcher (§17.11, CR-16) failed to start
+     `CoinflowSmsHeadlessTaskService` from its `JobService` on Android 16** when the app was backgrounded (triggered by our own
+     outgoing text changing `content://sms`). CR-16 was never verified on-device (its own note says so) — this is the first
+     evidence it may not work on Android 16. **Action (separate from V2, tracked):** re-test on a release build; if it
+     reproduces, CR-16's hand-off from the job to the headless service needs a different mechanism (e.g. run the sweep directly
+     from the job's process or use a foreground/expedited job).
+
+**0a — Widget approach (decided: native Kotlin `RemoteViews` — D42 confirmed)**
+- **Proven on both phones:** a `RemoteViews` widget in `modules/coinflow-sms` renders on the launcher, is fed only by a JSON string in
+  `SharedPreferences("coinflow_widgets")`, redraws when JS publishes a new snapshot (new text verified on the Motorola launcher via
+  the accessibility tree), and opens the app when tapped (`coinflow://add`; the route itself is phase-6 work).
+- **Library option (`react-native-android-widget` 0.22.1, peer `expo >= 54`) — not built or tested.** Rejected on architecture,
+  not on a failed build: it draws widgets by running JS in a headless task, which contradicts IMP-091 ("never start the JS
+  engine") and — as failure 1 above shows — headless JS is exactly the fragile part on this hardware. Native Kotlin has none of
+  that dependency.
+- Kotlin gotcha for phases 5/6: a sync `Function("x") { … return@Function -1 }` in the module DSL crashed the app at start-up
+  (`reifiedOperationMarker`); use `AsyncFunction` + `Promise`, as the existing functions do.
+- Spike code has been removed from the tree (its logic is described above); phase 6 writes the real providers.
+
+**Outcome:** contacts ✓ (API + permission notes) · SMS send ✓ · SMS receive (native) ✓ · widgets ✓ (native) · two pre-existing
+risks logged. Phase 0 is complete; phase 1 (data & domain, no native code) can start.
+
+- **CR-20** (2026-09-19, phase-0 on-device finding) — **SMS-store watcher (§17.11) runs its JS task inside the job, not via `startService`.** On a Samsung SM-S711B / Android 16 the job fired on a change to `content://sms` but the hand-off failed: `ActivityManager: Background start not allowed: service … CoinflowSmsHeadlessTaskService` → `CoinflowSms: Store trigger dropped: BackgroundServiceStartNotAllowedException`, i.e. CR-16's mechanism never worked once the app was idle in the background. `SmsStoreJobService` now hosts the `CoinflowSmsStoreChanged` task through `HeadlessJsTaskContext` (same steps `HeadlessJsTaskService` performs: get `ReactHost`, wait for/`start()` the context, `startTask`, wait for the finish event) and ends the job with `jobFinished`. A second flaw was fixed in the same change: `schedule(force=true)` on the running job's own id cancelled the run (`JobScheduler: Job didn't exist in JobStore`), so the trigger now alternates two ids (`SmsStoreTrigger.rearmFrom`). No JS, permission or UI change. Verified only on a **release-style build** (the debug dev client does not host headless JS reliably — `Cannot start headless task, CatalystInstance not available`).
+
+  **Verified on-device (2026-09-19, Samsung SM-S711B, Android 16, release-style build, app killed and idle):** a real SMS arriving from another phone woke the app, the store job ran once (`SmsStoreJobService` #7301 → re-armed #7302), the job-hosted task stamped `smsLastStoreTriggerAt` and ran the sweep (`smsLastReconcileSweepAt`), and the log shows no `Background start not allowed`, no `Store trigger dropped`, no `JobStore` warning. This also closes the "**Not yet verified on-device**" note on CR-16 for the store watcher's arming/firing (real-bank-SMS catch counts by path are still to be seen in normal use).
+
+### 45.6 As built — phase 1 (data & domain), 2026-09-19
+
+What shipped, and where it differs from the sketch above (the sketch was not wrong — these are refinements found while building):
+
+- **Migration** `src/db/migrations/0002_v2_splits.sql` (generated by `drizzle-kit`, `CREATE` statements only). Schema in `src/db/schema.ts`: `persons`, `splits`, `splitShares`, `splitRequestsIn`, `settlements`. `CHECK` constraints enforce amount > 0 on shares / requests / settlements and "exactly one of `shareId` / `requestId`" on settlements (D37).
+- **Domain (pure, `src/domain/`):**
+  - `split.ts` — `equalShares(total, n) → { youMinor, eachMinor }` (a single `eachMinor`, since everyone else gets the same), `percentToMinor`, `validateSplit`, `remainingMinor`, `effectiveAmount`, `shareState`, `splitState`, `shareRemainingMinor`, `recomputeYourShare`.
+  - `settlement.ts` — `allocate(txnAmount, alreadyAllocated, picks) → { allocations, allocatedMinor, unallocatedMinor }`.
+  - `person.ts` — `normalizePhone`, `maskPhone`, `isPhoneNumberSender` (D40).
+  - `split-message.ts` — `encodeRequest`, `encodeWithdraw`, `decodeRequest`, `makeRef(randomByte)`, `gsm7Length` (counts `{ } |` as 2 septets), `sanitizeNote` / `sanitizeName`, `formatRs` (Indian grouping), limits `MAX_REQUEST_MINOR` = ₹10 lakh, 24-char note, 20-char name, 480-char incoming, 160 septets. If a request would exceed 160 septets it drops "for <note>" from the sentence, then the name — the token itself is never shortened.
+  - `suggest-settlement.ts` — `suggestSettlement(txn, candidates) → { orderedIds, bestId }`, `nameMatches`.
+- **Repositories (`src/db/repositories/`, all exported from `index.ts`):** `persons.ts` (`findOrCreatePerson`, `listPersons`, `renamePerson`, `touchPersons`, `isPersonInUse`, `deletePersonIfUnused`), `splits.ts` (`createSplit`, `replaceShares`, `removeSplit`, `waiveShare` / `unwaiveShare`, `setShareRequestResult`, `validateAmountChange`, `getSplit*`, `listOpenShares`, `listOwedByPerson`, `owedToYouMinor`, `splitsForTransactions`), `settlements.ts` (`settle` — one DB transaction; a credit settles shares, a debit settles *accepted* requests — `unsettle`, `listSettlementsForTransaction`, `settledByShare` / `settledByRequest`), `split-requests.ts` (`receiveRequest`, `acceptRequest`, `rejectRequest`, `undoDecision`, `listRequestsByStatus`, `listOpenRequests`, `youOweMinor`, `purgeRequestTombstones`).
+- **Receive rules as built (§42.2):** the rate limit counts *all* of a sender's requests in the last hour including rejected tombstones (so rejecting cannot be used to reset it); a repeat of an identical request is `ignored: duplicate`; a request that has been paid against can be neither updated nor withdrawn; a rejected / withdrawn request is never silently reopened.
+- **Maintenance:** `clearAllData` deletes the V2 tables children-first; `purge` also expires request tombstones after 30 days (transaction hard-purge cascades to split / shares / settlements through the foreign keys); JSON export carries `people`, `splits`, `splitShares`, `splitRequests`, `settlements` (live transactions and undecided / accepted requests only).
+- **Settings keys** `splitYourName`, `widgetHideAmounts`, `widgetSnapshotAt` added to `SettingKey`.
+- **Test harness (new, tests only):** `src/db/test-support/memory-db.ts` runs the **real shipped migration files** on Node's built-in SQLite through a small Drizzle adapter, so repository tests execute real SQL — foreign keys, cascades, `UNIQUE` / `CHECK`, transactions — instead of a mock. `migration-v2.test.ts` upgrades a populated V1 database and proves every V1 table reads back identical (IMP-086).
+- **Not in phase 1 (by design):** analytics changes (phase 2), any UI (phases 3–4), the SMS ingest branch, notifications, sending (phase 5).
