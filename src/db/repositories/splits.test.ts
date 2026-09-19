@@ -100,6 +100,13 @@ describe('createSplit (IMP-070)', () => {
     expect(db().select().from(splitShares).all()).toEqual([]);
   });
 
+  it('refuses to split a credit (CR-21) — only money you paid out can be shared', () => {
+    const a = person('A', '9000000001');
+    const credit = insertTransaction(db(), { direction: 'credit', type: 'income', amountMinor: 100_000 });
+    expect(() => createSplit({ transactionId: credit.id, shares: [{ personId: a.id, amountMinor: 10_000 }] })).toThrow('only a debit');
+    expect(countSplits()).toBe(0);
+  });
+
   it('refuses a missing or soft-deleted transaction, and a second split on the same transaction', () => {
     const a = person('A', '9000000001');
     expect(() => createSplit({ transactionId: 'nope', shares: [{ personId: a.id, amountMinor: 10 }] })).toThrow('transaction not found');

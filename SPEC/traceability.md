@@ -2113,8 +2113,8 @@ Background reconcile: 24h default + hard-coded network requirement → **3h mini
 | IMP-070 | Split invariant: amount = your share + Σ shares; shares > 0 | UI-072 | src/domain/split.ts (`validateSplit`); `splits` repo | unit + repo | split.test.ts, splits.test.ts | Pass |
 | IMP-071 | Equal split in whole paise; remainder to you | UI-072 | src/domain/split.ts (`equalShares`) | unit (property) | split.test.ts | Pass |
 | IMP-072 | Percent → paise by largest remainder, sums exactly | UI-072 | src/domain/split.ts (`percentToMinor`) | unit (property) | split.test.ts | Pass |
-| IMP-073 | Effective spending everywhere; identical to V1 with no splits | UI-075, UI-081 | analyticsRepo fragments (§41); Home/Analytics | unit + repo (V1 fixtures unchanged) | analytics.test.ts (+ new cases) | Not started |
-| IMP-074 | Effective income nets settlements; debit settling a request ≠ spending change | UI-074 | analyticsRepo fragments; `settlements` repo | unit + repo | analytics.test.ts, settlements.test.ts | Not started |
+| IMP-073 | Effective spending everywhere; identical to V1 with no splits | UI-075, UI-081 | analyticsRepo fragments (§41); Home/Analytics | unit + repo (V1 fixtures unchanged) | analytics.test.ts (V1-parity + split cases); domain analytics.test.ts unchanged | Pass |
+| IMP-074 | Effective income nets settlements; debit settling a request ≠ spending change | UI-074 | analyticsRepo fragments; `settlements` repo | unit + repo | analytics.test.ts, settlements.test.ts | Pass |
 | IMP-075 | Settlement capped by remaining + unallocated; no leftover flow | UI-077 | src/domain/settlement.ts (`allocate`) | unit | settlement.test.ts, settlements.test.ts | Pass |
 | IMP-076 | Share/split status derived, never stored | UI-074 | src/domain/split.ts (`shareState`, `splitState`) | unit | split.test.ts, splits.test.ts | Pass |
 | IMP-077 | Person identity by normalised number; contacts optional | UI-071 | src/domain/person.ts; `persons` repo; People picker | unit + RNTL | person.test.ts, persons.test.ts; people-picker.test.tsx (phase 3) | Partial — closes when the People picker lands (phase 3) |
@@ -2136,11 +2136,13 @@ Background reconcile: 24h default + hard-coded network requirement → **3h mini
 | IMP-093 | Hide amounts masks ₹ figures, never labels | UI-094, UI-095 | snapshot `hideAmounts`; providers | unit + manual | publish.test.ts; on-device QA | Not started |
 | IMP-094 | Past-month snapshot renders — | UI-097 | providers (`periodEndMs`) | manual | on-device QA | Not started |
 | IMP-095 | Three providers registered with previews | UI-090 | app.plugin.js; `res/xml/widget_*_info.xml` | manual | on-device QA | Not started |
-| IMP-096 | Widget Balance = Analytics month card | UI-091 | publish.ts via analyticsRepo | unit | publish.test.ts | Not started |
+| IMP-096 | Widget Balance = Analytics month card | UI-091 | publish.ts via analyticsRepo | unit | analytics.test.ts (Balance = Income − Spent); publish.test.ts (phase 6) | Partial — data side done; closes when the widget snapshot publisher lands (phase 6) |
 | IMP-097 | No permissions beyond IMP-098 | — | app.json / plugins | build check | manifest assertion | Not started |
 | IMP-098 | SEND_SMS / READ_CONTACTS optional, just-in-time | UI-071, UI-080 | Split sheet; Settings › Splits & people | RNTL + manual | people-picker.test.tsx; on-device QA | Not started |
 
 **Phase 1 (data & domain) — built 2026-09-19:** migration `0002_v2_splits`, five tables, `src/domain/{split,settlement,person,split-message,suggest-settlement}.ts`, repositories `persons` / `splits` / `settlements` / `split-requests`, `maintenance.ts` + export extended. +234 tests (844 total, all green), typecheck and lint clean. Rows below are updated where phase 1 satisfies them; the rest close in the phase named.
+
+**Phase 2 (effective-amount analytics) — built 2026-09-19:** `effectiveAmountSql` in `analytics.ts`; every total, the arc, the category breakdown, biggest expenses and the daily series use it; V1 results proven identical when nothing is split; credits can no longer be split (UI-UX CR-8 / impl. CR-21). +15 tests (859 total).
 
 ### Visual rows (UI-UX §7)
 

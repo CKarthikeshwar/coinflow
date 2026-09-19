@@ -1,6 +1,6 @@
 # CoinFlow V2 — Implementation plan (phases)
 
-> Status: **Phases 0 and 1 done (2026-09-19)** — findings in `SPEC-implementation.md` §45.5, as-built notes in §45.6. **Phase 2 next.** Source of truth for *what* to build:
+> Status: **Phases 0, 1 and 2 done (2026-09-19)** — findings in `SPEC-implementation.md` §45.5, as-built notes in §45.6 / §45.7. **Phase 3 (Split UI) next.** Source of truth for *what* to build:
 > `SPEC/SPEC-UI-UX.md` §6.17–§6.24 (CR-4/5/6) and `SPEC/SPEC-implementation.md` Part III §38–§45 (CR-17/18/19).
 > Scope/decisions: `SPEC/V2-PLAN.md`. Designs (approved 2026-09-19): the "CoinFlow V2 Design" canvas.
 > This file is *how and in what order* — it changes no requirement.

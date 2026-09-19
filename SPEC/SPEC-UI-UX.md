@@ -1277,8 +1277,7 @@ notification some time after the transaction inside it has already been reviewed
     `₹450 of this settled Rahul's share of "Momos"` / `₹200 of this paid Priya's request "Cab"`; each line
     links to the other transaction / request. A credit shows `Effective income ₹50` under the amount when part
     of it was used up.
-  - Overflow gains **Split…** for any transaction without one (a debit, or a credit — credits can be split
-    too, e.g. a shared refund) and **Merge into a split…** (§6.20).
+  - Overflow gains **Split…** for any **debit** without one (credits cannot be split — CR-8) and **Merge into a split…** (§6.20).
 
 ### 6.9 Filter (sheet) · P0
 
@@ -1741,7 +1740,7 @@ Settings "SMS & notifications" row shows an On / Off subtitle and a warning icon
 `UI-065` Settings › Data › Clear all data requires a
 two-step confirm.
 
-**Splits (V2, CR-4)** — `UI-070` the Confirmation and Edit sheets and Transaction Details each offer **Split…**
+**Splits (V2, CR-4)** — `UI-070` the Confirmation and Edit sheets and Transaction Details each offer **Split…** (on debits only — CR-8)
 (and **Merge into a split…** in Details) and a transaction with a split shows **Split with N · ₹X yours** in
 that row · `UI-071` the Split sheet's People stage has search, chips for the selection, **Saved people**,
 **Contacts** (only once access is granted, otherwise a single "Choose from contacts" row) and **Add a number**,
@@ -1888,3 +1887,5 @@ other way around).
 - **CR-6** (2026-09-19, design review of the V2 canvas) — **V2 designs approved; the Queued-transactions 2×2 widget is dropped.** The user reviewed the coded design canvas ("CoinFlow V2 Design": widgets on a home screen, widget sizes/states, the split flow, Details with a split, Splits page, Merge sheet, request notification, Home with the "Owed to you" row) and approved it. The only change: **Queued transactions has no 2×2 size** — it is 4×2 and 4×3 only (§6.23; the Money summary keeps 4×2 and 2×2). The design gate `UI-099` is **cleared**; the design source of truth for V2 screens is that canvas plus §6.17–§6.24. The prototype path named in §6.24 (`design-prototype/01-midnight/widgets.html`) is superseded by the canvas.
 
 - **CR-7** (2026-09-19, phase-0 spike 0b — `SPEC/SPEC-implementation.md` §45.5) — **Split sheet result list: footnote removed.** §6.17 said requests sent by CoinFlow "don't appear in Messages". Measured on a motorola edge 60 pro (Android 16) the message is written to the Sent box, so the sentence is not reliable and is dropped. No other UI change.
+
+- **CR-8** (2026-09-19, phase 2 — `SPEC/SPEC-implementation.md` §37 CR-21) — **Only a debit can be split; a credit cannot.** §6.8 offered **Split…** on "a debit, or a credit — e.g. a shared refund". Building the effective-amount analytics showed the credit case has no defined meaning: a share is "what someone owes *you*", which cannot describe money you received. The **Split…** action (§6.4 / §6.6 confirm-and-edit sheets and §6.8 Details) is therefore shown for debits only. A credit's only split-related role is unchanged: it can **settle** shares (Merge, §6.20) and is then counted as income only for its unused part. Splitting a credit (money you hold that belongs partly to others) is left for a later version if it is ever wanted.

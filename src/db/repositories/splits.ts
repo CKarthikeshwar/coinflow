@@ -133,6 +133,8 @@ export function createSplit(
   const splitId = db.transaction((tx) => {
     const txn = liveTransaction(input.transactionId);
     if (!txn) throw new Error('transaction not found');
+    // CR-21: only money you paid OUT can be shared — a share is "what someone owes you", which has no meaning for an income.
+    if (txn.direction !== 'debit') throw new RangeError('only a debit (money you paid out) can be split');
     if (tx.select({ id: splits.id }).from(splits).where(eq(splits.transactionId, txn.id)).get()) {
       throw new Error('transaction is already split');
     }
