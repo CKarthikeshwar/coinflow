@@ -27,15 +27,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
 import { getAccountRule } from '@/db/repositories/account-rules';
+import { resolveDefaultCategory, useCategories } from '@/db/repositories/categories';
 import { setSetting, useSetting } from '@/db/repositories/settings';
 import { dismissAllPending, usePendingSuggestions } from '@/db/repositories/suggestions';
 import type { Suggestion } from '@/db/schema';
 import { isKnownAccountRule } from '@/domain/categorize';
 import { usePermissionStatus } from '@/hooks/use-permission-status';
 import { cancelAllSuggestionNotifications } from '@/services/notifications/post';
-import { handleDiscard, handleSave } from '@/services/notifications/respond';
+import { handleDiscard, handleSave, handleSaveAll } from '@/services/notifications/respond';
 import { requestSmsPermissions } from '@/services/sms';
-import { useSheetRegistry } from '@/stores';
+import { useSheetRegistry, useToast } from '@/stores';
 
 import { SuggestionCard } from '@/features/detection/suggestion-card';
 import { Button } from '@/ui/button';
@@ -68,7 +69,12 @@ export default function ReviewQueueScreen() {
 
   const permission = usePermissionStatus();
   const smsBanner = useSetting<number | null>('smsBannerDismissedAt');
+  const defaultId = useSetting<string | null>('defaultCategoryId');
+  const { data: categoryList } = useCategories();
+  const defaultCategory = resolveDefaultCategory(defaultId.value, categoryList ?? []);
+  const showToast = useToast((s) => s.show);
   const [confirmingDismissAll, setConfirmingDismissAll] = useState(false);
+  const [confirmingSaveAll, setConfirmingSaveAll] = useState(false);
 
   const showBanner = permission.sms === 'denied' && smsBanner.value == null;
 
@@ -85,6 +91,23 @@ export default function ReviewQueueScreen() {
     setConfirmingDismissAll(false);
     dismissAllPending();
     await cancelAllSuggestionNotifications();
+  };
+
+  // CR-12: with no default set, "Save all" sends the user to pick one first.
+  const handleSaveAllPress = () => {
+    if (!defaultCategory) {
+      router.push('/default-category' as never);
+      return;
+    }
+    setConfirmingSaveAll(true);
+  };
+
+  const handleConfirmSaveAll = async () => {
+    setConfirmingSaveAll(false);
+    if (!defaultCategory) return;
+    const { saved, skipped } = await handleSaveAll(defaultCategory.id);
+    const base = `Saved ${saved} transaction${saved === 1 ? '' : 's'}`;
+    showToast(skipped > 0 ? `${base} · ${skipped} left to review` : base);
   };
 
   return (
@@ -107,6 +130,9 @@ export default function ReviewQueueScreen() {
           renderItem={({ item }) => <QueueRow suggestion={item} />}
           ListFooterComponent={
             <View style={styles.footer}>
+              <Button onPress={handleSaveAllPress}>
+                {defaultCategory ? `Save all as ${defaultCategory.name}` : 'Save all with default category'}
+              </Button>
               <Button variant="ghost" onPress={() => setConfirmingDismissAll(true)}>
                 Dismiss all
               </Button>
@@ -114,6 +140,16 @@ export default function ReviewQueueScreen() {
           }
         />
       )}
+
+      <ConfirmDialog
+        visible={confirmingSaveAll}
+        glyph="check"
+        title={`Save ${rows.length} transaction${rows.length === 1 ? '' : 's'}?`}
+        body={`Expenses use ${defaultCategory?.name ?? 'your default category'} unless the account already has a category. Income stays uncategorized.`}
+        confirmLabel="Save all"
+        onConfirm={handleConfirmSaveAll}
+        onCancel={() => setConfirmingSaveAll(false)}
+      />
 
       <ConfirmDialog
         visible={confirmingDismissAll}
@@ -131,5 +167,5 @@ export default function ReviewQueueScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { padding: Spacing.three, gap: Spacing.two, flexGrow: 1 },
-  footer: { marginTop: Spacing.three, alignItems: 'center' },
+  footer: { marginTop: Spacing.three, alignItems: 'center', gap: Spacing.one },
 });

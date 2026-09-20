@@ -17,9 +17,9 @@ import { requireOptionalNativeModule } from 'expo';
 import { UnavailabilityError } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
-import type { CoinflowSmsNativeModule, InboxMessage, PermissionResponse } from './CoinflowSms.types';
+import type { CoinflowSmsNativeModule, InboxMessage, PermissionResponse, SendSmsResult } from './CoinflowSms.types';
 
-export type { InboxMessage, PermissionResponse } from './CoinflowSms.types';
+export type { InboxMessage, PermissionResponse, SendSmsResult } from './CoinflowSms.types';
 
 const NAME = 'CoinflowSms';
 
@@ -58,4 +58,27 @@ export async function getRecentInboxMessagesAsync(sinceEpochMs: number): Promise
  */
 export function armSmsStoreTrigger(): boolean {
   return native?.armSmsStoreTrigger() ?? false;
+}
+
+/** Read the current `SEND_SMS` grant state without prompting. */
+export async function getSendSmsPermissionAsync(): Promise<PermissionResponse> {
+  if (!native) throw new UnavailabilityError(NAME, 'getSendSmsPermissionAsync');
+  return native.getSendSmsPermissionAsync();
+}
+
+/** Prompt for `SEND_SMS` (just-in-time, only when the user sends a split request). */
+export async function requestSendSmsPermissionAsync(): Promise<PermissionResponse> {
+  if (!native) throw new UnavailabilityError(NAME, 'requestSendSmsPermissionAsync');
+  return native.requestSendSmsPermissionAsync();
+}
+
+/** Sends one SMS on the default SMS SIM; resolves 'sent' or 'failed' (never rejects, 30 s timeout — §42.3). */
+export async function sendSmsAsync(phone: string, text: string): Promise<SendSmsResult> {
+  if (!native) return 'failed';
+  return native.sendSmsAsync(phone, text);
+}
+
+/** Hands the widget snapshot JSON to the native widget providers (§44.3); false when unavailable. */
+export function publishWidgetSnapshot(json: string): boolean {
+  return native?.publishWidgetSnapshot(json) ?? false;
 }

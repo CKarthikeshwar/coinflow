@@ -59,12 +59,16 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { getAccountRule, searchByPrefix } from '@/db/repositories/account-rules';
 import { useCategories } from '@/db/repositories/categories';
 import { getSuggestion } from '@/db/repositories/suggestions';
+import { getSplitForTransaction, listOpenShares } from '@/db/repositories/splits';
 import { getTransaction } from '@/db/repositories/transactions';
 import type { AccountRule } from '@/db/schema';
 import { resolveCategoryForAccount } from '@/domain/categorize';
-import { formatMoney } from '@/domain/format/money';
+import { formatMoney, formatRupees } from '@/domain/format/money';
+import { recomputeYourShare } from '@/domain/split';
+import { sendRequests, summarizeReport } from '@/services/splits/send-requests';
 import { useAddSheetDraft, useKeypad, useSheetRegistry } from '@/stores';
 import type { KeypadKey } from '@/stores/keypad';
+import { useSplitDraft } from '@/stores/split-draft';
 import { useToast } from '@/stores/toast';
 
 import { AmountInput } from '@/ui/amount-input';
@@ -78,6 +82,9 @@ import { SelectorRow } from '@/ui/selector-row';
 import { TextField } from '@/ui/text-field';
 import { ThemedText } from '@/ui/themed-text';
 
+import { persistSplitDraft } from '../splits/persist-split';
+import { settleAndAnnounce } from '../splits/settle-and-announce';
+import { SuggestedSettlementBanner, useSettlementSuggestion } from '../splits/suggested-settlement-banner';
 import { writeConfirmedTransaction, writeEditedTransaction, type SmsRef } from './write-confirmed-transaction';
 
 const PAYMENT_METHOD_OPTIONS = [
@@ -196,6 +203,25 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
         occurredAt: txn.occurredAt,
       });
       useKeypad.getState().setFromMinor(txn.amountMinor);
+      // V2: show the transaction's existing split in the "Split with N" row; Cancel drops any change to it.
+      const existingSplit = getSplitForTransaction(txn.id);
+      useSplitDraft.getState().seedExisting(
+        existingSplit
+          ? {
+              splitId: existingSplit.split.id,
+              shares: existingSplit.shares.map((s) => ({
+                key: s.personId,
+                personId: s.personId,
+                name: s.person.displayName,
+                phone: s.person.phoneDisplay,
+                contactRef: s.person.contactRef,
+                source: s.person.source,
+                amountMinor: s.amountMinor,
+                waived: s.waivedAt != null,
+              })),
+            }
+          : null,
+      );
       smsRefRef.current = null;
       return;
     }
@@ -258,10 +284,33 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   // just stay disabled until there's a real amount (§6.5/§6.6 — Edit is "identical to Add").
   const addDisabled = mode !== 'confirm' && draft.amountMinor <= 0;
 
+  // V2 (IMP-089): with a split on this transaction other people's shares stay fixed and YOUR share is
+  // recomputed from the amount — if that would go below ₹0, Save is blocked until the split is edited.
+  const committedSplit = useSplitDraft((s) => s.committed);
+  const splitDirty = useSplitDraft((s) => s.dirty);
+  const splitActive = draft.direction === 'debit' && committedSplit !== null && committedSplit.length > 0;
+  const splitYours = splitActive ? recomputeYourShare(draft.amountMinor, committedSplit.map((c) => c.amountMinor)) : null;
+  const splitBlocked = splitYours !== null && !splitYours.ok;
+  // What it really costs you: amount − the shares others still owe (a waived share is absorbed by you).
+  const splitCost = splitActive
+    ? Math.max(0, draft.amountMinor - committedSplit.filter((c) => !c.waived).reduce((a, c) => a + c.amountMinor, 0))
+    : null;
+
+  // V2 (UI-078): a credit that looks like someone paying their share offers to settle it. Nothing is written until
+  // Save — the transaction doesn't exist yet — and only if the user pressed Settle (IMP-085).
+  const [openShares] = useState(() => (mode === 'confirm' ? listOpenShares() : []));
+  const settlementSuggestion = useSettlementSuggestion(openShares, {
+    availableMinor: draft.amountMinor,
+    account: draft.account,
+    isCredit: mode === 'confirm' && draft.direction === 'credit',
+  });
+  const [settleChosen, setSettleChosen] = useState(false);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+
   const handleCancel = useCallback(() => {
-    if (draft.dirty) setShowDiscardConfirm(true);
+    if (draft.dirty || splitDirty) setShowDiscardConfirm(true);
     else close();
-  }, [draft.dirty, close]);
+  }, [draft.dirty, splitDirty, close]);
 
   // Registers this sheet's own Cancel logic (dirty-check + discard confirm, V-6) as the
   // handler `useSheetRegistry().requestClose()` invokes — so the hardware/gesture back button
@@ -273,6 +322,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
 
   const doDiscard = () => {
     setShowDiscardConfirm(false);
+    useSplitDraft.getState().reset();
     draft.reset();
     close();
   };
@@ -281,17 +331,47 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
     draft.setSubmitting(true);
     try {
       const current = useAddSheetDraft.getState();
+      let savedTransactionId: string | undefined;
       if (mode === 'edit') {
         writeEditedTransaction(current);
+        savedTransactionId = current.sourceId;
       } else {
         // §30.6/§30.7 — Add/Confirm's save toast; Edit's own spec (§30.8) doesn't have one.
         const { transactionId } = writeConfirmedTransaction(current, smsRefRef.current);
+        savedTransactionId = transactionId;
         const signedMinor = current.direction === 'credit' ? current.amountMinor : -current.amountMinor;
         useToast.getState().show(`Added ${formatMoney(signedMinor)}`, {
           label: 'View',
           onPress: () => router.push(`/transaction/${transactionId}`),
         });
       }
+      // V2: the transaction is saved; now write its split (if any). A split failure must never lose the transaction.
+      if (savedTransactionId) {
+        const pendingSplit = useSplitDraft.getState().pending();
+        try {
+          const persisted = persistSplitDraft(savedTransactionId, pendingSplit, { direction: current.direction });
+          // V2 phase 5 (§42.3): the split is on disk — now text whoever still needs asking. The sheet closes
+          // straight away; the outcome arrives as a toast, and every result is recorded on the share either way.
+          if (pendingSplit.send && (persisted.kind === 'created' || persisted.kind === 'updated')) {
+            sendRequests(persisted.splitId)
+              .then((report) => {
+                const message = summarizeReport(report);
+                if (message) useToast.getState().show(message);
+              })
+              .catch(() => useToast.getState().show('Could not send the requests — retry from Details'));
+          }
+        } catch {
+          useToast.getState().show('Saved, but the split could not be saved');
+        }
+      }
+      if (savedTransactionId && settleChosen && settlementSuggestion) {
+        settleAndAnnounce(
+          { transactionId: savedTransactionId, picks: [{ shareId: settlementSuggestion.shareId }] },
+          'share',
+          new Map([[settlementSuggestion.shareId, settlementSuggestion.personName]]),
+        );
+      }
+      useSplitDraft.getState().reset();
       draft.reset();
       close();
     } catch {
@@ -301,7 +381,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   };
 
   const handleAdd = () => {
-    if (addDisabled) return;
+    if (addDisabled || splitBlocked) return;
     // The §6.4 "unusual amount" warn-then-allow gate is Confirm-specific — Add's own gate is
     // simply staying disabled until amount > 0 (§6.5), no extra dialog.
     if (mode === 'confirm' && isEdgeAmount) {
@@ -349,6 +429,16 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
             draft.patch({ direction, type: direction === 'credit' ? 'income' : 'expense' })
           }
         />
+
+        {settlementSuggestion && !suggestionDismissed ? (
+          <SuggestedSettlementBanner
+            personName={settlementSuggestion.personName}
+            amountMinor={draft.amountMinor}
+            pending={settleChosen}
+            onSettle={() => setSettleChosen(true)}
+            onDismiss={() => (settleChosen ? setSettleChosen(false) : setSuggestionDismissed(true))}
+          />
+        ) : null}
 
         {draft.type !== 'income' ? (
           <SelectorRow
@@ -422,6 +512,15 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           multiline
         />
 
+        {mode !== 'add' && draft.direction === 'debit' && draft.amountMinor > 0 ? (
+          <SplitRow
+            committed={committedSplit}
+            yourMinor={splitCost}
+            blocked={splitBlocked}
+            onPress={() => open('split', { ...params, returnTo: mode })}
+          />
+        ) : null}
+
         {draft.error ? (
           <ThemedText type="label" themeColor="text" style={styles.error}>
             {draft.error}
@@ -432,7 +531,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
       <NumericKeypad onKey={handleKey} />
       <View style={styles.primaryRow}>
         <Button
-          variant={addDisabled ? 'disabled' : 'primary'}
+          variant={addDisabled || splitBlocked ? 'disabled' : 'primary'}
           onPress={handleAdd}
           loading={draft.submitting}
           style={styles.primaryButton}
@@ -462,6 +561,42 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
         }}
         onCancel={() => setShowEdgeAmountConfirm(false)}
       />
+    </View>
+  );
+}
+
+/** §6.4 / §6.6 (V2, CR-4) — the quiet "Split…" row under Description; shows the split once one is set. */
+function SplitRow({
+  committed,
+  yourMinor,
+  blocked,
+  onPress,
+}: {
+  committed: readonly { amountMinor: number }[] | null;
+  yourMinor: number | null;
+  blocked: boolean;
+  onPress: () => void;
+}) {
+  const has = committed !== null && committed.length > 0;
+  return (
+    <View>
+      <Pressable accessibilityRole="button" onPress={onPress} style={styles.staticRow}>
+        <Icon name="users" size={18} color="text3" />
+        <ThemedText type="body" themeColor="text" style={styles.staticLabel}>
+          {has ? `Split with ${committed.length}` : 'Split…'}
+        </ThemedText>
+        {has && yourMinor !== null && !blocked ? (
+          <ThemedText type="body" themeColor="text3">
+            {formatRupees(yourMinor)} yours
+          </ThemedText>
+        ) : null}
+        <Icon name="chevron-right" size={16} color="text3" />
+      </Pressable>
+      {blocked ? (
+        <ThemedText type="caption" themeColor="text">
+          Others’ shares are more than the amount — edit the split.
+        </ThemedText>
+      ) : null}
     </View>
   );
 }

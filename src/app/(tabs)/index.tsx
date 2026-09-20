@@ -33,6 +33,7 @@ import {
 } from '@/db/repositories/analytics';
 import { setSetting, useSetting } from '@/db/repositories/settings';
 import { usePendingCount } from '@/db/repositories/suggestions';
+import { useSplitBadges, useSplitsOverview } from '@/db/repositories/split-hooks';
 import { useRecentTransactions } from '@/db/repositories/transactions';
 import { usePermissionStatus } from '@/hooks/use-permission-status';
 import { requestSmsPermissions } from '@/services/sms';
@@ -40,6 +41,7 @@ import { useSheetRegistry } from '@/stores';
 
 import { ActionStripRow } from '@/features/home/action-strip';
 import { BalanceHero } from '@/features/home/balance-hero';
+import { OwedToYouRow } from '@/features/home/owed-row';
 import { EmptyState } from '@/ui/empty-state';
 import { ErrorState } from '@/ui/error-state';
 import { PermissionBanner } from '@/ui/permission-banner';
@@ -70,6 +72,8 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
   const uncategorized = useUncategorizedCount();
   const pending = usePendingCount();
   const recent = useRecentTransactions(8);
+  const splitBadges = useSplitBadges(); // V2 (UI-075): "Split · 1 of 3 paid" on shared transactions
+  const owed = useSplitsOverview(); // V2 (UI-081): the "Owed to you ₹N" row, only while N > 0
   const categoryMap = getCategoryMap();
 
   const smsBanner = useSetting<number | null>('smsBannerDismissedAt');
@@ -131,6 +135,9 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
         />
       </View>
 
+      <OwedToYouRow amountMinor={owed.owedTotalMinor} onPress={() => router.push('/splits')} />
+      <ActionStripRow kind="requests" count={owed.unattended.length} onPress={() => router.push('/splits?tab=requests')} />
+
       {isNewUser ? null : (
         <View style={styles.strip}>
           <ActionStripRow kind="review" count={pending.count} onPress={() => router.push('/review-queue')} />
@@ -167,6 +174,7 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
               txn={txn}
               showTime
               category={txn.categoryId ? (categoryMap.get(txn.categoryId) ?? null) : null}
+              split={splitBadges.get(txn.id)}
               onPress={() => router.push(`/transaction/${txn.id}`)}
             />
           ))}

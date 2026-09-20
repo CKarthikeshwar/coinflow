@@ -94,3 +94,8 @@ export function formatPercentDelta(x: number | null): string {
   const sign = x > 0 ? '+' : '';
   return `${sign}${Math.round(x * 100)}%`;
 }
+
+/** `₹1,200` — a plain magnitude with no `+`/`−` (for "your share", "still owed", totals — never a signed delta). */
+export function formatRupees(amountMinor: number): string {
+  return formatMoney(amountMinor, { sign: 'none' });
+}

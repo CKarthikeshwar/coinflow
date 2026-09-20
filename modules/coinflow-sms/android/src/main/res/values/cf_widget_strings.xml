@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="cf_widget_summary_label">Money summary</string>
+  <string name="cf_widget_summary_description">This month’s balance, income and spending.</string>
+  <string name="cf_widget_queue_label">To review</string>
+  <string name="cf_widget_queue_description">Detected transactions waiting for your OK.</string>
+  <string name="cf_widget_quickadd_label">Quick add</string>
+  <string name="cf_widget_quickadd_description">Add a transaction in one tap.</string>
+</resources>

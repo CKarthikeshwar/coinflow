@@ -257,8 +257,8 @@ export type OwedItem = {
   requestState: ShareRequestState;
 };
 
-/** Every share with money still owed to you (not waived, not settled, its transaction not deleted). */
-export function listOpenShares(): OwedItem[] {
+/** Every non-waived share whose transaction is not deleted, oldest first. */
+function listLiveShares(): OwedItem[] {
   const rows = db
     .select({ share: splitShares, person: persons, split: splits, txn: transactions })
     .from(splitShares)
@@ -286,22 +286,38 @@ export function listOpenShares(): OwedItem[] {
         state: shareState(share, settledMinor),
         requestState: share.requestState,
       };
-    })
-    .filter((i) => i.remainingMinor > 0);
+    });
+}
+
+/** Every share with money still owed to you (not waived, not settled, its transaction not deleted). */
+export function listOpenShares(): OwedItem[] {
+  return listLiveShares().filter((i) => i.remainingMinor > 0);
+}
+
+/** Shares people have paid in full (Splits › Show settled), newest first. */
+export function listSettledShares(): OwedItem[] {
+  return listLiveShares()
+    .filter((i) => i.state === 'settled')
+    .sort((a, b) => b.occurredAt - a.occurredAt);
 }
 
 export type OwedGroup = { personId: string; personName: string; totalMinor: number; items: OwedItem[] };
 
-/** "Owed to you", grouped by person, largest outstanding first (Splits page, §6.19). */
-export function listOwedByPerson(): OwedGroup[] {
+/** Groups items by person, largest outstanding first (`totalMinor` = Σ remaining). Pure. */
+export function groupOwedByPerson(items: readonly OwedItem[]): OwedGroup[] {
   const byPerson = new Map<string, OwedGroup>();
-  for (const item of listOpenShares()) {
+  for (const item of items) {
     const g = byPerson.get(item.personId) ?? { personId: item.personId, personName: item.personName, totalMinor: 0, items: [] };
     g.totalMinor += item.remainingMinor;
     g.items.push(item);
     byPerson.set(item.personId, g);
   }
   return [...byPerson.values()].sort((a, b) => b.totalMinor - a.totalMinor || a.personName.localeCompare(b.personName));
+}
+
+/** "Owed to you", grouped by person, largest outstanding first (Splits page, §6.19). */
+export function listOwedByPerson(): OwedGroup[] {
+  return groupOwedByPerson(listOpenShares());
 }
 
 /** Total still owed to you across all open shares. */

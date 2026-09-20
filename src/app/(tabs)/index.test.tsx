@@ -25,6 +25,12 @@ jest.mock('expo-notifications', () => ({ requestPermissionsAsync: jest.fn().mock
 const mockCategories: Category[] = [
   { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
 ];
+let mockOwedTotalMinor = 0;
+let mockUnattended: unknown[] = [];
+jest.mock('@/db/repositories/split-hooks', () => ({
+  useSplitBadges: () => new Map(),
+  useSplitsOverview: () => ({ owedTotalMinor: mockOwedTotalMinor, unattended: mockUnattended }),
+}));
 jest.mock('@/db/repositories/categories', () => ({ getCategoryMap: () => new Map(mockCategories.map((c) => [c.id, c])) }));
 
 jest.mock('@/db/repositories/settings', () => ({
@@ -84,6 +90,8 @@ beforeEach(() => {
   mockSetSetting.mockReset();
   mockRefreshPermission.mockReset();
   mockPermission = { sms: 'granted', notifications: 'granted', refresh: mockRefreshPermission };
+  mockOwedTotalMinor = 0;
+  mockUnattended = [];
   mockSettings = {};
   mockPendingCount = { count: 0 };
   mockUncategorized = { count: 0 };
@@ -164,6 +172,29 @@ describe('loaded, with data', () => {
     const { getByText } = await render(<HomeScreen />);
     await fireEvent.press(getByText('Lunch'));
     expect(mockRouterPush).toHaveBeenCalledWith('/transaction/txn-1');
+  });
+
+  it('shows no "Owed to you" row when nothing is outstanding (UI-081)', async () => {
+    const { queryByText } = await render(<HomeScreen />);
+    expect(queryByText('Owed to you')).toBeNull();
+  });
+
+  it('shows "Owed to you ₹N" under the month tiles while something is outstanding, and opens Splits (UI-081)', async () => {
+    mockOwedTotalMinor = 45_000;
+    const { getByText } = await render(<HomeScreen />);
+    expect(getByText('₹450')).toBeTruthy();
+    await fireEvent.press(getByText('Owed to you'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/splits');
+  });
+
+  it('shows undecided split requests as a row that opens the Requests list, and hides it at zero (§6.21)', async () => {
+    const none = await render(<HomeScreen />);
+    expect(none.queryByText(/split request/)).toBeNull();
+    await none.unmount();
+    mockUnattended = [{ id: 'a' }, { id: 'b' }];
+    const { getByText } = await render(<HomeScreen />);
+    await fireEvent.press(getByText('2 split requests'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/splits?tab=requests');
   });
 
   it('"See all" navigates to Transactions', async () => {

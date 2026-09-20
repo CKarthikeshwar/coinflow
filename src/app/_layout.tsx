@@ -54,6 +54,7 @@ import { RootErrorBoundary } from '@/features/app-shell/root-error-boundary';
 import { RootNavigator } from '@/features/app-shell/root-navigator';
 import { SheetHost } from '@/features/app-shell/sheet-host';
 import { SmsReconciler } from '@/features/app-shell/sms-reconciler';
+import { WidgetSync } from '@/features/app-shell/widget-sync';
 import { ToastHost } from '@/features/app-shell/toast-host';
 import { UndoHost } from '@/features/transactions/undo-host';
 
@@ -81,6 +82,7 @@ export default function RootLayout() {
                   <ToastHost />
                   <NotificationRouter />
                   <SmsReconciler />
+                  <WidgetSync />
                 </BottomSheetModalProvider>
               </AppBackground>
               <AnimatedSplashOverlay />

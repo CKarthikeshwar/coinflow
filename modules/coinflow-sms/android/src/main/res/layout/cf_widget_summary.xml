@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/cf_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:orientation="vertical"
+  android:padding="14dp"
+  android:background="@drawable/cf_widget_bg">
+
+  <TextView
+    android:id="@+id/cf_header"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:textColor="@color/cf_widget_text2"
+    android:textSize="13sp"
+    android:fontFamily="sans-serif-medium"
+    android:maxLines="1" />
+
+  <LinearLayout
+    android:id="@+id/cf_content"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:orientation="vertical"
+    android:gravity="bottom">
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Balance"
+      android:textColor="@color/cf_widget_text3"
+      android:textSize="11sp" />
+
+    <TextView
+      android:id="@+id/cf_balance"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:textColor="@color/cf_widget_text"
+      android:textSize="30sp"
+      android:fontFamily="sans-serif-medium"
+      android:textStyle="bold"
+      android:maxLines="1" />
+
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="6dp"
+      android:orientation="horizontal">
+
+      <LinearLayout
+        android:id="@+id/cf_income_col"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <TextView
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:text="Income"
+          android:textColor="@color/cf_widget_text3"
+          android:textSize="11sp" />
+        <TextView
+          android:id="@+id/cf_income"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:textColor="@color/cf_widget_text"
+          android:textSize="15sp"
+          android:maxLines="1" />
+      </LinearLayout>
+
+      <LinearLayout
+        android:id="@+id/cf_spent_col"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <TextView
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:text="Spent"
+          android:textColor="@color/cf_widget_text3"
+          android:textSize="11sp" />
+        <TextView
+          android:id="@+id/cf_spent"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:textColor="@color/cf_widget_text"
+          android:textSize="15sp"
+          android:maxLines="1" />
+      </LinearLayout>
+    </LinearLayout>
+  </LinearLayout>
+
+  <TextView
+    android:id="@+id/cf_message"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:gravity="center"
+    android:text="Open CoinFlow to set up"
+    android:textColor="@color/cf_widget_text2"
+    android:textSize="14sp"
+    android:visibility="gone" />
+</LinearLayout>

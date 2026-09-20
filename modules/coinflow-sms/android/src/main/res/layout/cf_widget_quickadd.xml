@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/cf_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:gravity="center"
+  android:orientation="horizontal"
+  android:padding="8dp"
+  android:background="@drawable/cf_widget_bg_inverse">
+  <ImageView
+    android:layout_width="28dp"
+    android:layout_height="28dp"
+    android:contentDescription="Add transaction"
+    android:src="@drawable/cf_widget_plus" />
+  <TextView
+    android:id="@+id/cf_label"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="6dp"
+    android:text="Add transaction"
+    android:textColor="@color/cf_widget_inverse_ink"
+    android:textSize="14sp"
+    android:fontFamily="sans-serif-medium"
+    android:maxLines="1"
+    android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,23 @@
+# V2 phase 4 (part D) — Home "Owed to you" row → Splits page; segments; dev sample request under "You owe".
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Owed to you"
+- takeScreenshot: v2p4-d1-home
+- tapOn: "Owed to you"
+- waitForAnimationToEnd
+- assertVisible: "Splits"
+- assertVisible: "₹400 owed to you"
+- takeScreenshot: v2p4-d2-owed
+- tapOn: "You owe"
+- waitForAnimationToEnd
+- assertVisible: "You don’t owe anyone."
+- tapOn: "Add sample request (dev build only)"
+- waitForAnimationToEnd
+- assertVisible: "₹450 you owe"
+- takeScreenshot: v2p4-d3-youowe
+- tapOn: "Requests"
+- waitForAnimationToEnd
+- assertVisible: "ACCEPTED"
+- takeScreenshot: v2p4-d4-requests

@@ -31,6 +31,7 @@ const mockCategories: Category[] = [
 
 let mockListResult: { rows: Transaction[]; daySubtotals: { dayStartMs: number; spentMinor: number }[]; updatedAt: number | undefined };
 
+jest.mock('@/db/repositories/split-hooks', () => ({ useSplitBadges: () => new Map() }));
 jest.mock('@/db/repositories/categories', () => ({
   getCategoryMap: () => new Map(mockCategories.map((c) => [c.id, c])),
   useCategories: () => ({ data: mockCategories }),

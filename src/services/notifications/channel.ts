@@ -24,6 +24,8 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 export const TXN_REVIEW_CHANNEL_ID = 'txn-review';
+/** Split requests (V2, §43.4): quieter than the transaction channel — default importance, no heads-up. */
+export const SPLIT_REQUESTS_CHANNEL_ID = 'split-requests';
 
 export async function ensureNotificationChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
@@ -35,6 +37,13 @@ export async function ensureNotificationChannel(): Promise<void> {
     // `'default'` makes it look for a *custom sound file* named "default" and warn when it's
     // not found (confirmed against the installed `expo-notifications` Android source).
     vibrationPattern: [0, 150],
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    bypassDnd: false,
+    showBadge: true,
+  });
+  await Notifications.setNotificationChannelAsync(SPLIT_REQUESTS_CHANNEL_ID, {
+    name: 'Split requests',
+    importance: Notifications.AndroidImportance.DEFAULT,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
     bypassDnd: false,
     showBadge: true,

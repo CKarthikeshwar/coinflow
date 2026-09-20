@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Widget palette (SPEC-UI-UX.md §6.22, UI-096: greyscale only). Tile / text are the approved widget spec values
+       (#0B0B0C / #F5F5F2); hairline, text2 and text3 are copied from src/constants/theme.ts. One place to update. -->
+  <color name="cf_widget_bg">#0B0B0C</color>
+  <color name="cf_widget_hairline">#2B2D38</color>
+  <color name="cf_widget_text">#F5F5F2</color>
+  <color name="cf_widget_text2">#9A9AA1</color>
+  <color name="cf_widget_text3">#85858C</color>
+  <color name="cf_widget_pill">#262832</color>
+  <!-- Quick add inverts the tile (same inversion as the tab-bar Add FAB, §6.24). -->
+  <color name="cf_widget_inverse_bg">#F5F5F2</color>
+  <color name="cf_widget_inverse_ink">#0B0B0C</color>
+</resources>

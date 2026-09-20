@@ -30,3 +30,4 @@ export * from './onboarding';
 export * from './sheet-registry';
 export * from './toast';
 export * from './undo';
+export * from './split-draft';

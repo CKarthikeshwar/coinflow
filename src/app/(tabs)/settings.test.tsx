@@ -5,14 +5,21 @@ import SettingsScreen from './settings';
 const mockRouterPush = jest.fn();
 
 let mockPermission: { sms: 'unknown' | 'granted' | 'denied' };
+let mockDefaultCategoryId: string | null;
 
 jest.mock('expo-router', () => ({ router: { push: (...args: unknown[]) => mockRouterPush(...args) } }));
 jest.mock('expo-constants', () => ({ expoConfig: { version: '4.5.6' } }));
+jest.mock('@/db/repositories/categories', () => ({
+  useCategories: () => ({ data: [{ id: 'cat-food', name: 'Food' }] }),
+  resolveDefaultCategory: (id: string | null, list: { id: string; name: string }[]) => list.find((c) => c.id === id) ?? null,
+}));
+jest.mock('@/db/repositories/settings', () => ({ useSetting: () => ({ value: mockDefaultCategoryId }) }));
 jest.mock('@/hooks/use-permission-status', () => ({ usePermissionStatus: () => mockPermission }));
 
 beforeEach(() => {
   mockRouterPush.mockReset();
   mockPermission = { sms: 'granted' };
+  mockDefaultCategoryId = null;
 });
 
 it('renders all six rows and the version footer', async () => {
@@ -24,6 +31,14 @@ it('renders all six rows and the version footer', async () => {
   expect(getByText('Data')).toBeTruthy();
   expect(getByText('About')).toBeTruthy();
   expect(getByText('Version 4.5.6')).toBeTruthy();
+});
+
+it('Default category row shows "Not set", then the chosen name', async () => {
+  const { getByText, rerender } = await render(<SettingsScreen />);
+  expect(getByText('Not set')).toBeTruthy();
+  mockDefaultCategoryId = 'cat-food';
+  await rerender(<SettingsScreen />);
+  expect(getByText('Food')).toBeTruthy();
 });
 
 it('SMS granted shows "On" with no warning glyph', async () => {

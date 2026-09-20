@@ -20,6 +20,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors, Spacing } from '@/constants/theme';
+import { resolveDefaultCategory, useCategories } from '@/db/repositories/categories';
+import { useSetting } from '@/db/repositories/settings';
 import { usePermissionStatus } from '@/hooks/use-permission-status';
 
 import { Icon, type IconName } from '@/ui/icon';
@@ -55,6 +57,9 @@ function Row({ label, icon, href, subtitle, warn }: SettingsRow) {
 export default function SettingsScreen() {
   const permission = usePermissionStatus();
   const smsOn = permission.sms === 'granted';
+  const { data: categoryList } = useCategories();
+  const defaultId = useSetting<string | null>('defaultCategoryId');
+  const defaultName = resolveDefaultCategory(defaultId.value, categoryList ?? [])?.name;
   const version = Constants.expoConfig?.version ?? '—';
 
   return (
@@ -65,6 +70,7 @@ export default function SettingsScreen() {
       <View style={styles.body}>
         <View style={styles.section}>
           <Row label="Categories" icon="tag" href="/categories" />
+          <Row label="Default category" icon="bookmark" href="/default-category" subtitle={defaultName ?? 'Not set'} />
           <Row label="Payment methods" icon="wallet" href="/payment-methods" />
           <Row
             label="SMS & notifications"
@@ -74,6 +80,8 @@ export default function SettingsScreen() {
             warn={!smsOn}
           />
           <Row label="Account rules" icon="history" href="/account-rules" />
+          <Row label="Splits & people" icon="users" href="/splits-people" />
+          <Row label="Widgets" icon="layout-grid" href="/widgets" />
           <Row label="Data" icon="download" href="/data" />
           <Row label="About" icon="help-circle" href="/about" />
         </View>

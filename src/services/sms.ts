@@ -31,9 +31,9 @@
 import { PermissionStatus } from 'expo-modules-core';
 
 import * as CoinflowSms from '../../modules/coinflow-sms';
-import type { InboxMessage, PermissionResponse } from '../../modules/coinflow-sms';
+import type { InboxMessage, PermissionResponse, SendSmsResult } from '../../modules/coinflow-sms';
 
-export type { InboxMessage, PermissionResponse };
+export type { InboxMessage, PermissionResponse, SendSmsResult };
 
 /** `true` only on an Android dev-client / standalone build with the native module linked. */
 export function isSmsCaptureSupported(): boolean {
@@ -62,6 +62,38 @@ export function armSmsStoreTrigger(): boolean {
 export async function getRecentSmsMessages(sinceEpochMs: number): Promise<InboxMessage[]> {
   if (!CoinflowSms.isSupported()) return [];
   return CoinflowSms.getRecentInboxMessagesAsync(sinceEpochMs);
+}
+
+/** Grant state for `SEND_SMS` (never prompts); denied where sending is unsupported. */
+export async function getSendSmsPermission(): Promise<PermissionResponse> {
+  if (!CoinflowSms.isSupported()) return deniedResponse();
+  return CoinflowSms.getSendSmsPermissionAsync();
+}
+
+/** Prompt for `SEND_SMS` — just-in-time, only when the user sends a split request (IMP-098). */
+export async function requestSendSmsPermission(): Promise<PermissionResponse> {
+  if (!CoinflowSms.isSupported()) return deniedResponse();
+  return CoinflowSms.requestSendSmsPermissionAsync();
+}
+
+/** Sends one SMS on the default SMS SIM (§42.3); 'failed' where unsupported. Never rejects. */
+export async function sendSms(phone: string, text: string): Promise<SendSmsResult> {
+  if (!CoinflowSms.isSupported()) return 'failed';
+  try {
+    return await CoinflowSms.sendSmsAsync(phone, text);
+  } catch {
+    return 'failed';
+  }
+}
+
+/** Pushes the widget snapshot to the native widgets (§44.3); false where unsupported. Never throws. */
+export function publishWidgetSnapshotJson(json: string): boolean {
+  if (!CoinflowSms.isSupported()) return false;
+  try {
+    return CoinflowSms.publishWidgetSnapshot(json);
+  } catch {
+    return false;
+  }
 }
 
 function deniedResponse(): PermissionResponse {

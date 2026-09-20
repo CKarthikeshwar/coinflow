@@ -18,7 +18,7 @@ import { normalizePhone } from '@/domain/person';
 import { MAX_REQUEST_MINOR, sanitizeNote } from '@/domain/split-message';
 
 import { db } from '../client';
-import { splitRequestsIn, type RequestInStatus, type SplitRequestIn } from '../schema';
+import { persons, splitRequestsIn, type RequestInStatus, type SplitRequestIn } from '../schema';
 import { findOrCreatePerson } from './persons';
 import { settledByRequest } from './settlements';
 
@@ -138,13 +138,35 @@ export function undoDecision(id: string, now: number = Date.now()): boolean {
   return setStatus(id, ['accepted', 'rejected'], 'unattended', now);
 }
 
-export type RequestView = SplitRequestIn & { settledMinor: number; remainingMinor: number };
+export type RequestView = SplitRequestIn & {
+  settledMinor: number;
+  remainingMinor: number;
+  /** `false` when the sender is only a number we met through this SMS ("not in your people", §6.21). */
+  knownPerson: boolean;
+};
 
 function withSettled(rows: SplitRequestIn[]): RequestView[] {
   const settled = settledByRequest(rows.map((r) => r.id));
+  const personIds = [...new Set(rows.map((r) => r.fromPersonId).filter((id): id is string => !!id))];
+  const smsOnly = new Set(
+    personIds.length === 0
+      ? []
+      : db
+          .select({ id: persons.id, source: persons.source })
+          .from(persons)
+          .where(inArray(persons.id, personIds))
+          .all()
+          .filter((p) => p.source === 'sms')
+          .map((p) => p.id),
+  );
   return rows.map((r) => {
     const settledMinor = settled.get(r.id) ?? 0;
-    return { ...r, settledMinor, remainingMinor: Math.max(0, r.amountMinor - settledMinor) };
+    return {
+      ...r,
+      settledMinor,
+      remainingMinor: Math.max(0, r.amountMinor - settledMinor),
+      knownPerson: !!r.fromPersonId && !smsOnly.has(r.fromPersonId),
+    };
   });
 }
 
@@ -171,6 +193,18 @@ export function listOpenRequests(): RequestView[] {
       .orderBy(asc(splitRequestsIn.receivedAt))
       .all(),
   ).filter((r) => r.remainingMinor > 0);
+}
+
+/** Accepted requests you have paid in full (Splits › You owe › Show settled), newest first. */
+export function listSettledRequests(): RequestView[] {
+  return withSettled(
+    db
+      .select()
+      .from(splitRequestsIn)
+      .where(eq(splitRequestsIn.status, 'accepted'))
+      .orderBy(desc(splitRequestsIn.receivedAt))
+      .all(),
+  ).filter((r) => r.remainingMinor === 0);
 }
 
 /** Total you still owe across accepted requests. */

@@ -58,7 +58,7 @@ import { monthPeriod, previousPeriod, type Period } from '@/domain/period';
 import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
-import { transactions } from '../schema';
+import { settlements, splitShares, splits, transactions } from '../schema';
 
 /**
  * §41 — what a transaction *effectively* is, as a SQL expression over the outer `transaction` row
@@ -78,6 +78,19 @@ export const effectiveAmountSql = sql<number>`MAX(0, CASE
     WHERE "settlement"."transactionId" = "transaction"."id" AND "settlement"."shareId" IS NOT NULL), 0)
   ELSE "transaction"."amountMinor" END)`;
 
+/**
+ * Changes whenever ANY split, share or settlement changes (V2). Drizzle's `useLiveQuery` re-runs a query only
+ * when its *main* table (`transaction`) changes — but `effectiveAmountSql` also reads the split tables, so
+ * splitting / waiving / settling would leave Home and Analytics stale until the next app start (found on-device).
+ * Adding this to every effective-amount hook's `deps` makes them re-run.
+ */
+export function useSplitChangeSignal(): number {
+  const a = useLiveQuery(db.select({ id: splits.id }).from(splits));
+  const b = useLiveQuery(db.select({ id: splitShares.id }).from(splitShares));
+  const c = useLiveQuery(db.select({ id: settlements.id }).from(settlements));
+  return (a.updatedAt?.getTime() ?? 0) + (b.updatedAt?.getTime() ?? 0) + (c.updatedAt?.getTime() ?? 0);
+}
+
 const inPeriod = (period: Period) => [
   sql`${transactions.occurredAt} >= ${period.startMs}`,
   sql`${transactions.occurredAt} < ${period.endMsExclusive}`,
@@ -95,7 +108,8 @@ export function runningBalanceQuery() {
 
 /** §26.2 — the all-time computed net (D2). Never an SMS "Avl Bal" read. May be negative. */
 export function useRunningBalance() {
-  const q = useLiveQuery(runningBalanceQuery());
+  const signal = useSplitChangeSignal();
+  const q = useLiveQuery(runningBalanceQuery(), [signal]);
   return { balanceMinor: q.data[0]?.balanceMinor ?? 0, error: q.error, updatedAt: q.updatedAt };
 }
 
@@ -112,7 +126,8 @@ export function periodSummaryQuery(period: Period) {
 
 /** §26.1 — Spent / Income for one period. Defaults to the current calendar month. */
 export function usePeriodSummary(period: Period = monthPeriod()) {
-  const q = useLiveQuery(periodSummaryQuery(period), [period.startMs, period.endMsExclusive]);
+  const signal = useSplitChangeSignal();
+  const q = useLiveQuery(periodSummaryQuery(period), [period.startMs, period.endMsExclusive, signal]);
   const row = q.data[0];
   return {
     spentMinor: row?.spentMinor ?? 0,
@@ -183,7 +198,8 @@ export function categoryBreakdownQuery(period: Period) {
 /** §26.4 — "Where it went". `categoryId: null` is the Uncategorized bucket (own row, hatched,
  * IMP-033), ordered by spend descending. */
 export function useCategoryBreakdown(period: Period) {
-  const q = useLiveQuery(categoryBreakdownQuery(period), [period.startMs, period.endMsExclusive]);
+  const signal = useSplitChangeSignal();
+  const q = useLiveQuery(categoryBreakdownQuery(period), [period.startMs, period.endMsExclusive, signal]);
   return { rows: q.data, error: q.error, updatedAt: q.updatedAt };
 }
 
@@ -207,7 +223,8 @@ export function largestExpensesQuery(period: Period, limit = 5) {
 /** §26.5 — top 5 expenses in the period by amount, ties broken by most recent. A shared expense ranks
  * (and shows) at what it cost *you*, consistent with the Spent total (§41). */
 export function useLargestExpenses(period: Period, limit = 5) {
-  const q = useLiveQuery(largestExpensesQuery(period, limit), [period.startMs, period.endMsExclusive, limit]);
+  const signal = useSplitChangeSignal();
+  const q = useLiveQuery(largestExpensesQuery(period, limit), [period.startMs, period.endMsExclusive, limit, signal]);
   return { rows: q.data, error: q.error, updatedAt: q.updatedAt };
 }
 
@@ -235,8 +252,9 @@ export function dailyExpenseRowsQuery(period: Period) {
 export function useDailySeries(period: Period) {
   const previous = previousPeriod(period);
 
-  const current = useLiveQuery(dailyExpenseRowsQuery(period), [period.startMs, period.endMsExclusive]);
-  const prev = useLiveQuery(dailyExpenseRowsQuery(previous), [previous.startMs, previous.endMsExclusive]);
+  const signal = useSplitChangeSignal();
+  const current = useLiveQuery(dailyExpenseRowsQuery(period), [period.startMs, period.endMsExclusive, signal]);
+  const prev = useLiveQuery(dailyExpenseRowsQuery(previous), [previous.startMs, previous.endMsExclusive, signal]);
 
   const series = buildDailySeries(current.data, period);
   const hasPreviousData = prev.data.length > 0;

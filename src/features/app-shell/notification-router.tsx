@@ -64,6 +64,9 @@ export function NotificationRouter() {
       case 'review':
         router.push('/review-queue');
         break;
+      case 'splits':
+        router.push(`/splits?tab=${target.tab}`);
+        break;
       case 'home':
         break; // already there, or nothing left to route to
     }

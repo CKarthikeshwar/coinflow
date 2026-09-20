@@ -1,0 +1,19 @@
+# V2 phase 4 (part B) — record a ₹400 income from "Rahul" and open it: expect the Suggested-settlement banner.
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn: "Add transaction"
+- waitForAnimationToEnd
+- tapOn: "4"
+- tapOn: "0"
+- tapOn: "0"
+- tapOn:
+    text: "Income"
+    index: 1
+- tapOn: "Account"
+- inputText: "RAHUL"
+- hideKeyboard
+- tapOn: "Add"
+- waitForAnimationToEnd
+- takeScreenshot: v2p4-b-home

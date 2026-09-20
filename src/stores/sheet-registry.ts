@@ -35,7 +35,9 @@ export type SheetName =
   | 'categoryPicker'
   | 'createCategory'
   | 'editCategory'
-  | 'editAccountRule';
+  | 'editAccountRule'
+  | 'split' // V2 — the Split sheet (SPEC-UI-UX.md §6.17)
+  | 'merge'; // V2 — the Merge sheet (SPEC-UI-UX.md §6.20)
 
 type SheetRegistryStore = {
   current: SheetName | null;

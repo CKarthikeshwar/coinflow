@@ -11,6 +11,7 @@ import { getSuggestion, insertIfNew } from '@/db/repositories/suggestions';
 import { hasDedupeKey } from '@/db/repositories/transactions';
 import { postForSuggestion } from '@/services/notifications/post';
 import { reconcileNotifications } from '@/services/notifications/reconcile';
+import { handleIncomingRequest } from '@/services/splits/receive-request';
 
 
 import { recordCatch } from './catch-stats';
@@ -45,6 +46,7 @@ jest.mock('@/services/notifications/post', () => ({
   postForSuggestion: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('./catch-stats', () => ({ recordCatch: jest.fn() }));
+jest.mock('@/services/splits/receive-request', () => ({ handleIncomingRequest: jest.fn().mockResolvedValue(false) }));
 jest.mock('@/services/notifications/reconcile', () => ({
   reconcileNotifications: jest.fn().mockResolvedValue(undefined),
 }));
@@ -57,6 +59,7 @@ const hasDedupeKeyMock = hasDedupeKey as jest.Mock;
 const postForSuggestionMock = postForSuggestion as jest.Mock;
 const reconcileNotificationsMock = reconcileNotifications as jest.Mock;
 const recordCatchMock = recordCatch as jest.Mock;
+const handleIncomingRequestMock = handleIncomingRequest as jest.Mock;
 
 const QUALIFYING_SMS = {
   sender: 'AD-HDFCBK-S',
@@ -183,5 +186,39 @@ describe('smsIngestTask — notify: false (§17.9, CR-11)', () => {
     await smsIngestTask(QUALIFYING_SMS);
     expect(postForSuggestionMock).toHaveBeenCalledTimes(1);
     expect(reconcileNotificationsMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('smsIngestTask — V2 request branch (§42.2, IMP-079)', () => {
+  it('offers every message to the request branch first, with the sender, body and notify flag', async () => {
+    await smsIngestTask(QUALIFYING_SMS, { notify: false });
+    expect(handleIncomingRequestMock).toHaveBeenCalledWith(
+      { sender: QUALIFYING_SMS.sender, body: QUALIFYING_SMS.body },
+      { notify: false },
+    );
+  });
+
+  it('a message the request branch handled stops there — never a bank Suggestion, never the sender gate', async () => {
+    handleIncomingRequestMock.mockResolvedValueOnce(true);
+    await smsIngestTask({ ...QUALIFYING_SMS, sender: '+919845897555' });
+    expect(insertIfNewMock).not.toHaveBeenCalled();
+    expect(postForSuggestionMock).not.toHaveBeenCalled();
+    expect(recordCatchMock).not.toHaveBeenCalled();
+  });
+
+  it('even a bank-looking body from a request sender is not parsed once handled', async () => {
+    handleIncomingRequestMock.mockResolvedValueOnce(true);
+    await smsIngestTask({ sender: 'AD-HDFCBK-S', body: QUALIFYING_SMS.body });
+    expect(insertIfNewMock).not.toHaveBeenCalled();
+  });
+
+  it('an unhandled message carries on exactly as in V1', async () => {
+    await smsIngestTask(QUALIFYING_SMS);
+    expect(insertIfNewMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never throws if the request branch throws', async () => {
+    handleIncomingRequestMock.mockRejectedValueOnce(new TypeError('boom'));
+    await expect(smsIngestTask(QUALIFYING_SMS)).resolves.toBeUndefined();
   });
 });

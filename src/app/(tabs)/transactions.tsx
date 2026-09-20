@@ -28,6 +28,7 @@ import { FlashList } from '@shopify/flash-list';
 
 import { Spacing } from '@/constants/theme';
 import { getCategoryMap, useCategories } from '@/db/repositories/categories';
+import { useSplitBadges } from '@/db/repositories/split-hooks';
 import { useTransactionList } from '@/db/repositories/transactions';
 import type { PaymentMethod, Transaction } from '@/db/schema';
 import { startOfLocalDay } from '@/domain/period';
@@ -83,6 +84,7 @@ export default function TransactionsScreen() {
   // Sync + cheap — just re-read every render rather than fighting exhaustive-deps over an
   // intentional "recompute when rows changed" memo that doesn't actually read `rows`.
   const categoryMap = getCategoryMap();
+  const splitBadges = useSplitBadges(); // V2 (UI-075)
 
   const activeChips = useMemo(() => {
     const chips: { key: string; label: string; clear: () => void }[] = [];
@@ -217,6 +219,7 @@ export default function TransactionsScreen() {
                 <TransactionCard
                   txn={item.txn}
                   category={item.txn.categoryId ? (categoryMap.get(item.txn.categoryId) ?? null) : null}
+                  split={splitBadges.get(item.txn.id)}
                   onPress={() => router.push(`/transaction/${item.txn.id}`)}
                 />
               </View>

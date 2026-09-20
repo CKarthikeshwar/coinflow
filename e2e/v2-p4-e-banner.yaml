@@ -1,0 +1,19 @@
+# V2 phase 4 (part E) — precondition: a ₹400 credit from NEHA exists, already settled against Neha's share.
+# Remove the settlement → banner "Looks like Neha paying ₹400" returns; Settle → snackbar; Undo → banner returns.
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn: "NEHA"
+- waitForAnimationToEnd
+- tapOn: "Remove"
+- waitForAnimationToEnd
+- assertVisible: "Looks like Neha paying ₹400"
+- assertNotVisible: "Settlements"
+- tapOn: "Settle"
+- assertVisible: "Settled Neha’s share — ₹400"
+- tapOn: "Undo"
+- waitForAnimationToEnd
+- assertNotVisible: "Settlements"
+- assertVisible: "Looks like Neha paying ₹400"
+- takeScreenshot: v2p4-e3-undone

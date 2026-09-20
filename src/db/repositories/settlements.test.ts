@@ -4,9 +4,9 @@ import { settlements, transactions } from '../schema';
 import { insertTransaction } from '../test-support/fixtures';
 import { createMemoryDb } from '../test-support/memory-db';
 import { findOrCreatePerson } from './persons';
-import { acceptRequest, listOpenRequests, receiveRequest } from './split-requests';
-import { allocatedFromTransaction, listSettlementsForTransaction, settle, settledByShare, unsettle } from './settlements';
-import { createSplit, getSplit, waiveShare } from './splits';
+import { acceptRequest, listOpenRequests, listSettledRequests, receiveRequest } from './split-requests';
+import { allocatedFromTransaction, listPaymentCandidates, listSettlementsForTransaction, settle, settledByShare, unsettle } from './settlements';
+import { createSplit, getSplit, groupOwedByPerson, listOpenShares, listOwedByPerson, listSettledShares, waiveShare } from './splits';
 
 let mockMem: ReturnType<typeof createMemoryDb>;
 let mockCounter = 0;
@@ -205,5 +205,62 @@ describe('unsettle / lists', () => {
     const d = debit(45_000);
     settle({ transactionId: d.id, picks: [{ requestId: r.request.id }] });
     expect(listSettlementsForTransaction(d.id)[0]).toMatchObject({ kind: 'request', label: 'Momos', amountMinor: 45_000 });
+  });
+});
+
+describe('phase 4 lists — Splits page & Merge sheet', () => {
+  it('listSettledShares returns fully paid shares only (not open, not waived), newest first', () => {
+    const { rahulShare, priyaShare } = dinner();
+    expect(listSettledShares()).toEqual([]);
+    settle({ transactionId: credit(30_000).id, picks: [{ shareId: rahulShare }] });
+    settle({ transactionId: credit(10_000).id, picks: [{ shareId: priyaShare }] }); // only part-paid
+    expect(listSettledShares().map((i) => i.shareId)).toEqual([rahulShare]);
+    expect(listOpenShares().map((i) => i.shareId)).toEqual([priyaShare]);
+    waiveShare(priyaShare);
+    expect(listSettledShares().map((i) => i.shareId)).toEqual([rahulShare]);
+  });
+
+  it('groupOwedByPerson sums remaining per person, largest first', () => {
+    const { rahulShare } = dinner();
+    settle({ transactionId: credit(10_000).id, picks: [{ shareId: rahulShare }] }); // Rahul now owes 20_000, Priya 30_000
+    const groups = listOwedByPerson();
+    expect(groups.map((g) => [g.personName, g.totalMinor])).toEqual([
+      ['Priya', 30_000],
+      ['Rahul', 20_000],
+    ]);
+    expect(groupOwedByPerson([])).toEqual([]);
+  });
+
+  it('listSettledRequests returns accepted requests paid in full', () => {
+    const r = receiveRequest({ fromPhone: '+919742590888', ref: 'ab2cd3', amountMinor: 45_000, note: 'Momos' }, 1000);
+    if (r.kind !== 'created') throw new Error('setup failed');
+    acceptRequest(r.request.id, 1001);
+    expect(listSettledRequests()).toEqual([]);
+    settle({ transactionId: debit(45_000).id, picks: [{ requestId: r.request.id }] });
+    expect(listSettledRequests().map((x) => x.id)).toEqual([r.request.id]);
+    expect(listOpenRequests()).toEqual([]);
+  });
+
+  it('listPaymentCandidates returns live transactions of the direction with an unallocated remainder', () => {
+    const { rahulShare } = dinner();
+    const big = credit(50_000);
+    const used = credit(30_000);
+    const deleted = credit(9_000);
+    debit(7_000);
+    db().update(transactions).set({ deletedAt: 1 }).where(eq(transactions.id, deleted.id)).run();
+    settle({ transactionId: used.id, picks: [{ shareId: rahulShare }] }); // fully allocated → excluded
+    const ids = listPaymentCandidates('credit').map((c) => c.id);
+    expect(ids).toContain(big.id);
+    expect(ids).not.toContain(used.id);
+    expect(ids).not.toContain(deleted.id);
+    expect(listPaymentCandidates('debit').every((c) => c.direction === 'debit')).toBe(true);
+  });
+
+  it('listPaymentCandidates reports what is left of a part-used payment', () => {
+    const { rahulShare } = dinner();
+    const c = credit(50_000);
+    settle({ transactionId: c.id, picks: [{ shareId: rahulShare }] }); // 30_000 used
+    expect(listPaymentCandidates('credit').find((x) => x.id === c.id)).toMatchObject({ amountMinor: 50_000, unallocatedMinor: 20_000 });
+    expect(listPaymentCandidates('credit', 0)).toEqual([]);
   });
 });

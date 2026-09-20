@@ -1,6 +1,7 @@
 package expo.modules.coinflowsms
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.provider.Telephony
 import android.util.Log
 import expo.modules.interfaces.permissions.Permissions
@@ -60,6 +61,36 @@ class CoinflowSmsModule : Module() {
         Manifest.permission.RECEIVE_SMS,
         Manifest.permission.READ_SMS
       )
+    }
+
+    // --- Sending (SPEC-implementation.md §42.3, IMP-081/098) ---------------------------------------------------
+    // SEND_SMS is optional and requested just-in-time (only when the user sends a split request), separately from
+    // RECEIVE_SMS / READ_SMS above so that declining it never affects detection.
+    AsyncFunction("getSendSmsPermissionAsync") { promise: Promise ->
+      Permissions.getPermissionsWithPermissionsManager(appContext.permissions, promise, Manifest.permission.SEND_SMS)
+    }
+
+    AsyncFunction("requestSendSmsPermissionAsync") { promise: Promise ->
+      Permissions.askForPermissionsWithPermissionsManager(appContext.permissions, promise, Manifest.permission.SEND_SMS)
+    }
+
+    // Resolves "sent" | "failed" — never rejects, so a send problem is data for the UI, not an exception.
+    AsyncFunction("sendSmsAsync") { phone: String, text: String, promise: Promise ->
+      val ctx = appContext.reactContext
+      if (ctx == null ||
+        ctx.checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED
+      ) {
+        promise.resolve("failed")
+      } else {
+        SmsSender.send(ctx, phone, text) { result -> promise.resolve(result) }
+      }
+    }
+
+    // --- Widgets (SPEC-implementation.md §44.3) ------------------------------------------------------------------
+    // JS writes the snapshot; the providers only ever render it (IMP-091). Never throws.
+    Function("publishWidgetSnapshot") { json: String ->
+      val ctx = appContext.reactContext ?: return@Function false
+      WidgetStore.publish(ctx, json)
     }
 
     AsyncFunction("getRecentInboxMessagesAsync") { sinceEpochMs: Double, promise: Promise ->

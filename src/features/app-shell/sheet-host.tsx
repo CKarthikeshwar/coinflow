@@ -68,10 +68,13 @@ import { Easing } from 'react-native-reanimated';
 
 import { Colors, Radius } from '@/constants/theme';
 import { useAccountRuleDraft, useAddSheetDraft, useCategoryDraft, useSheetRegistry } from '@/stores';
+import { useSplitDraft } from '@/stores/split-draft';
 
 import { CategoryEditorSheet } from '@/features/categories/category-editor-sheet';
 import { CategoryPickerSheet } from '@/features/categories/category-picker-sheet';
 import { AccountRuleEditorSheet } from '@/features/settings/account-rule-editor-sheet';
+import { MergeSheet } from '@/features/splits/merge-sheet';
+import { SplitSheet } from '@/features/splits/split-sheet';
 import { FilterSheet } from '@/features/transactions/filter-sheet';
 import { TransactionSheetBody } from '@/features/transactions/transaction-sheet';
 
@@ -95,7 +98,9 @@ function Backdrop(props: BottomSheetBackdropProps & { dirty: boolean }) {
 export function SheetHost() {
   const ref = useRef<BottomSheetModal>(null);
   const { current, close } = useSheetRegistry();
-  const addSheetDirty = useAddSheetDraft((s) => s.dirty);
+  const splitDirty = useSplitDraft((s) => s.dirty);
+  // V2: a changed split also counts as unsaved input in the Confirm / Edit sheets that own it.
+  const addSheetDirty = useAddSheetDraft((s) => s.dirty) || splitDirty;
   const categoryDirty = useCategoryDraft((s) => s.dirty);
   const accountRuleDirty = useAccountRuleDraft((s) => s.dirty);
   const isCategoryEditor = current === 'createCategory' || current === 'editCategory';
@@ -106,7 +111,7 @@ export function SheetHost() {
   // close is re-picking the same filters), so it's never dirty.
   const dirty = isCategoryEditor
     ? categoryDirty
-    : current === 'filter'
+    : current === 'filter' || current === 'merge'
       ? false
       : current === 'editAccountRule'
         ? accountRuleDirty
@@ -141,7 +146,10 @@ export function SheetHost() {
     // Add/Edit/Confirm draft. Save and discard already reset it, but a plain close — swipe,
     // scrim tap, back, or Cancel on an untouched sheet — used to leave it `active`, so the next
     // Add could open pre-filled with a previous Confirm/Edit session's data.
-    if (!current) useAddSheetDraft.getState().reset();
+    if (!current) {
+      useAddSheetDraft.getState().reset();
+      useSplitDraft.getState().reset(); // V2: the in-progress split lives only as long as its parent session
+    }
 
     if (dismissing.current) {
       // A previous sheet is still mid-close. Presenting now would race gorhom's
@@ -202,7 +210,7 @@ export function SheetHost() {
   };
 
   const sizing = useMemo(() => {
-    if (current === 'confirm' || current === 'add' || current === 'edit')
+    if (current === 'confirm' || current === 'add' || current === 'edit' || current === 'split' || current === 'merge')
       return { snapPoints: ['92%'], enableDynamicSizing: false };
     return { snapPoints: undefined, enableDynamicSizing: true };
   }, [current]);
@@ -226,6 +234,8 @@ export function SheetHost() {
       {isCategoryEditor ? <CategoryEditorSheet /> : null}
       {current === 'filter' ? <FilterSheet /> : null}
       {current === 'editAccountRule' ? <AccountRuleEditorSheet /> : null}
+      {current === 'split' ? <SplitSheet /> : null}
+      {current === 'merge' ? <MergeSheet /> : null}
     </BottomSheetModal>
   );
 }

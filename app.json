@@ -20,7 +20,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": ["android.permission.WRITE_CONTACTS"]
     },
     "web": {
       "output": "static",
@@ -50,6 +51,12 @@
         }
       ],
       "expo-sharing",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "CoinFlow reads your contacts only when you choose someone to split with. Nothing is copied except the name and number you pick."
+        }
+      ],
       [
         "@sentry/react-native",
         {

@@ -5,6 +5,10 @@ import type { Suggestion } from '@/db/schema';
 import ReviewQueueScreen from './review-queue';
 
 const mockRouterBack = jest.fn();
+const mockRouterPush = jest.fn();
+const mockHandleSaveAll = jest.fn(async (..._args: unknown[]) => ({ saved: 2, skipped: 0 }));
+let mockDefaultCategoryId: string | null;
+let mockCategories: { id: string; name: string }[];
 const mockGetAccountRule = jest.fn((..._args: unknown[]) => null as unknown);
 const mockSetSetting = jest.fn();
 const mockDismissAllPending = jest.fn();
@@ -20,10 +24,19 @@ let mockPendingData: { data: Suggestion[] | undefined; updatedAt: number | undef
 let mockPermission: { sms: 'unknown' | 'granted' | 'denied' };
 let mockSmsBannerValue: number | null;
 
-jest.mock('expo-router', () => ({ router: { back: (...args: unknown[]) => mockRouterBack(...args) } }));
+jest.mock('expo-router', () => ({
+  router: {
+    back: (...args: unknown[]) => mockRouterBack(...args),
+    push: (...args: unknown[]) => mockRouterPush(...args),
+  },
+}));
+jest.mock('@/db/repositories/categories', () => ({
+  useCategories: () => ({ data: mockCategories }),
+  resolveDefaultCategory: (id: string | null, list: { id: string }[]) => list.find((c) => c.id === id) ?? null,
+}));
 jest.mock('@/db/repositories/account-rules', () => ({ getAccountRule: (...args: unknown[]) => mockGetAccountRule(...args) }));
 jest.mock('@/db/repositories/settings', () => ({
-  useSetting: () => ({ value: mockSmsBannerValue }),
+  useSetting: (key: string) => ({ value: key === 'defaultCategoryId' ? mockDefaultCategoryId : mockSmsBannerValue }),
   setSetting: (...args: unknown[]) => mockSetSetting(...args),
 }));
 jest.mock('@/db/repositories/suggestions', () => ({
@@ -39,6 +52,7 @@ jest.mock('@/services/notifications/post', () => ({
 jest.mock('@/services/notifications/respond', () => ({
   handleDiscard: (...args: unknown[]) => mockHandleDiscard(...args),
   handleSave: (...args: unknown[]) => mockHandleSave(...args),
+  handleSaveAll: (...args: unknown[]) => mockHandleSaveAll(...args),
 }));
 jest.mock('@/services/sms', () => ({
   requestSmsPermissions: (...args: unknown[]) => mockRequestSmsPermissions(...args),
@@ -65,6 +79,10 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
 
 beforeEach(() => {
   mockRouterBack.mockReset();
+  mockRouterPush.mockReset();
+  mockHandleSaveAll.mockReset().mockResolvedValue({ saved: 2, skipped: 0 });
+  mockDefaultCategoryId = null;
+  mockCategories = [{ id: 'cat-food', name: 'Food' }];
   mockGetAccountRule.mockReset().mockReturnValue(null);
   mockSetSetting.mockReset();
   mockDismissAllPending.mockReset();
@@ -117,6 +135,35 @@ describe('rows', () => {
     const dismissTexts = getAllByText('Dismiss all');
     await fireEvent.press(dismissTexts[dismissTexts.length - 1]);
     expect(mockDismissAllPending).toHaveBeenCalled();
+  });
+});
+
+describe('Save all (CR-12)', () => {
+  it('sends the user to pick a default when none is set', async () => {
+    mockPendingData = { data: [suggestion()], updatedAt: Date.now() };
+    const { getByText } = await render(<ReviewQueueScreen />);
+    await fireEvent.press(getByText('Save all with default category'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/default-category');
+    expect(mockHandleSaveAll).not.toHaveBeenCalled();
+  });
+
+  it('treats a default whose category was deleted as unset', async () => {
+    mockDefaultCategoryId = 'cat-gone';
+    mockPendingData = { data: [suggestion()], updatedAt: Date.now() };
+    const { getByText } = await render(<ReviewQueueScreen />);
+    await fireEvent.press(getByText('Save all with default category'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/default-category');
+  });
+
+  it('confirms with the count, then saves with the default category', async () => {
+    mockDefaultCategoryId = 'cat-food';
+    mockPendingData = { data: [suggestion(), suggestion({ id: 'sug-2' })], updatedAt: Date.now() };
+    const { getByText, getAllByText } = await render(<ReviewQueueScreen />);
+    await fireEvent.press(getByText('Save all as Food'));
+    expect(getByText('Save 2 transactions?')).toBeTruthy();
+    const saveTexts = getAllByText('Save all');
+    await fireEvent.press(saveTexts[saveTexts.length - 1]);
+    expect(mockHandleSaveAll).toHaveBeenCalledWith('cat-food');
   });
 });
 

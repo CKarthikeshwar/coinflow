@@ -43,7 +43,7 @@ import { randomUUID } from 'expo-crypto';
 
 import { db } from '@/db/client';
 import { getAccountRule } from '@/db/repositories/account-rules';
-import { dismissSuggestion, getSuggestion } from '@/db/repositories/suggestions';
+import { dismissSuggestion, getSuggestion, listPending } from '@/db/repositories/suggestions';
 import { accountRules, suggestions, transactions } from '@/db/schema';
 import { isKnownAccountRule } from '@/domain/categorize';
 
@@ -120,6 +120,67 @@ export async function handleSave(suggestionId: string): Promise<SaveOutcome> {
 
   await cancelForSuggestion(suggestionId);
   return { outcome: 'saved', transactionId };
+}
+
+export type SaveAllOutcome = { saved: number; skipped: number };
+
+/**
+ * CR-25 — "Save all" in the Review Queue: writes every complete pending suggestion in ONE database
+ * transaction. Category per row: a credit stays Uncategorized (IMP-011); a debit takes its account
+ * rule's learned category when it has one, else `defaultCategoryId`. Deliberately does not touch
+ * `accountRules` — a bulk save must not teach an account the default category. Rows missing an
+ * amount, direction or time are left pending and counted in `skipped`.
+ */
+export async function handleSaveAll(defaultCategoryId: string): Promise<SaveAllOutcome> {
+  const pending = listPending();
+  const savedIds: string[] = [];
+  const now = Date.now();
+
+  db.transaction((tx) => {
+    for (const suggestion of pending) {
+      if (suggestion.amountMinor === null || suggestion.direction === null || suggestion.occurredAt === null) {
+        continue;
+      }
+      const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
+      const direction = suggestion.direction;
+      const note = rule?.lastNote?.trim() || null;
+      const account = suggestion.account;
+      const transactionId = randomUUID();
+
+      tx.insert(transactions)
+        .values({
+          id: transactionId,
+          amountMinor: suggestion.amountMinor,
+          direction,
+          type: direction === 'credit' ? 'income' : 'expense',
+          categoryId: direction === 'credit' ? null : (rule?.categoryId ?? defaultCategoryId), // IMP-011
+          paymentMethod: rule?.lastPaymentMethod ?? suggestion.paymentMethod,
+          account,
+          normalizedAccountKey: suggestion.normalizedKey,
+          note,
+          description: null,
+          searchText: `${note ?? ''} ${account ?? ''}`.toLowerCase().replace(/\s+/g, ' ').trim(),
+          occurredAt: suggestion.occurredAt,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+          source: 'sms',
+          smsSender: suggestion.smsSender,
+          smsReceivedAt: suggestion.smsReceivedAt,
+          dedupeKey: suggestion.dedupeKey,
+          editedByUser: false,
+        })
+        .run();
+      tx.update(suggestions)
+        .set({ status: 'confirmed', confirmedTransactionId: transactionId })
+        .where(eq(suggestions.id, suggestion.id))
+        .run();
+      savedIds.push(suggestion.id);
+    }
+  });
+
+  await Promise.all(savedIds.map((id) => cancelForSuggestion(id)));
+  return { saved: savedIds.length, skipped: pending.length - savedIds.length };
 }
 
 export type DiscardOutcome = { outcome: 'discarded' } | { outcome: 'noop' };

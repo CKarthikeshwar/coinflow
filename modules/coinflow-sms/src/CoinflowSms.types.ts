@@ -24,7 +24,24 @@ export interface CoinflowSmsNativeModule {
    * message another app's higher/equal-priority receiver swallowed before `SmsReceiver` ran.
    */
   getRecentInboxMessagesAsync(sinceEpochMs: number): Promise<InboxMessage[]>;
+  /** Current grant state for `SEND_SMS` (never prompts). Optional, just-in-time (IMP-098). */
+  getSendSmsPermissionAsync(): Promise<PermissionResponse>;
+  /** Prompt for `SEND_SMS`; resolves with the post-prompt state. */
+  requestSendSmsPermissionAsync(): Promise<PermissionResponse>;
+  /**
+   * Sends one SMS on the default SMS SIM and resolves with the system result (§42.3). `'failed'` also covers a
+   * missing permission, an exception and the 30 s timeout — it never rejects.
+   */
+  sendSmsAsync(phone: string, text: string): Promise<SendSmsResult>;
+  /**
+   * Stores the widget snapshot JSON (SPEC-implementation.md §44.2) and asks every CoinFlow home-screen widget to
+   * redraw. Returns false if it could not be stored. Never throws.
+   */
+  publishWidgetSnapshot(json: string): boolean;
 }
+
+/** What the system said about a send. `'sent'` is "accepted by the radio", not "delivered". */
+export type SendSmsResult = 'sent' | 'failed';
 
 /** One row read from `content://sms/inbox` (§17.8). */
 export interface InboxMessage {

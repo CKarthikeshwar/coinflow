@@ -39,6 +39,8 @@ import {
   Funnel,
   GraduationCap,
   HeartPulse,
+  Bookmark,
+  LayoutGrid,
   House,
   Landmark,
   type LucideIcon,
@@ -55,6 +57,7 @@ import {
   TrendingDown,
   TrendingUp,
   TriangleAlert,
+  Users,
   Utensils,
   Wallet,
   X,
@@ -103,6 +106,9 @@ const ICONS = {
   'shield-check': ShieldCheck,
   'trash-2': Trash2,
   download: Download,
+  bookmark: Bookmark, // CR-12 — Settings › Default category
+  users: Users, // V2 — split payments (SPEC-UI-UX.md §6.17)
+  'layout-grid': LayoutGrid, // V2 — Settings › Widgets (§6.24)
 
   // Stat-tile trend glyph (§29.4's `StatTile`) — not in §3.4's own enumerated chrome list,
   // added when the component needed it, same as every other entry here.

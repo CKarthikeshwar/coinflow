@@ -55,6 +55,7 @@ import { ensureMigrated } from '@/db/maintenance';
 import { parseSms } from '@/domain/parser';
 import { postForSuggestion } from '@/services/notifications/post';
 import { reconcileNotifications } from '@/services/notifications/reconcile';
+import { handleIncomingRequest } from '@/services/splits/receive-request';
 
 import { recordCatch, type SmsCatchSource } from './catch-stats';
 
@@ -101,6 +102,10 @@ export async function smsIngestTask(
   try {
     const sender = payload?.sender?.trim();
     if (!sender) return;
+
+    // V2 (§42.2, IMP-079) — a split request from a *phone number* is handled here and stops here: it must
+    // never reach the bank sender gate / parser, and a bank text (alphanumeric sender) never enters this branch.
+    if (await handleIncomingRequest({ sender, body: payload?.body ?? '' }, { notify })) return;
 
     // Step 1 — sender gate.
     if (!isKnownSender(sender)) return;

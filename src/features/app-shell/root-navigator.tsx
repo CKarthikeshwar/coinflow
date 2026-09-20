@@ -65,6 +65,11 @@ export function RootNavigator() {
       <Stack.Protected guard={isOnboarded}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="review-queue" />
+        <Stack.Screen name="splits" />
+        <Stack.Screen name="splits-people" />
+        <Stack.Screen name="widgets" />
+        <Stack.Screen name="add" />
+        <Stack.Screen name="review" />
         <Stack.Screen name="transaction/[id]" />
         <Stack.Screen name="categories" />
         <Stack.Screen name="account-rules" />

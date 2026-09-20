@@ -1,6 +1,6 @@
 # CoinFlow V2 — Implementation plan (phases)
 
-> Status: **Phases 0, 1 and 2 done (2026-09-19)** — findings in `SPEC-implementation.md` §45.5, as-built notes in §45.6 / §45.7. **Phase 3 (Split UI) next.** Source of truth for *what* to build:
+> Status: **Phases 0–5 done and verified on-device** (0–3: 2026-09-19; 4: 2026-09-20 on the Samsung with Maestro; 5: 2026-09-20 on the Samsung + a Motorola — send, receive, Accept, settle, denied-SEND_SMS fallback; swipe-away / Reject / notification buttons not exercised). **Phase 6 (Widgets) built and installed 2026-09-20**; the three widgets were checked visually by the user, but taps, live updates, Hide amounts, cold start and month rollover are still to verify (§45.11). Also shipped after the freeze: Settings › Default category + Review Queue *Save all* (UI-UX CR-12 / impl CR-25, verified on the Samsung). Findings in `SPEC-implementation.md` §45.5, as-built notes in §45.6–§45.11. Source of truth for *what* to build:
 > `SPEC/SPEC-UI-UX.md` §6.17–§6.24 (CR-4/5/6) and `SPEC/SPEC-implementation.md` Part III §38–§45 (CR-17/18/19).
 > Scope/decisions: `SPEC/V2-PLAN.md`. Designs (approved 2026-09-19): the "CoinFlow V2 Design" canvas.
 > This file is *how and in what order* — it changes no requirement.

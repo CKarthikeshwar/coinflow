@@ -53,3 +53,6 @@ modules/coinflow-sms/android/build/
 
 # on-device bug-report videos/screenshots (large binaries, not project source)
 /app-references/
+
+# Claude Code project instructions (local only)
+/CLAUDE.md

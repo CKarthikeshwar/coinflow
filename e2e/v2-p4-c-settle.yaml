@@ -1,0 +1,21 @@
+# V2 phase 4 (part C) — the ₹400 credit from RAHUL matches two ₹400 shares, so there is NO banner (ambiguous);
+# merge through the sheet: pick Amit, Settle → snackbar + Settlements section.
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn: "RAHUL"
+- waitForAnimationToEnd
+- assertNotVisible: "Looks like.*"
+- tapOn: "Merge into a split…"
+- waitForAnimationToEnd
+- assertVisible: "Merge ₹400"
+- takeScreenshot: v2p4-c1-merge-sheet
+- tapOn:
+    text: "Amit"
+    index: 1
+- assertVisible: "₹400 of ₹400 used"
+- tapOn: "Settle"
+- waitForAnimationToEnd
+- takeScreenshot: v2p4-c2-settled
+- assertVisible: "Settlements"

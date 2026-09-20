@@ -52,6 +52,16 @@ export function listCategories(): Category[] {
   return db.select().from(categories).orderBy(asc(categories.order)).all();
 }
 
+/**
+ * CR-25: the stored default category, or `null` when unset, deleted, or the system "Uncategorized" row —
+ * Uncategorized means `categoryId = null` everywhere else, so it can never be a default.
+ */
+export function resolveDefaultCategory(id: string | null | undefined, list: Category[]): Category | null {
+  if (!id) return null;
+  const found = list.find((c) => c.id === id);
+  return found && found.kind !== 'system' ? found : null;
+}
+
 export function getCategoryMap(): Map<string, Category> {
   return new Map(listCategories().map((c) => [c.id, c]));
 }

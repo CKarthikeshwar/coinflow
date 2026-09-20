@@ -13,7 +13,7 @@ import { Icon } from '@/ui/icon';
 import { ThemedText } from '@/ui/themed-text';
 
 export type ActionStripRowProps = {
-  kind: 'review' | 'uncat';
+  kind: 'review' | 'uncat' | 'requests';
   count: number;
   onPress: () => void;
 };
@@ -21,6 +21,7 @@ export type ActionStripRowProps = {
 const LABEL: Record<ActionStripRowProps['kind'], (n: number) => string> = {
   review: (n) => `${n} to review`,
   uncat: (n) => `${n} uncategorized`,
+  requests: (n) => (n === 1 ? '1 split request' : `${n} split requests`), // V2 (§6.21): undecided requests
 };
 
 export function ActionStripRow({ kind, count, onPress }: ActionStripRowProps) {
@@ -28,7 +29,7 @@ export function ActionStripRow({ kind, count, onPress }: ActionStripRowProps) {
 
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={styles.row}>
-      <View style={[styles.marker, kind === 'review' ? styles.markerFill : styles.markerRing]} />
+      <View style={[styles.marker, kind === 'uncat' ? styles.markerRing : styles.markerFill]} />
       <ThemedText type="body" themeColor="text" style={styles.label}>
         {LABEL[kind](count)}
       </ThemedText>

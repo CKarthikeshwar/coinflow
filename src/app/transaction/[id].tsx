@@ -24,20 +24,32 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors, Spacing } from '@/constants/theme';
 import { getCategoryMap } from '@/db/repositories/categories';
+import { useSettlementsForTransaction, useSplitForTransaction, useSplitsOverview } from '@/db/repositories/split-hooks';
+import { unsettle } from '@/db/repositories/settlements';
+import { removeSplit, unwaiveShare, waiveShare } from '@/db/repositories/splits';
 import { softDeleteTransaction, useTransaction } from '@/db/repositories/transactions';
 import type { PaymentMethod } from '@/db/schema';
-import { formatMoney } from '@/domain/format/money';
+import { formatMoney, formatRupees } from '@/domain/format/money';
+import { isSmsCaptureSupported } from '@/services/sms';
+import { openInSmsApp, sendRequests, summarizeReport } from '@/services/splits/send-requests';
 import { useSheetRegistry } from '@/stores';
+import { useToast } from '@/stores/toast';
 import { useUndo } from '@/stores/undo';
+
+import { settleAndAnnounce } from '@/features/splits/settle-and-announce';
+import { SettlementsSection } from '@/features/splits/settlements-section';
+import { SplitCard } from '@/features/splits/split-card';
+import { SuggestedSettlementBanner, useSettlementSuggestion } from '@/features/splits/suggested-settlement-banner';
 
 import { Button } from '@/ui/button';
 import { ConfirmDialog } from '@/ui/confirm-dialog';
 import { Icon } from '@/ui/icon';
+import { SelectorRow } from '@/ui/selector-row';
 import { ThemedText } from '@/ui/themed-text';
 import { TopBar } from '@/ui/top-bar';
 
@@ -54,6 +66,22 @@ export default function TransactionDetailsScreen() {
   const { data } = useTransaction(id);
   const txn = data?.[0] ?? null;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRemoveSplit, setShowRemoveSplit] = useState(false);
+  // V2 (CR-4): the split on this transaction, live — must be read before the early return below.
+  const split = useSplitForTransaction(id);
+  // V2 (CR-4, phase 4): what this transaction has settled, what is still open to settle, and the advisory match.
+  const overview = useSplitsOverview();
+  const settled = useSettlementsForTransaction(id);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+  const [sendingShareId, setSendingShareId] = useState<string | null>(null);
+  const canSendSms = isSmsCaptureSupported();
+  const openShares = overview.owed.flatMap((g) => g.items);
+  const availableMinor = txn ? txn.amountMinor - settled.allocatedMinor : 0;
+  const suggestion = useSettlementSuggestion(openShares, {
+    availableMinor,
+    account: txn?.account,
+    isCredit: txn?.direction === 'credit',
+  });
 
   if (!txn) {
     return (
@@ -76,6 +104,52 @@ export default function TransactionDetailsScreen() {
   const openEdit = () => useSheetRegistry.getState().open('edit', { transactionId: txn.id });
   const isUncategorized = txn.type !== 'income' && !category;
 
+  // V2 — only a debit can be split (CR-8). The Split sheet opens "direct": it saves straight to the database.
+  const openSplit = () => useSheetRegistry.getState().open('split', { direct: true, transactionId: txn.id });
+  const canMerge =
+    availableMinor > 0 && (txn.direction === 'credit' ? overview.owed.length > 0 : overview.youOwe.length > 0);
+  const openMerge = () => useSheetRegistry.getState().open('merge', { transactionId: txn.id });
+  const settleSuggestion = () => {
+    if (!suggestion) return;
+    settleAndAnnounce(
+      { transactionId: txn.id, picks: [{ shareId: suggestion.shareId }] },
+      'share',
+      new Map([[suggestion.shareId, suggestion.personName]]),
+    );
+  };
+  // V2 phase 5 (§6.17) — send / retry / resend one person's request from the card. The split is already saved,
+  // so a failure only leaves that share's request state as it was; the row then offers Retry.
+  const sendOneRequest = async (shareId: string) => {
+    if (!split) return;
+    setSendingShareId(shareId);
+    try {
+      const report = await sendRequests(split.split.id, { shareIds: [shareId], force: true });
+      if (report.fallback.length > 0) {
+        // SEND_SMS refused: hand the pre-filled message to the user's own SMS app instead.
+        const opened = await openInSmsApp(split.split.id, shareId);
+        useToast.getState().show(opened?.state === 'opened_in_sms_app' ? 'Opened in Messages — press send there' : 'Could not open Messages');
+      } else {
+        useToast.getState().show(summarizeReport(report) ?? 'Nothing to send');
+      }
+    } catch {
+      useToast.getState().show('Could not send the request');
+    } finally {
+      setSendingShareId(null);
+    }
+  };
+
+  const removeSettlement = (settlementId: string) => {
+    unsettle([settlementId]);
+    useToast.getState().show('Settlement removed');
+  };
+  const owedMinor = split ? split.shares.reduce((a, s) => a + s.remainingMinor, 0) : 0;
+  const handleRemoveSplit = () => {
+    setShowRemoveSplit(false);
+    if (!split) return;
+    removeSplit(split.split.id);
+    useToast.getState().show('Split removed');
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
@@ -93,10 +167,16 @@ export default function TransactionDetailsScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <ThemedText type="amountHero" style={styles.amount}>
           {formatMoney(signedMinor)}
         </ThemedText>
+        {split ? (
+          <ThemedText type="label" themeColor="text3" style={styles.shareLine}>
+            Your share {formatRupees(split.effectiveMinor)}
+            {owedMinor > 0 ? ` · ${formatRupees(owedMinor)} still owed` : ' · all settled'}
+          </ThemedText>
+        ) : null}
 
         <View style={styles.metaRow}>
           <ThemedText type="label" themeColor="text3">
@@ -146,7 +226,48 @@ export default function TransactionDetailsScreen() {
             </ThemedText>
           </View>
         ) : null}
-      </View>
+
+        {suggestion && !suggestionDismissed ? (
+          <View style={styles.banner}>
+            <SuggestedSettlementBanner
+              personName={suggestion.personName}
+              amountMinor={availableMinor}
+              onSettle={settleSuggestion}
+              onDismiss={() => setSuggestionDismissed(true)}
+            />
+          </View>
+        ) : null}
+
+        {canMerge ? (
+          <View style={styles.splitRow}>
+            <SelectorRow icon="users" label="Merge into a split…" onPress={openMerge} />
+          </View>
+        ) : null}
+
+        {txn.direction === 'debit' && !split ? (
+          <View style={styles.splitRow}>
+            <SelectorRow icon="users" label="Split…" onPress={openSplit} />
+          </View>
+        ) : null}
+
+        {split ? (
+          <SplitCard
+            view={split}
+            onEditSplit={openSplit}
+            onRemoveSplit={() => setShowRemoveSplit(true)}
+            onWaive={(shareId) => waiveShare(shareId)}
+            onRestore={(shareId) => unwaiveShare(shareId)}
+            onSendRequest={canSendSms ? sendOneRequest : undefined}
+            sendingShareId={sendingShareId}
+          />
+        ) : null}
+
+        <SettlementsSection
+          lines={settled.lines}
+          unallocatedMinor={availableMinor}
+          onRemove={removeSettlement}
+        />
+      </ScrollView>
 
       <View style={styles.footer}>
         <Button onPress={openEdit} style={styles.editButton}>
@@ -154,6 +275,15 @@ export default function TransactionDetailsScreen() {
         </Button>
       </View>
 
+      <ConfirmDialog
+        visible={showRemoveSplit}
+        glyph="trash-2"
+        title="Remove split?"
+        body="Each person’s share and any payments recorded against them are removed. The payments themselves stay as transactions."
+        confirmLabel="Remove"
+        onConfirm={handleRemoveSplit}
+        onCancel={() => setShowRemoveSplit(false)}
+      />
       <ConfirmDialog
         visible={showDeleteConfirm}
         glyph="trash-2"
@@ -191,7 +321,11 @@ const styles = StyleSheet.create({
   headerSpacer: { flex: 1 },
   backTap: { width: 44, height: 44, marginLeft: -Spacing.two, alignItems: 'center', justifyContent: 'center' },
   overflowTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  content: { flex: 1, paddingHorizontal: Spacing.four, gap: Spacing.two },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: Spacing.two },
+  splitRow: { marginHorizontal: -Spacing.three }, // SelectorRow pads its own sides; line it up with the text above
+  banner: { marginTop: Spacing.two },
+  shareLine: { textAlign: 'center', marginTop: -Spacing.one },
   amount: { textAlign: 'center', marginBottom: Spacing.two },
   metaRow: {
     flexDirection: 'row',

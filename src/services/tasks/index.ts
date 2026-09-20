@@ -57,7 +57,9 @@ import { setSetting } from '@/db/repositories/settings';
 import { ensureNotificationChannel } from '@/services/notifications/channel';
 import { registerNotificationCategories } from '@/services/notifications/categories';
 import { handleDiscard, handleSave } from '@/services/notifications/respond';
+import { handleAcceptRequest, handleRejectRequest } from '@/services/notifications/respond-split';
 import { armSmsStoreTrigger } from '@/services/sms';
+import { publishWidgetSnapshotNow } from '@/services/widgets/publish';
 
 import { reconcileMissedSms } from './sms-reconcile';
 import { smsIngestTask, type SmsHeadlessPayload } from './sms-ingest';
@@ -90,7 +92,8 @@ if (Platform.OS === 'android') {
     } catch (e) {
       console.warn('[tasks] smsLastRealtimeInvokedAt write failed:', (e as Error)?.name ?? 'unknown');
     }
-    return smsIngestTask(payload);
+    await smsIngestTask(payload);
+    publishWidgetSnapshotNow(); // §44.3 — the queue widget updates with the app closed
   });
 }
 
@@ -108,6 +111,7 @@ if (Platform.OS === 'android') {
       console.warn('[tasks] smsLastStoreTriggerAt write failed:', (e as Error)?.name ?? 'unknown');
     }
     await reconcileMissedSms({ notify: true, source: 'storeTrigger', lookbackMs: STORE_TRIGGER_LOOKBACK_MS });
+    publishWidgetSnapshotNow();
   });
   try {
     armSmsStoreTrigger();
@@ -122,6 +126,7 @@ if (Platform.OS === 'android') {
   TaskManager.defineTask(SMS_RECONCILE_TASK, async () => {
     armSmsStoreTrigger(); // watchdog: Android drops the store watcher on reboot (§17.11)
     await reconcileMissedSms({ notify: true, source: 'sweepPeriodic' });
+    publishWidgetSnapshotNow(); // also rolls the widgets over to a new month
     return BackgroundTask.BackgroundTaskResult.Success;
   });
   // Explicit 12h minimum interval (CR-15 → CR-16). Without it `expo-background-task` falls back to
@@ -156,8 +161,17 @@ TaskManager.defineTask<Notifications.NotificationTaskPayload>(
     if (!data || !('actionIdentifier' in data)) return;
 
     const payload = data.notification.request.content.data as
-      | { kind?: string; suggestionId?: string }
+      | { kind?: string; suggestionId?: string; requestId?: string }
       | undefined;
+
+    // V2 (§6.21) — Accept / Reject on a split-request notification, headless like Save / Discard.
+    if (payload?.kind === 'split-request' && payload.requestId) {
+      if (data.actionIdentifier === 'ACCEPT') await handleAcceptRequest(payload.requestId);
+      else if (data.actionIdentifier === 'REJECT') await handleRejectRequest(payload.requestId);
+      publishWidgetSnapshotNow();
+      return;
+    }
+
     if (payload?.kind !== 'suggestion' || !payload.suggestionId) return;
 
     // `ADD` and a body tap carry `opensAppToForeground:true` — those are handled by
@@ -168,6 +182,7 @@ TaskManager.defineTask<Notifications.NotificationTaskPayload>(
     } else if (data.actionIdentifier === 'DISCARD') {
       await handleDiscard(payload.suggestionId);
     }
+    publishWidgetSnapshotNow(); // Save / Discard change the queue widget
   },
 );
 

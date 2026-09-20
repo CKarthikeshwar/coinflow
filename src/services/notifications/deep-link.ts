@@ -21,6 +21,7 @@
  * longer makes sense (e.g. trying to "confirm" a suggestion that was already confirmed).
  */
 
+import { getRequest } from '@/db/repositories/split-requests';
 import { getSuggestion } from '@/db/repositories/suggestions';
 import { getTransaction } from '@/db/repositories/transactions';
 
@@ -28,14 +29,30 @@ export type NotificationTarget =
   | { kind: 'confirm'; suggestionId: string }
   | { kind: 'transaction'; transactionId: string }
   | { kind: 'review' }
+  /** V2 (§43.4) — the Splits page, on the segment that still makes sense for what was tapped. */
+  | { kind: 'splits'; tab: 'owed' | 'owe' | 'requests' }
   | { kind: 'home' };
 
-export type NotificationData = { kind?: string; suggestionId?: string } | null | undefined;
+export type NotificationData = { kind?: string; suggestionId?: string; requestId?: string } | null | undefined;
 
 /** §31.6 stale-tap table. */
 export function resolveNotificationTarget(data: NotificationData): NotificationTarget {
   if (!data) return { kind: 'home' };
   if (data.kind === 'group') return { kind: 'review' };
+
+  // V2 (§43.4) — the summary always lands on the Requests list.
+  if (data.kind === 'split-group') return { kind: 'splits', tab: 'requests' };
+  if (data.kind === 'split-request') {
+    if (!data.requestId) return { kind: 'splits', tab: 'requests' };
+    const request = getRequest(data.requestId);
+    if (!request) return { kind: 'home' }; // purged — nothing to show
+    // Re-read the row (never trust the payload): an undecided request goes to Requests; one already decided
+    // goes where it now lives — never to a dead sheet.
+    if (request.status === 'unattended') return { kind: 'splits', tab: 'requests' };
+    if (request.status === 'accepted') return { kind: 'splits', tab: 'owe' };
+    return { kind: 'splits', tab: 'owed' }; // rejected / withdrawn: just the Splits page
+  }
+
   if (data.kind !== 'suggestion' || !data.suggestionId) return { kind: 'home' };
 
   const suggestion = getSuggestion(data.suggestionId);

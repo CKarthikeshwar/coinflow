@@ -2,6 +2,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 
 import type { Category, Suggestion, Transaction } from '@/db/schema';
 import { useAddSheetDraft, useKeypad, useSheetRegistry } from '@/stores';
+import { useSplitDraft } from '@/stores/split-draft';
 import { useToast } from '@/stores/toast';
 
 import { TransactionSheetBody } from './transaction-sheet';
@@ -17,6 +18,8 @@ const mockGetTransaction = jest.fn((..._args: unknown[]) => null as Transaction 
 const mockWriteConfirmedTransaction = jest.fn((..._args: unknown[]) => ({ transactionId: 'new-txn-id' }));
 const mockWriteEditedTransaction = jest.fn((..._args: unknown[]) => ({ transactionId: 'txn-1' }));
 const mockRouterPush = jest.fn((..._args: unknown[]) => undefined);
+const mockGetSplitForTransaction = jest.fn((..._args: unknown[]) => undefined as unknown);
+const mockPersistSplitDraft = jest.fn((..._args: unknown[]) => ({ kind: 'created' }));
 
 jest.mock('@/db/repositories/account-rules', () => ({
   getAccountRule: (...args: unknown[]) => mockGetAccountRule(...args),
@@ -29,6 +32,19 @@ jest.mock('./write-confirmed-transaction', () => ({
   writeConfirmedTransaction: (...args: unknown[]) => mockWriteConfirmedTransaction(...args),
   writeEditedTransaction: (...args: unknown[]) => mockWriteEditedTransaction(...args),
 }));
+let mockOpenShares: unknown[] = [];
+jest.mock('@/db/repositories/splits', () => ({
+  getSplitForTransaction: (...args: unknown[]) => mockGetSplitForTransaction(...args),
+  listOpenShares: () => mockOpenShares,
+}));
+const mockSettleAndAnnounce = jest.fn();
+jest.mock('../splits/settle-and-announce', () => ({ settleAndAnnounce: (...args: unknown[]) => mockSettleAndAnnounce(...args) }));
+const mockSendRequests = jest.fn(async (..._a: unknown[]) => ({ results: [], fallback: [] }));
+jest.mock('@/services/splits/send-requests', () => ({
+  sendRequests: (...a: unknown[]) => mockSendRequests(...a),
+  summarizeReport: () => 'Requests sent to 2 people',
+}));
+jest.mock('../splits/persist-split', () => ({ persistSplitDraft: (...args: unknown[]) => mockPersistSplitDraft(...args) }));
 jest.mock('expo-router', () => ({ router: { push: (...args: unknown[]) => mockRouterPush(...args) } }));
 
 function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
@@ -84,6 +100,9 @@ beforeEach(() => {
   mockWriteConfirmedTransaction.mockReset().mockReturnValue({ transactionId: 'new-txn-id' });
   mockWriteEditedTransaction.mockReset().mockReturnValue({ transactionId: 'txn-1' });
   mockRouterPush.mockReset();
+  mockGetSplitForTransaction.mockReset().mockReturnValue(undefined);
+  mockPersistSplitDraft.mockReset().mockReturnValue({ kind: 'created' });
+  useSplitDraft.getState().reset();
   useSheetRegistry.setState({ current: null, params: {}, onRequestClose: null });
   useAddSheetDraft.getState().reset();
   useKeypad.getState().reset();
@@ -249,5 +268,199 @@ describe('Edit mode', () => {
     expect(second.getByDisplayValue('Edited note')).toBeTruthy();
     expect(mockGetTransaction).toHaveBeenCalledTimes(1);
     await second.unmount();
+  });
+});
+
+describe('Split row (V2 — UI-070, IMP-089)', () => {
+  const twoPeople = [
+    { key: 'a', personId: 'p-a', name: 'Rahul', phone: '+919845897555', contactRef: null, source: 'manual' as const, amountMinor: 10_000 },
+    { key: 'b', personId: 'p-b', name: 'Priya', phone: '+919742590888', contactRef: null, source: 'manual' as const, amountMinor: 10_000 },
+  ];
+
+  function openConfirm(over: Partial<Suggestion> = {}) {
+    mockGetSuggestion.mockReturnValue(suggestion({ amountMinor: 45000, ...over }));
+    useSheetRegistry.setState({ current: 'confirm', params: { suggestionId: 'sug-1' } });
+    return render(<TransactionSheetBody mode="confirm" />);
+  }
+
+  it('is not offered in the Add sheet (a transaction must exist to be split)', async () => {
+    const { getByText, queryByText } = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent.press(getByText('5'));
+    expect(queryByText('Split…')).toBeNull();
+  });
+
+  it('is offered in Confirm for a debit with an amount, and opens the Split sheet returning to Confirm', async () => {
+    const { getByText } = await openConfirm();
+    await fireEvent.press(getByText('Split…'));
+    expect(useSheetRegistry.getState().current).toBe('split');
+    expect(useSheetRegistry.getState().params).toMatchObject({ returnTo: 'confirm', suggestionId: 'sug-1' });
+  });
+
+  it('is hidden for an income and for a ₹0 amount', async () => {
+    const { queryByText, unmount } = await openConfirm({ direction: 'credit' });
+    expect(queryByText('Split…')).toBeNull();
+    await unmount();
+    useAddSheetDraft.getState().reset();
+    const again = await openConfirm({ amountMinor: 0 });
+    expect(again.queryByText('Split…')).toBeNull();
+  });
+
+  it('shows "Split with N" and your share once a split is committed', async () => {
+    useSplitDraft.setState({ committed: twoPeople });
+    const { getByText, queryByText } = await openConfirm();
+    expect(getByText('Split with 2')).toBeTruthy();
+    expect(getByText(/250.*yours/)).toBeTruthy(); // ₹450 − ₹100 − ₹100
+    expect(queryByText('Split…')).toBeNull();
+  });
+
+  it('blocks Add and explains why when others’ shares would exceed a lowered amount (IMP-089)', async () => {
+    useSplitDraft.setState({ committed: twoPeople }); // others owe ₹200
+    const { getByText, getByRole } = await openConfirm({ amountMinor: 15_000 }); // ₹150 < ₹200
+    expect(getByText('Others’ shares are more than the amount — edit the split.')).toBeTruthy();
+    expect(getByRole('button', { name: 'Add' }).props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+    await fireEvent.press(getByRole('button', { name: 'Add' }));
+    expect(mockWriteConfirmedTransaction).not.toHaveBeenCalled();
+  });
+
+  it('saving the transaction then writes the split against the new transaction id', async () => {
+    useSplitDraft.setState({ committed: twoPeople, dirty: true });
+    const { getByRole } = await openConfirm();
+    await fireEvent.press(getByRole('button', { name: 'Add' }));
+    expect(mockWriteConfirmedTransaction).toHaveBeenCalledTimes(1);
+    expect(mockPersistSplitDraft).toHaveBeenCalledWith(
+      'new-txn-id',
+      expect.objectContaining({ committed: twoPeople, existingSplitId: null }),
+      expect.objectContaining({ direction: 'debit' }),
+    );
+    expect(useSplitDraft.getState().committed).toBeNull(); // draft cleared after save
+  });
+
+  it('a failing split write never loses the saved transaction — it tells the user instead', async () => {
+    mockPersistSplitDraft.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    useSplitDraft.setState({ committed: twoPeople, dirty: true });
+    const { getByRole } = await openConfirm();
+    await fireEvent.press(getByRole('button', { name: 'Add' }));
+    expect(mockWriteConfirmedTransaction).toHaveBeenCalledTimes(1);
+    expect(useToast.getState().message).toBe('Saved, but the split could not be saved');
+    expect(useSheetRegistry.getState().current).toBeNull(); // the sheet still closed
+  });
+
+  it('with no split, saving does not attempt to write one that is empty', async () => {
+    const { getByRole } = await openConfirm();
+    await fireEvent.press(getByRole('button', { name: 'Add' }));
+    expect(mockPersistSplitDraft).toHaveBeenCalledWith('new-txn-id', expect.objectContaining({ committed: null }), expect.anything());
+  });
+
+  it('Edit seeds the row from the existing split and saves against the same transaction', async () => {
+    mockGetTransaction.mockReturnValue(transaction({ amountMinor: 45000 }));
+    mockGetSplitForTransaction.mockReturnValue({
+      split: { id: 'sp-1' },
+      shares: [{ personId: 'p-a', amountMinor: 10_000, person: { displayName: 'Rahul', phoneDisplay: '+919845897555', contactRef: null, source: 'manual' } }],
+    });
+    useSheetRegistry.setState({ current: 'edit', params: { transactionId: 'txn-1' } });
+    const { getByText, getByRole } = await render(<TransactionSheetBody mode="edit" />);
+    expect(getByText('Split with 1')).toBeTruthy();
+    await fireEvent.press(getByRole('button', { name: 'Save' }));
+    expect(mockPersistSplitDraft).toHaveBeenCalledWith('txn-1', expect.objectContaining({ existingSplitId: 'sp-1' }), expect.anything());
+  });
+
+  it('a waived share is absorbed by you in the "yours" figure (not owed to you)', async () => {
+    mockGetTransaction.mockReturnValue(transaction({ amountMinor: 45000 }));
+    mockGetSplitForTransaction.mockReturnValue({
+      split: { id: 'sp-1' },
+      shares: [
+        { personId: 'p-a', amountMinor: 10_000, waivedAt: 5, person: { displayName: 'Rahul', phoneDisplay: '+919845897555', contactRef: null, source: 'manual' } },
+        { personId: 'p-b', amountMinor: 10_000, waivedAt: null, person: { displayName: 'Priya', phoneDisplay: '+919742590888', contactRef: null, source: 'manual' } },
+      ],
+    });
+    useSheetRegistry.setState({ current: 'edit', params: { transactionId: 'txn-1' } });
+    const { getByText } = await render(<TransactionSheetBody mode="edit" />);
+    expect(getByText(/350.*yours/)).toBeTruthy(); // ₹450 − only Priya's ₹100
+  });
+
+  it('Cancel after changing only the split asks before discarding (V-6)', async () => {
+    useSplitDraft.setState({ committed: twoPeople, dirty: true });
+    const { getByText } = await openConfirm();
+    await fireEvent.press(getByText('Cancel'));
+    expect(getByText('Discard changes?')).toBeTruthy();
+    await fireEvent.press(getByText('Discard'));
+    expect(useSplitDraft.getState().committed).toBeNull();
+  });
+});
+
+describe('V2 phase 4 — Suggested settlement in the Confirm sheet (UI-078)', () => {
+  const rahulShare = { shareId: 'sh-1', personId: 'p-a', personName: 'Rahul Mehta', remainingMinor: 45_000 };
+
+  function openCredit(over: Partial<Suggestion> = {}) {
+    mockGetSuggestion.mockReturnValue(
+      suggestion({ direction: 'credit', amountMinor: 45_000, account: 'RAHUL MEHTA', ...over }),
+    );
+    useSheetRegistry.setState({ current: 'confirm', params: { suggestionId: 'sug-1' } });
+    return render(<TransactionSheetBody mode="confirm" />);
+  }
+
+  beforeEach(() => {
+    mockOpenShares = [rahulShare];
+    mockSettleAndAnnounce.mockReset();
+  });
+  afterEach(() => {
+    mockOpenShares = [];
+  });
+
+  it('offers the match on a credit that equals one open share and names the payer', async () => {
+    const { getByText } = await openCredit();
+    expect(getByText('Looks like Rahul Mehta paying ₹450')).toBeTruthy();
+  });
+
+  it('offers nothing for a debit, an Add sheet, or a different amount', async () => {
+    const debit = await openCredit({ direction: 'debit' });
+    expect(debit.queryByText(/Looks like/)).toBeNull();
+    await debit.unmount();
+    useAddSheetDraft.getState().reset();
+
+    const other = await openCredit({ amountMinor: 30_000 });
+    expect(other.queryByText(/Looks like/)).toBeNull();
+    await other.unmount();
+
+    useAddSheetDraft.getState().reset();
+    useSheetRegistry.setState({ current: 'add', params: {} });
+    const add = await render(<TransactionSheetBody mode="add" />);
+    expect(add.queryByText(/Looks like/)).toBeNull();
+  });
+
+  it('Settle writes nothing yet — the settlement happens after Save, for the saved transaction', async () => {
+    const { getByText } = await openCredit();
+    await fireEvent.press(getByText('Settle'));
+    expect(getByText('Will settle Rahul Mehta’s share')).toBeTruthy();
+    expect(mockSettleAndAnnounce).not.toHaveBeenCalled();
+
+    await fireEvent.press(getByText('Add'));
+    expect(mockSettleAndAnnounce).toHaveBeenCalledWith(
+      { transactionId: 'new-txn-id', picks: [{ shareId: 'sh-1' }] },
+      'share',
+      new Map([['sh-1', 'Rahul Mehta']]),
+    );
+  });
+
+  it('saving without pressing Settle never settles (IMP-085), and "Not this" hides the card', async () => {
+    const first = await openCredit();
+    await fireEvent.press(first.getByText('Add'));
+    expect(mockSettleAndAnnounce).not.toHaveBeenCalled();
+    await first.unmount();
+
+    useAddSheetDraft.getState().reset();
+    const again = await openCredit();
+    await fireEvent.press(again.getByText('Not this'));
+    expect(again.queryByText(/Looks like/)).toBeNull();
+  });
+
+  it('Undo on the pending card cancels the choice, so Save settles nothing', async () => {
+    const { getByText } = await openCredit();
+    await fireEvent.press(getByText('Settle'));
+    await fireEvent.press(getByText('Undo'));
+    await fireEvent.press(getByText('Add'));
+    expect(mockSettleAndAnnounce).not.toHaveBeenCalled();
   });
 });

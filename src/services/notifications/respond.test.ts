@@ -2,10 +2,10 @@ import { getTableName, type Table } from 'drizzle-orm';
 
 import type { AccountRule, Suggestion } from '@/db/schema';
 import { getAccountRule } from '@/db/repositories/account-rules';
-import { dismissSuggestion, getSuggestion } from '@/db/repositories/suggestions';
+import { dismissSuggestion, getSuggestion, listPending } from '@/db/repositories/suggestions';
 
 import { cancelForSuggestion } from './post';
-import { handleDiscard, handleSave } from './respond';
+import { handleDiscard, handleSave, handleSaveAll } from './respond';
 
 const mockInsertedRows: unknown[] = [];
 const mockUpdates: { table: string; values: Record<string, unknown> }[] = [];
@@ -37,11 +37,13 @@ jest.mock('@/db/repositories/account-rules', () => ({ getAccountRule: jest.fn() 
 jest.mock('@/db/repositories/suggestions', () => ({
   getSuggestion: jest.fn(),
   dismissSuggestion: jest.fn(),
+  listPending: jest.fn(),
 }));
 jest.mock('./post', () => ({ cancelForSuggestion: jest.fn().mockResolvedValue(undefined) }));
 
 const getSuggestionMock = getSuggestion as jest.Mock;
 const getAccountRuleMock = getAccountRule as jest.Mock;
+const listPendingMock = listPending as jest.Mock;
 const dismissSuggestionMock = dismissSuggestion as jest.Mock;
 const cancelForSuggestionMock = cancelForSuggestion as jest.Mock;
 
@@ -191,5 +193,45 @@ describe('handleDiscard', () => {
     expect(dismissSuggestionMock).toHaveBeenCalledWith('sug-1');
     expect(mockInsertedRows).toHaveLength(0);
     expect(cancelForSuggestionMock).toHaveBeenCalledWith('sug-1');
+  });
+});
+
+describe('handleSaveAll (CR-25)', () => {
+  it('saves debits with the default category, credits uncategorized, and touches no account rule', async () => {
+    listPendingMock.mockReturnValue([
+      suggestion({ id: 's1' }),
+      suggestion({ id: 's2', direction: 'credit', normalizedKey: 'salary' }),
+    ]);
+    getAccountRuleMock.mockReturnValue(null);
+    const result = await handleSaveAll('cat-default');
+    expect(result).toEqual({ saved: 2, skipped: 0 });
+    expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ type: 'expense', categoryId: 'cat-default' }));
+    expect(mockInsertedRows[1]).toEqual(expect.objectContaining({ type: 'income', categoryId: null }));
+    expect(mockUpdates.map((u) => u.table)).toEqual(['suggestion', 'suggestion']);
+    expect(cancelForSuggestionMock).toHaveBeenCalledWith('s1');
+    expect(cancelForSuggestionMock).toHaveBeenCalledWith('s2');
+  });
+
+  it("prefers the account rule's learned category over the default", async () => {
+    listPendingMock.mockReturnValue([suggestion()]);
+    getAccountRuleMock.mockReturnValue(rule({ categoryId: 'cat-food' }));
+    await handleSaveAll('cat-default');
+    expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ categoryId: 'cat-food', note: 'Lunch' }));
+  });
+
+  it('falls back to the default when the rule has no category', async () => {
+    listPendingMock.mockReturnValue([suggestion()]);
+    getAccountRuleMock.mockReturnValue(rule({ categoryId: null }));
+    await handleSaveAll('cat-default');
+    expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ categoryId: 'cat-default' }));
+  });
+
+  it('leaves incomplete suggestions pending and counts them as skipped', async () => {
+    listPendingMock.mockReturnValue([suggestion({ id: 's1' }), suggestion({ id: 's2', amountMinor: null })]);
+    getAccountRuleMock.mockReturnValue(null);
+    const result = await handleSaveAll('cat-default');
+    expect(result).toEqual({ saved: 1, skipped: 1 });
+    expect(mockInsertedRows).toHaveLength(1);
+    expect(cancelForSuggestionMock).not.toHaveBeenCalledWith('s2');
   });
 });

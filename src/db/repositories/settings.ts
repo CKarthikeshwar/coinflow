@@ -54,7 +54,9 @@ export type SettingKey =
   // V2 (CR-17/19)
   | 'splitYourName'
   | 'widgetHideAmounts'
-  | 'widgetSnapshotAt';
+  | 'widgetSnapshotAt'
+  // CR-25
+  | 'defaultCategoryId';
 
 export function getSetting<T>(key: SettingKey | string, fallback: T): T {
   const row = db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).get();

@@ -1,0 +1,21 @@
+# V2 phase 4 (part F) — precondition: a sample request exists under "You owe" (dev button) and a debit with
+# unallocated money. Merge… → pick the payment → Settle → "Paid …" snackbar; the request moves to Show settled.
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn: "Owed to you"
+- waitForAnimationToEnd
+- tapOn: "You owe"
+- waitForAnimationToEnd
+- tapOn: "Merge…"
+- waitForAnimationToEnd
+- assertVisible: "Record payment"
+- takeScreenshot: v2p4-f1-pick-payment
+- tapOn: "Payment"
+- tapOn: "Settle"
+- assertVisible: "Paid .*request — ₹450"
+- waitForAnimationToEnd
+- assertVisible: "You don’t owe anyone."
+- tapOn: "Show settled (1)"
+- takeScreenshot: v2p4-f2-settled

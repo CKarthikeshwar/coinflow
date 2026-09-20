@@ -1,0 +1,27 @@
+# V2 phase 4 (part A) — split the existing ₹1,200 expense between You + Rahul + Priya (₹400 each).
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn: "No note"
+- tapOn: "Split…"
+- waitForAnimationToEnd
+- tapOn: "Add a number"
+- tapOn: "Name (optional)"
+- inputText: "Rahul"
+- tapOn: "10-digit mobile number"
+- inputText: "9845897555"
+- pressKey: Enter
+- tapOn: "Add a number"
+- tapOn: "Name (optional)"
+- inputText: "Priya"
+- tapOn: "10-digit mobile number"
+- inputText: "9742590888"
+- pressKey: Enter
+- tapOn: "Continue"
+- waitForAnimationToEnd
+- assertVisible: "How much each?"
+- tapOn: "Save split"
+- waitForAnimationToEnd
+- assertVisible: "Split"
+- takeScreenshot: v2p4-a-details

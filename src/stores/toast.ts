@@ -27,7 +27,7 @@ type ToastAction = { label: string; onPress: () => void };
 type ToastStore = {
   message: string | null;
   action: ToastAction | null;
-  show: (message: string, action?: ToastAction) => void;
+  show: (message: string, action?: ToastAction, durationMs?: number) => void;
   clear: () => void;
 };
 
@@ -36,13 +36,13 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 export const useToast = create<ToastStore>((set) => ({
   message: null,
   action: null,
-  show: (message, action) => {
+  show: (message, action, durationMs = TOAST_DURATION_MS) => {
     if (timer) clearTimeout(timer);
     set({ message, action: action ?? null });
     timer = setTimeout(() => {
       timer = null;
       set({ message: null, action: null });
-    }, TOAST_DURATION_MS);
+    }, durationMs);
   },
   clear: () => {
     if (timer) clearTimeout(timer);

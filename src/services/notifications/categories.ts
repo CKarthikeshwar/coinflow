@@ -34,6 +34,8 @@ import * as Notifications from 'expo-notifications';
 
 export const TXN_KNOWN_CATEGORY = 'txnKnown';
 export const TXN_NEW_CATEGORY = 'txnNew';
+/** Split requests (SPEC-implementation.md §43.4 says `split-request`; camelCase like the ids above — CR-23). */
+export const SPLIT_REQUEST_CATEGORY = 'splitRequest';
 
 const SAVE_ACTION: Notifications.NotificationAction = {
   identifier: 'SAVE',
@@ -53,6 +55,18 @@ const DISCARD_ACTION: Notifications.NotificationAction = {
   options: { opensAppToForeground: false, isDestructive: true },
 };
 
+const ACCEPT_ACTION: Notifications.NotificationAction = {
+  identifier: 'ACCEPT',
+  buttonTitle: 'Accept',
+  options: { opensAppToForeground: false },
+};
+
+const REJECT_ACTION: Notifications.NotificationAction = {
+  identifier: 'REJECT',
+  buttonTitle: 'Reject',
+  options: { opensAppToForeground: false, isDestructive: true },
+};
+
 export async function registerNotificationCategories(): Promise<void> {
   // Known account (a rule with a category) — Save · Add · Discard.
   await Notifications.setNotificationCategoryAsync(TXN_KNOWN_CATEGORY, [
@@ -62,4 +76,6 @@ export async function registerNotificationCategories(): Promise<void> {
   ]);
   // New account (no rule, or a rule with no category yet) — Add · Discard only (§31.2).
   await Notifications.setNotificationCategoryAsync(TXN_NEW_CATEGORY, [ADD_ACTION, DISCARD_ACTION]);
+  // Split request (V2, §6.21) — Accept · Reject, both headless.
+  await Notifications.setNotificationCategoryAsync(SPLIT_REQUEST_CATEGORY, [ACCEPT_ACTION, REJECT_ACTION]);
 }

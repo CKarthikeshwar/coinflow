@@ -10,7 +10,7 @@
  * - what is not allocated stays an ordinary transaction — there is no leftover step (decided).
  */
 
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 
 import { allocate } from '@/domain/settlement';
@@ -196,4 +196,48 @@ export function listSettlementsForTransaction(transactionId: string): Settlement
     .map<SettlementLine>((r) => ({ ...r.s, counterpartName: r.name, label: r.note ?? '', kind: 'request' }));
 
   return [...shareLines, ...requestLines].sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export type PaymentCandidate = {
+  id: string;
+  direction: 'credit' | 'debit';
+  amountMinor: number;
+  /** What is still unallocated (amount − Σ settlements). Always > 0. */
+  unallocatedMinor: number;
+  note: string | null;
+  account: string | null;
+  occurredAt: number;
+};
+
+/**
+ * Transactions that could still settle something — the Merge sheet's list when it starts from a share / request
+ * ("which payment settled this?", SPEC-UI-UX §6.20 as built, CR-10). A credit can settle shares people owe you,
+ * a debit can settle requests you owe; only ones with an unallocated remainder are returned, newest first.
+ */
+export function listPaymentCandidates(direction: 'credit' | 'debit', limit = 60): PaymentCandidate[] {
+  const rows = db
+    .select({
+      id: transactions.id,
+      direction: transactions.direction,
+      amountMinor: transactions.amountMinor,
+      note: transactions.note,
+      account: transactions.account,
+      occurredAt: transactions.occurredAt,
+    })
+    .from(transactions)
+    .where(and(eq(transactions.direction, direction), isNull(transactions.deletedAt)))
+    .orderBy(desc(transactions.occurredAt))
+    .all();
+  const allocated = new Map(
+    db
+      .select({ id: settlements.transactionId, total: sql<number>`coalesce(sum(${settlements.amountMinor}), 0)` })
+      .from(settlements)
+      .groupBy(settlements.transactionId)
+      .all()
+      .map((r) => [r.id, Number(r.total)] as const),
+  );
+  return rows
+    .map<PaymentCandidate>((r) => ({ ...r, unallocatedMinor: r.amountMinor - (allocated.get(r.id) ?? 0) }))
+    .filter((r) => r.unallocatedMinor > 0)
+    .slice(0, limit);
 }
