@@ -27,6 +27,9 @@ export const TXN_REVIEW_CHANNEL_ID = 'txn-review';
 /** Split requests (V2, §43.4): quieter than the transaction channel — default importance, no heads-up. */
 export const SPLIT_REQUESTS_CHANNEL_ID = 'split-requests';
 
+/** Daily "did you record today's transactions?" reminder — default importance, no heads-up. */
+export const DAILY_REMINDER_CHANNEL_ID = 'daily-reminder';
+
 export async function ensureNotificationChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync(TXN_REVIEW_CHANNEL_ID, {
@@ -47,5 +50,12 @@ export async function ensureNotificationChannel(): Promise<void> {
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
     bypassDnd: false,
     showBadge: true,
+  });
+  await Notifications.setNotificationChannelAsync(DAILY_REMINDER_CHANNEL_ID, {
+    name: 'Daily reminder',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    bypassDnd: false,
+    showBadge: false,
   });
 }

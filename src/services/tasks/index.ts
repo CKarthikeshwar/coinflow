@@ -56,6 +56,7 @@ import { AppRegistry, Platform } from 'react-native';
 import { setSetting } from '@/db/repositories/settings';
 import { ensureNotificationChannel } from '@/services/notifications/channel';
 import { registerNotificationCategories } from '@/services/notifications/categories';
+import { ensureDailyReminder } from '@/services/notifications/daily-reminder';
 import { handleDiscard, handleSave } from '@/services/notifications/respond';
 import { handleAcceptRequest, handleRejectRequest } from '@/services/notifications/respond-split';
 import { armSmsStoreTrigger } from '@/services/sms';
@@ -147,6 +148,12 @@ ensureNotificationChannel().catch((e: unknown) => {
 registerNotificationCategories().catch((e: unknown) => {
   console.warn('[tasks] registerNotificationCategories failed:', (e as Error)?.name ?? 'unknown');
 });
+// Channel must exist before the daily trigger references it.
+ensureNotificationChannel()
+  .then(ensureDailyReminder)
+  .catch((e: unknown) => {
+    console.warn('[tasks] ensureDailyReminder failed:', (e as Error)?.name ?? 'unknown');
+  });
 
 // --- Notification action responses (app-killed) -----------------------------
 TaskManager.defineTask<Notifications.NotificationTaskPayload>(

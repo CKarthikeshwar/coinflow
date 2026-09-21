@@ -30,13 +30,26 @@
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 
+import { ensureDailyReminder } from '@/services/notifications/daily-reminder';
 import { resolveNotificationTarget, type NotificationData } from '@/services/notifications/deep-link';
 import { useSheetRegistry } from '@/stores';
 
 export function NotificationRouter() {
   const response = Notifications.useLastNotificationResponse();
   const handledId = useRef<string | null>(null);
+
+  // Re-arm the daily reminder whenever the app comes to the foreground — picks up a notification
+  // permission granted after the launch-time attempt in `tasks/index.ts`. Idempotent (fixed id).
+  useEffect(() => {
+    const arm = () => ensureDailyReminder().catch(() => {});
+    arm();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') arm();
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (!response) return; // undefined (not resolved yet) or null (no response)

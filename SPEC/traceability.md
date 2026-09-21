@@ -2209,3 +2209,16 @@ Two phones: Samsung SM-S711B (Jio, +91 9390787053) and Motorola edge 60 pro (VIL
 
 Notes: a plain `pm revoke` of SEND_SMS is not a valid denial test on the Motorola — the app re-requests and it is granted without a dialog; add `pm set-permission-flags --user 0 <pkg> android.permission.SEND_SMS user-fixed`. The Motorola's number is 9742590888; 9845897555 (the earlier assumption) was an old SIM.
 
+
+### Release APK — signing and size (2026-09-21)
+
+Local `assembleRelease` builds for `v2.0.0`. No code or spec change; findings only.
+
+| Check | Result |
+|---|---|
+| Local release APK would not update the installed app | **Cause:** the `release` signing config reads `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (added by `plugins/with-android-signing.js`). With none set in the shell the APK came out signed by the Android **debug** key (`CN=Android Debug`, SHA-256 `fac61745…3b9c`), a different certificate from the installed release build, so Android refused the update |
+| Fix | Set the four variables before Gradle: path = `coinflow-release.jks` (repo root, git-ignored), alias `coinflow-release`, key password = store password. Rebuilt APK verified with `apksigner verify --print-certs`: `CN=CoinFlow, OU=CK Workforce`, SHA-256 `2719b07b…d7a9` — the release key's fingerprint (`keytool -list`). Always run this check before installing; "Android Debug" means the variables were not picked up |
+| Install over the existing app | **Not verified** — no device connected when built. If Android still reports a signature mismatch, the installed app is a debug-key build (`expo run:android`): uninstall once (wipes app data), then install |
+| APK size 117 MB | Native libraries are compiled for four ABIs: `lib/x86_64` 27 MB, `x86` 27 MB, `arm64-v8a` 26 MB, `armeabi-v7a` 18 MB (compressed); JS bundle 7.5 MB, dex ~7 MB, resources ~4 MB. Minify and resource shrinking were already on (`gradle.properties`) |
+| Size fix | `./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a` → **45 MB**, still release-signed, `lib/arm64-v8a` only. Runs on modern 64-bit phones; will not install on x86 emulators or 32-bit-only phones. Command-line only — `gradle.properties`, `app.json` and `.github/workflows/release.yml` unchanged, so CI builds are still four-ABI |
+| Open | Make arm64-only permanent (`expo-build-properties` `android.buildArchs: ["arm64-v8a"]` in `app.json`, or ABI splits) — needs a decision; it would also affect emulator and `expo run:android` builds. Store password was shared in a chat session — consider rotating it and the `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_PASSWORD` secrets |
