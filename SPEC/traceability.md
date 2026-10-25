@@ -304,7 +304,7 @@ finished (here, "needs F3's navigation tree," i.e. it's waiting on a not-yet-bui
 | IMP-003 | A single-transaction notification shows amount + direction + account. Known account → Save/Add/Discard; new account → Add/Discard only. Body tap opens Confirmation. No confidence indicator. | — | `src/services/notifications/channel.ts` · `categories.ts` · `content.ts` · `post.ts` | unit | `src/services/notifications/content.test.ts` · `post.test.ts` | Partial — content/actions/posting done; **`Add`/body-tap → Confirmation sheet needs F3's navigation tree (§28), not built yet** |
 | IMP-004 | With 2+ pending Suggestions, notifications are delivered as one group that opens the Review queue (no per-item Add/Discard on the group). | — | `src/services/notifications/post.ts` (`refreshGroupSummary`) | unit | `post.test.ts` | Partial — group-summary content/count logic done; **native OS-level stacking not available** (see note below); "opens the Review queue" needs F11, not built yet |
 | IMP-005 | Adding a Suggestion (via Confirmation or the notification's `Save`) writes the transaction, removes it from the queue, and upserts its `AccountRule`. | — | `src/services/notifications/respond.ts` (`handleSave`) | unit | `respond.test.ts` | Pass for the notification-`Save` path; the Confirmation-sheet path is F3 |
-| IMP-007 | Dismissing a Suggestion (queue or notification) removes it permanently and adds nothing. | — | `src/services/notifications/respond.ts` (`handleDiscard`) | unit | `respond.test.ts` | Pass for the notification-`Discard` path; the queue-swipe path is F11 |
+| IMP-007 | Dismissing a Suggestion (queue or notification) removes it **from view** permanently and adds nothing to the ledger. *(2026-09-28, CR-30: implemented as a tombstone, not a row DELETE — a hard delete let the SMS-reconcile sweep resurrect it from the still-present SMS within 48h; purged ~4 days later.)* | — | `src/services/notifications/respond.ts` (`handleDiscard`), `db/repositories/suggestions.ts` | unit | `respond.test.ts`, `suggestions-real.test.ts` | Pass — the resurrection bug (dismiss → reopen app → item is back) is now covered directly |
 | IMP-009 | Suggestions and their notifications survive an app kill / device reboot. | — | `src/services/notifications/reconcile.ts` | unit (gating only) | `sms-ingest.test.ts` (asserts `reconcileNotifications` is called) | Partial — logic built; **on-device kill/reboot verification not automated**, owed manually |
 
 **Known platform/library gap (discovered during implementation, not a product decision):** the
@@ -396,7 +396,7 @@ once several pieces of UI are wired together, which a narrow unit test can't see
 | IMP-003 | (continued from F2) Review Queue lists every pending Suggestion with the known/new action set. | UI-023/024 | `src/app/review-queue.tsx` · `src/features/detection/suggestion-card.tsx` | RNTL | `suggestion-card.test.tsx` | Partial — card + screen built; no RNTL test of the screen itself (DB/notifications mocking owed) |
 | IMP-004 | (continued from F2) "N transactions to review" now actually opens the Review Queue. | — | `src/features/home/action-strip.tsx`, Home → `router.push('/review-queue')` | — | — | Pass (manual code review; no navigation test written) |
 | IMP-005 | (continued from F2) Review Queue's inline **Save** writes the transaction the same way the notification's Save does. | — | `review-queue.tsx` reuses `respond.ts`'s `handleSave` directly (§17.4b shared path, exactly as spec'd) | unit (via `respond.test.ts`, already covers `handleSave` itself) | — | Pass |
-| IMP-007 | (continued from F2) Review Queue dismiss removes a Suggestion permanently, adds nothing. | — | `review-queue.tsx` reuses `respond.ts`'s `handleDiscard`; "Dismiss all" → `dismissAllPending` + `cancelAllSuggestionNotifications` | unit (`handleDiscard` via `respond.test.ts`) | — | Pass for per-row dismiss; "Dismiss all" has no dedicated test |
+| IMP-007 | (continued from F2) Review Queue dismiss removes a Suggestion from view permanently (tombstone, CR-30), adds nothing to the ledger. | — | `review-queue.tsx` reuses `respond.ts`'s `handleDiscard`; "Dismiss all" → `dismissAllPending` + `cancelAllSuggestionNotifications` | unit (`handleDiscard` via `respond.test.ts`; `dismissAllPending` via `suggestions-real.test.ts`) | — | Pass for per-row dismiss and "Dismiss all" |
 
 **Simplification vs. spec (documented, not silent):** the card's "overflow → Dismiss" is a direct
 tap-to-dismiss icon button, not a swipe gesture. Same functional outcome, simpler to build
@@ -505,7 +505,7 @@ discard-guard, write call). `sheet-host.tsx` now also routes `SheetName:'add'` t
 | IMP | Criterion | UI-0xx | Component/service | Test kind | Test id / file | Status |
 |---|---|---|---|---|---|---|
 | IMP-010 | Add validation — amount empty/0 keeps **Add** disabled with an inline hint; no other field is required. | UI-030/032 | `transaction-sheet.tsx` (`addDisabled`) | — | — | Pass by construction — no dedicated test |
-| IMP-011 | Income transactions store no category, regardless of what was selected before switching direction. | — | `write-confirmed-transaction.ts` (shared with F3) | unit | `write-confirmed-transaction.test.ts` | Pass |
+| IMP-011 | ~~Income transactions store no category~~ — **superseded by CR-28 (2026-09-26): income can have a category (income categories).** | — | `write-confirmed-transaction.ts` (shared with F3) | unit | `write-confirmed-transaction.test.ts` | Pass |
 | IMP-012 | `type` is always stored (`expense`/`income`), derived from direction. | — | `write-confirmed-transaction.ts` (shared with F3) | unit | `write-confirmed-transaction.test.ts` | Pass |
 | IMP-013 | Saving with a non-empty account upserts its `AccountRule` (creates or bumps `hitCount`), same as Confirm. | — | `write-confirmed-transaction.ts` (shared with F3) | unit | `write-confirmed-transaction.test.ts` | Pass |
 
@@ -2224,3 +2224,94 @@ Local `assembleRelease` builds for `v2.0.0`. No code or spec change; findings on
 | Size fix — chosen | **Option 1.** `./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a` → **45.1 MB (43.0 MiB)**, still release-signed, `lib/arm64-v8a` only. Both test phones (Samsung, Motorola) are arm64. Runs on modern 64-bit phones; will not install on x86 emulators or 32-bit-only phones. Command-line only — `gradle.properties`, `app.json` and `.github/workflows/release.yml` unchanged, so CI builds are still four-ABI. The first estimate (~30 MB) counted only the largest files; dex (~13 MB), the JS bundle (7.5 MB), resources and assets are the same for every ABI |
 | Build fails if the signing variables are unset | The plugin falls back to a non-existent `release.keystore`, so `assembleRelease` stops at `:app:packageRelease` with "specifies file `android\app\release.keystore` which doesn't exist" and leaves the previous APK in `outputs/` untouched — check its timestamp before installing. Intended (fail loudly, `plugins/with-android-signing.js`) |
 | Open | Make arm64-only permanent (`expo-build-properties` `android.buildArchs: ["arm64-v8a"]` in `app.json`, or ABI splits) — needs a decision; it would also affect emulator and `expo run:android` builds. Store password was shared in a chat session — consider rotating it and the `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_PASSWORD` secrets |
+
+
+### Income categories (2026-09-26) — CR-28 / UI-UX CR-17
+
+Built in unit tests, then checked on the Samsung (release build, 2026-09-26): migration 0003 ran on the real database with existing data intact; the Confirm sheet's picker offered only the 7 income categories for a credit; Settings showed both default rows; Categories listed all 17 (after the CR-17 scroll fix); Analytics showed "Where it came from". **Not yet checked on a device:** saving an income with a category, the account-rule editor's two lists, creating an income category.
+
+| Requirement | Where | Tests | Status |
+|---|---|---|---|
+| Categories are expense or income; old ones stay expense (migration 0003, additive) | `schema.ts`, `migrations/0003_income_categories.sql` | `migration-v3.test.ts` (real SQLite: old rows intact, FK set-null) | Pass (unit) |
+| 7 income defaults incl. Pocket money; existing installs get them, duplicate names skipped | `seed-data.ts`, `seed.ts` | `seed.test.ts`, `seed-real.test.ts` | Pass (unit) |
+| Add / Confirm / Edit: category row for income; picker filtered by kind; switching direction drops a wrong-kind pick | `transaction-sheet.tsx`, `category-picker-sheet.tsx` | `transaction-sheet.test.tsx`, `category-picker-sheet.test.tsx` | Pass (unit) |
+| Income category is stored (supersedes IMP-011) | `transactions.ts`, `write-confirmed-transaction.ts` | `transactions.test.ts`, `write-confirmed-transaction.test.ts` | Pass (unit) |
+| Accounts remember an expense AND an income category | `account-rules.ts`, `categorize.ts`, editor + row | `account-rules.test.ts`, `categorize.test.ts`, `account-rule-editor-sheet.test.tsx`, `account-rule-row.test.tsx` | Pass (unit) |
+| Save / Save all use the direction's category and default; default income category setting | `respond.ts`, `default-category.tsx`, `settings.tsx`, `review-queue.tsx` | `respond.test.ts`, `default-category.test.tsx`, `settings.test.tsx` | Pass (unit) |
+| One combined Categories list with Expense / Income tags; type chosen on create | `categories.tsx`, `category-editor-sheet.tsx` | `categories.test.tsx`, `category-editor-sheet.test.tsx` | Pass (unit) |
+| Cards / Details show the income category; Uncategorized (Home count, filter) includes income | `transaction-card.tsx`, `transaction/[id].tsx`, `analytics.ts`, `transactions.ts` | `transaction-card.test.tsx`, `[id].test.tsx` | Pass (unit) |
+| Analytics "Where it came from" | `analytics.ts`, `category-breakdown.tsx`, `analytics.tsx` | `analytics.test.ts` (real SQL), `category-breakdown.test.tsx`, `analytics.test.tsx` | Pass (unit) |
+
+
+### Review fixes (2026-09-26) — CR-29 / UI-UX CR-19
+
+| Fix | Where | Tests | Status |
+|---|---|---|---|
+| Own account ("to your account XXX672", masked numbers) is never the counterparty; footer ignored; NEFT "by Sender" | `domain/parser/extract.ts` | corpus `own-account-*`, `footer-to-is-not-a-payee`; checked against the phone's 774 SMS | Pass (unit) |
+| Upgrade seeding never re-adds a deleted default; new rows appended after existing ones | `db/seed.ts`, `db/seed-data.ts` (`since`) | `seed-real.test.ts` | Pass (unit) |
+| Pending category pick applied on Save / Cancel; never onto a closed draft | `category-picker-sheet.tsx`, `transaction-sheet.tsx` | `category-picker-sheet.test.tsx` | Pass (unit) |
+| Home Spending `− ₹…`; balance thin space; no tag on Uncategorized | `(tabs)/index.tsx`, `balance-hero.tsx`, `categories.tsx` | `index.test.tsx`, `categories.test.tsx` | Pass (unit) |
+
+Not changed (by request): duplicate SMS across Canara sender IDs, the inexact reminder window, the install-marker clamp, shared note across directions, "Dismiss all" clearing every notification, the group-notification second tap.
+
+
+### Dismiss-resurrection bug (2026-09-28) — CR-30
+
+Confirmed on the Samsung: two suggestions dismissed via "Dismiss all" (both within 48h) reappeared on the next
+app open. Root cause and fix verified against real in-memory SQLite (`suggestions-real.test.ts`) reproducing the
+exact sequence: insert → dismiss → simulate the reconcile sweep's re-ingest of the same SMS → assert no new
+pending row and `hasDedupeKey` still blocks it. **Not yet re-verified on-device** — needs a release build; the
+migration runs on the real database (with the two currently-live pending suggestions) at first launch.
+
+
+### Usability batch (2026-10-25) — CR-31 / UI-UX CR-20
+
+| Change | Where | Tests | Status |
+|---|---|---|---|
+| Note autocomplete (prefix, case-insensitive, most-used first) | `transactions.ts` `searchNotesByPrefix`, `transaction-sheet.tsx` | `note-suggestions.test.ts` (real SQLite), `transaction-sheet.test.tsx` | Pass (unit) |
+| Minute step 1; type hour / minute on the app keypad, hour → minute auto-advance | `domain/time-entry.ts`, `ui/date-time-picker.tsx`, `transaction-sheet.tsx` | `time-entry.test.ts`, `date-time-picker.test.tsx`, `transaction-sheet.test.tsx` | Pass (unit) |
+| Clearer income-category icons; v1/v2 installs refreshed unless the user changed the icon | `seed-data.ts` (`SEED_VERSION` 3, `ICON_REFRESH_V3`), `seed.ts`, `ui/icon.tsx` | `seed-real.test.ts` | Pass (unit) |
+| Splits kept just for tracking: name-only people, Send by SMS / Just track, "Tracking only" | `split-sheet.tsx`, `persons.ts`, `split-card.tsx` | `split-sheet.test.tsx`, `persons.test.ts`, `split-card.test.ts` | Pass (unit) |
+| Keypad only while typing the amount or a time | `transaction-sheet.tsx`, `ui/text-field.tsx`, `ui/amount-input.tsx` | `transaction-sheet.test.tsx` | Pass (unit) |
+| Toast above the tab bar, opaque; details heading = note → account → none | `ui/toast.tsx`, `transaction/[id].tsx` | `[id].test.tsx` | Pass (unit) |
+| "This date is in the future" only for a real future date (was on every Add) | `transaction-sheet.tsx` | `transaction-sheet.test.tsx` | Pass (unit) |
+
+**Not yet checked on a device** — needs a release build; the seed-v3 icon refresh runs on the real database at first launch.
+
+**On-device check of CR-31 (2026-10-25, Samsung, release build):** Pass — fresh Add opens with the keypad on the amount and no future hint; another
+control puts the keypad away; note suggestions appear case-insensitively ("MO" → Momos, Momos party); typing 1-8-0-7 on the time gives 18:07 with
+the hour → minute hand-off; details with no note show no heading; existing income categories got the new icons; Split → contact → Continue shows
+*Send by SMS / Just track* and Just track turns the button into *Save split* (cancelled, nothing saved). **Found → CR-32:** note field and suggestions
+hidden behind the keyboard; calendar 8 days per row; *Add a person* below the contact list. **Not checked:** the save toast (needs a real save).
+
+**On-device check of CR-32 (2026-10-25):** Pass — focusing Note scrolls it above the keyboard with its suggestions visible, and tapping one fills
+the note; *Add a person* is under the search box. The calendar's ⅐-width fix showed 6 days per row instead of 8 — replaced by week rows
+(`monthWeeks`, tested). Re-checked on the 21:48 build: Pass — 7 days per row, October 2026 starts 28 Sep–4 Oct, 25 Oct under Sunday.
+
+### Toast polish (2026-10-25) — CR-33 / UI-UX CR-21
+
+| Change | Where | Tests | Status |
+|---|---|---|---|
+| Save toast fades + rises in (340 ms), fades out (280 ms), stays 1 s | `ui/toast.tsx`, `stores/toast.ts` | typecheck / lint only (no component test — animation is native-driven) | Built — **not yet checked on a device** |
+
+### My accounts, balances & transfers — SPEC ONLY (2026-10-25) — CR-34 / UI-UX CR-22
+
+| ID | Requirement | Spec | Phase | Status |
+|---|---|---|---|---|
+| UI-101 | "Paid to / from" and "Merchant rules" relabels | UI-UX §6.25 | A | Specified |
+| UI-102 | Accounts under payment methods; **Paid from** chips | §6.25, impl §46.8 | B | Specified |
+| UI-103 | My accounts page + Add/Edit account sheet, total balance | §6.25, impl §46.9 | A | Specified |
+| UI-104 | Accounts created automatically from SMS (+ Review card) | §6.25, impl §46.5 | A | Specified |
+| UI-105 | Manual Transfer in the Add sheet | §6.25, impl §46.6 | B | Specified |
+| UI-106 | Auto-linked transfers, "Looks like a transfer?", Unlink | §6.25, impl §46.3/§46.6 | C | Specified |
+| UI-107 | "Needs a look" (unrecorded money) | §6.25, impl §46.3 `reconcile` | D | Specified |
+| UI-108 | Credit cards: bill = transfer, due-date reminder | §6.25, impl §46.4/§46.10 | C/E | Specified |
+| UI-109 | Home total, list meta, filter, notification line, Balances widget | §6.25, impl §46.10 | B/D/E | Specified (widget needs a prototype first) |
+| IMP-105 | Migration `0005_my_accounts` (`my_account`, `account_balance`, `transaction.accountId/transferPeerId`, `suggestion.accountId`) | impl §46.2 | A | Specified |
+| IMP-106 | Domain: account-key, balance, reconcile, transfers, card-bill | §46.3 | A–D | Specified |
+| IMP-107 | Parser: own account, balance, due date, `balance` result variant | §46.4 | A/D | Specified |
+| IMP-108 | Ingest: resolve / auto-create account, snapshots, idempotent sweep | §46.5 | A/D | Specified |
+| IMP-109 | Repositories + invariants + CSV columns | §46.6/§46.7 | A–C | Specified |
+| IMP-110 | Card-bill reminder + widget schema v2 | §46.10 | E | Specified |
+
+**Nothing in this section is built.** Open questions for the owner are listed in impl §46.12.

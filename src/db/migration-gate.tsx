@@ -22,7 +22,8 @@
  *     ↓ (while pending: renders null, native splash stays up)
  *   migrations succeed
  *     ↓
- *   one-time effect: seedDatabase() → purge() → isFtsAvailable() → armCrashReporting(...)
+ *   one-time effect: seedDatabase() → ensureInstallMarker() → purge() → isFtsAvailable() →
+ *     armCrashReporting(...)
  *     ↓
  *   renders `children` — the real app takes over
  *
@@ -51,7 +52,7 @@ import { db } from './client';
 import { isFtsAvailable } from './fts';
 import migrationsBundle from './migrations/migrations';
 import { purge } from './maintenance';
-import { getSetting } from './repositories/settings';
+import { ensureInstallMarker, getSetting } from './repositories/settings';
 import { seedDatabase } from './seed';
 
 const migrations = migrationsBundle as unknown as Parameters<typeof useMigrations>[1];
@@ -66,6 +67,7 @@ export function MigrationGate({ children }: { children: ReactNode }) {
     ran.current = true;
     try {
       seedDatabase();
+      ensureInstallMarker();
       purge();
       isFtsAvailable(); // warm the probe before the first search query
     } catch (e) {

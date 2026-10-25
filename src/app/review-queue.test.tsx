@@ -72,6 +72,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     dedupeKey: 'dedupe-1',
     status: 'pending',
     confirmedTransactionId: null,
+    dismissedAt: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
@@ -163,7 +164,7 @@ describe('Save all (CR-12)', () => {
     expect(getByText('Save 2 transactions?')).toBeTruthy();
     const saveTexts = getAllByText('Save all');
     await fireEvent.press(saveTexts[saveTexts.length - 1]);
-    expect(mockHandleSaveAll).toHaveBeenCalledWith('cat-food');
+    expect(mockHandleSaveAll).toHaveBeenCalledWith({ expense: 'cat-food', income: null });
   });
 });
 

@@ -12,6 +12,7 @@ const mockStep = jest.fn();
 
 let mockPeriod: Period;
 let mockSummary: { spentMinor: number; incomeMinor: number; error: Error | undefined; updatedAt: number | undefined };
+let mockIncomeRows: unknown[] = [];
 let mockBreakdown: { rows: unknown[]; error: Error | undefined; updatedAt: number | undefined };
 let mockDaily: {
   series: unknown[];
@@ -35,6 +36,8 @@ jest.mock('@/db/repositories/settings', () => ({ getSetting: (...args: unknown[]
 jest.mock('@/db/repositories/analytics', () => ({
   usePeriodSummary: () => mockSummary,
   useCategoryBreakdown: () => mockBreakdown,
+  // CR-28 — shares the loaded/error state of the main breakdown; only the rows differ
+  useIncomeBreakdown: () => ({ ...mockBreakdown, rows: mockIncomeRows }),
   useDailySeries: () => mockDaily,
   useLargestExpenses: () => mockLargest,
 }));
@@ -67,7 +70,8 @@ jest.mock('@/features/analytics/mean-median-tile', () => ({
   MeanMedianTile: (p: { label: string; valueMinor: number }) => mockTextStub(`MeanMedianTile:${p.label}`)({ valueMinor: p.valueMinor }),
 }));
 jest.mock('@/features/analytics/category-breakdown', () => ({
-  CategoryBreakdown: (p: { rows: unknown[] }) => mockTextStub('CategoryBreakdown')({ length: p.rows.length }),
+  CategoryBreakdown: (p: { rows: unknown[]; kind?: string }) =>
+    mockTextStub(p.kind === 'income' ? 'IncomeBreakdown' : 'CategoryBreakdown')({ length: p.rows.length }),
 }));
 jest.mock('@/features/analytics/daily-chart', () => ({
   DailyChart: (p: { mean: number }) => mockTextStub('DailyChart')({ mean: p.mean }),
@@ -84,6 +88,7 @@ beforeEach(() => {
   mockPeriod = monthPeriod(new Date(2026, 8, 15).getTime());
   mockSummary = { spentMinor: 0, incomeMinor: 0, error: undefined, updatedAt: undefined };
   mockBreakdown = { rows: [], error: undefined, updatedAt: undefined };
+  mockIncomeRows = [];
   mockDaily = {
     series: [],
     yMax: 1,
@@ -157,4 +162,14 @@ it('passes the period label through to PeriodControl', async () => {
   markLoaded();
   const { getByText } = await render(<AnalyticsScreen />);
   expect(getByText(`PeriodControl:${mockPeriod.label}`)).toBeTruthy();
+});
+
+it('shows the income breakdown card only when there is income in the period (CR-28)', async () => {
+  markLoaded();
+  const { queryByText, rerender } = await render(<AnalyticsScreen />);
+  expect(queryByText(/^IncomeBreakdown/)).toBeNull();
+
+  mockIncomeRows = [{ categoryId: 'cat-salary', amountMinor: 100000, n: 1 }];
+  await rerender(<AnalyticsScreen />);
+  expect(queryByText('IncomeBreakdown:1')).toBeTruthy();
 });

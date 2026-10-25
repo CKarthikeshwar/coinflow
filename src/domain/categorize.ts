@@ -33,7 +33,7 @@
  * matching or a default category here, that would go against a deliberate product decision.
  */
 
-import type { AccountRule, PaymentMethod } from '@/db/schema';
+import type { AccountRule, Category, CategoryAppliesTo, Direction, PaymentMethod } from '@/db/schema';
 
 export type ResolvedCategory = {
   categoryId: string | null;
@@ -45,16 +45,33 @@ export type ResolvedCategory = {
  * §25.1 — on detection / autocomplete pick. `null` key (no parsed/typed account) always
  * stays Uncategorized with a blank note — never guessed (`idea.md` §7).
  */
-export function resolveCategoryForAccount(rule: AccountRule | null): ResolvedCategory {
+export function resolveCategoryForAccount(
+  rule: AccountRule | null,
+  direction: Direction = 'debit',
+): ResolvedCategory {
   if (!rule) return { categoryId: null, note: null, paymentMethod: null };
-  return { categoryId: rule.categoryId, note: rule.lastNote, paymentMethod: rule.lastPaymentMethod };
+  return { categoryId: ruleCategoryFor(rule, direction), note: rule.lastNote, paymentMethod: rule.lastPaymentMethod };
 }
 
 /**
- * §25.1 notification/queue action-set rule: a rule with a non-null `categoryId` **or** a
- * non-null `lastNote` counts as "known" (gets one-tap `Save`); otherwise "new".
+ * CR-28 — an account remembers one *expense* category (`categoryId`) and one *income* category
+ * (`incomeCategoryId`), because the same person can both be paid by you and pay you back.
  */
-export function isKnownAccountRule(rule: AccountRule | null): boolean {
+export function ruleCategoryFor(rule: AccountRule, direction: Direction): string | null {
+  return direction === 'credit' ? rule.incomeCategoryId : rule.categoryId;
+}
+
+/**
+ * §25.1 notification/queue action-set rule: a rule with a remembered category for this direction
+ * (CR-28: expense category for a debit, income category for a credit) **or** a non-null `lastNote`
+ * counts as "known" (gets one-tap `Save`); otherwise "new".
+ */
+export function isKnownAccountRule(rule: AccountRule | null, direction: Direction = 'debit'): boolean {
   if (!rule) return false;
-  return rule.categoryId !== null || rule.lastNote !== null;
+  return ruleCategoryFor(rule, direction) !== null || rule.lastNote !== null;
+}
+
+/** CR-28 — the categories the Add / Confirm picker offers for a transaction of this kind (order preserved). */
+export function categoriesFor(list: Category[], appliesTo: CategoryAppliesTo): Category[] {
+  return list.filter((c) => c.appliesTo === appliesTo);
 }

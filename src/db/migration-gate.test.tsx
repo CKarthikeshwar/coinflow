@@ -9,6 +9,7 @@ const mockSeedDatabase = jest.fn();
 const mockPurge = jest.fn();
 const mockIsFtsAvailable = jest.fn();
 const mockGetSetting = jest.fn();
+const mockEnsureInstallMarker = jest.fn();
 const mockArmCrashReporting = jest.fn();
 const mockLogWarn = jest.fn();
 const mockLogError = jest.fn();
@@ -22,7 +23,10 @@ jest.mock('./client', () => ({ db: {} }));
 jest.mock('./fts', () => ({ isFtsAvailable: () => mockIsFtsAvailable() }));
 jest.mock('./migrations/migrations', () => ({}));
 jest.mock('./maintenance', () => ({ purge: () => mockPurge() }));
-jest.mock('./repositories/settings', () => ({ getSetting: (...args: unknown[]) => mockGetSetting(...args) }));
+jest.mock('./repositories/settings', () => ({
+  getSetting: (...args: unknown[]) => mockGetSetting(...args),
+  ensureInstallMarker: (...args: unknown[]) => mockEnsureInstallMarker(...args),
+}));
 jest.mock('./seed', () => ({ seedDatabase: () => mockSeedDatabase() }));
 jest.mock('@/lib/log', () => ({
   log: { warn: (...args: unknown[]) => mockLogWarn(...args), error: (...args: unknown[]) => mockLogError(...args) },
@@ -58,6 +62,7 @@ it('runs seed + purge once migrations succeed, then renders children', async () 
   );
   expect(await findByText('hello')).toBeTruthy();
   expect(mockSeedDatabase).toHaveBeenCalledTimes(1);
+  expect(mockEnsureInstallMarker).toHaveBeenCalledTimes(1);
   expect(mockPurge).toHaveBeenCalledTimes(1);
   expect(mockIsFtsAvailable).toHaveBeenCalledTimes(1);
 });

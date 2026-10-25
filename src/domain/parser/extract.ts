@@ -192,29 +192,78 @@ export function extractAccount(
   const vpa = body.match(new RegExp(VPA_SOURCE, 'i'));
   if (vpa) return { raw: vpa[0], normalizedKey: normalizeAccount(vpa[0]) };
 
+  // CR-29: names are only looked for before the bank's footer ("Total Avail.bal …", "Dial 1930 to report cyber
+  // fraud", "Not you? SMS BLOCK…") — once "to your account XXX672" is skipped, the footer's "to report cyber fraud"
+  // would otherwise be taken as the counterparty.
+  const scope = beforeFooter(body);
+
+  // CR-29: a NEFT/IMPS credit names the payer as "… towards NEFT by Sender <NAME>, IFSC …". Checked before the
+  // `to|towards` rule, which would otherwise swallow "NEFT by Sender …" up to the next full stop.
+  if (direction === 'credit') {
+    const bySender = scope.match(/\bby\s+sender\s+([^,.;]+?)(?=[,.;]|\s+(?:ifsc|on|ref|upi|a\/c)\b|$)/i);
+    if (bySender?.[1]?.trim() && !isOwnAccountRef(bySender[1])) {
+      const raw = trimTrailingPunctuation(bySender[1].trim());
+      return { raw, normalizedKey: normalizeAccount(raw) };
+    }
+  }
+
   // The negative lookahead guards against "credited/debited to A/c 1234…" — "to" introducing
   // the user's own account, not a counterparty — which would otherwise swallow it as a name.
-  const toAt = body.match(
-    /\b(?:to|at|towards|for|in favour of)\s+(?!(?:on|ref|upi|a\/c)\b)([^.;]+?)(?=[.;]|\s+(?:on|ref|upi|a\/c)\b|$)/i,
+  // CR-29: other ways of naming the user's own account ("to your account XXX672", "to XXX672") are
+  // skipped by `isOwnAccountRef`, and the search moves on to the next candidate instead of giving up.
+  const toAt = firstCounterparty(
+    scope,
+    /\b(?:to|at|towards|for|in favour of)\s+(?!(?:on|ref|upi|a\/c)\b)([^.;]+?)(?=[.;]|\s+(?:on|ref|upi|a\/c)\b|$)/gi,
   );
-  if (toAt?.[1]?.trim()) {
-    const raw = trimTrailingPunctuation(toAt[1].trim());
-    return { raw, normalizedKey: normalizeAccount(raw) };
-  }
+  if (toAt) return { raw: toAt, normalizedKey: normalizeAccount(toAt) };
 
   const upiRef = extractFromUpiRef(body);
   if (upiRef) return { raw: upiRef, normalizedKey: normalizeAccount(upiRef) };
 
   if (direction === 'credit') {
-    const from = body.match(
-      /\bfrom\s+(?!(?:on|ref|upi|a\/c)\b)([^.;]+?)(?=[.;]|\s+(?:on|ref|upi|a\/c)\b|$)/i,
+    const from = firstCounterparty(
+      scope,
+      /\bfrom\s+(?!(?:on|ref|upi|a\/c)\b)([^.;]+?)(?=[.;]|\s+(?:on|ref|upi|a\/c)\b|$)/gi,
     );
-    if (from?.[1]?.trim()) {
-      const raw = trimTrailingPunctuation(from[1].trim());
-      return { raw, normalizedKey: normalizeAccount(raw) };
-    }
+    if (from) return { raw: from, normalizedKey: normalizeAccount(from) };
   }
 
+  return null;
+}
+
+/**
+ * CR-29 — true when a captured "name" is really the user's own account, not a counterparty: "your account XXX672",
+ * "your a/c no. XX9672", "account XX12", or a bare masked number ("XXX672", "**1234"). Seen in real Canara Bank SMS
+ * ("has been DEBITED to your account XXX672 on …") — without this, every such message got the same "account" and
+ * shared one account rule.
+ */
+export function isOwnAccountRef(raw: string): boolean {
+  const s = raw.trim().toLowerCase();
+  return (
+    /^(?:your\s+)?(?:account|acct|a\/c|ac)\b/.test(s) ||
+    /^your\b/.test(s) ||
+    /^[x*]{2,}\d+$/.test(s.replace(/\s+/g, ''))
+  );
+}
+
+/**
+ * CR-29 — the part of the SMS before the bank's footer (balance line, fraud helpline, "Not you?", SMS-block
+ * instructions). Counterparty names always come before these; the footer only holds boilerplate like
+ * "Dial 1930 to report cyber fraud" or "SMS BLOCKUPI to 99…", whose "to …" is not a payee.
+ */
+export function beforeFooter(body: string): string {
+  const footer = body.search(
+    /\b(?:total\s+)?avail(?:able)?\.?\s*bal|\bavl\.?\s*bal|\bdial\s+\d{3,}|\bnot\s+you\b|\bsms\s+block/i,
+  );
+  return footer === -1 ? body : body.slice(0, footer);
+}
+
+/** The first capture of a global `pattern` that is a real counterparty (non-empty, not the user's own account). */
+function firstCounterparty(body: string, pattern: RegExp): string | null {
+  for (const m of body.matchAll(pattern)) {
+    const raw = m[1]?.trim();
+    if (raw && !isOwnAccountRef(raw)) return trimTrailingPunctuation(raw);
+  }
   return null;
 }
 

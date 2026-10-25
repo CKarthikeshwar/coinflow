@@ -17,6 +17,7 @@ function category(overrides: Partial<Category> = {}): Category {
     name: 'Food',
     icon: 'utensils',
     kind: 'default',
+    appliesTo: 'expense',
     isProtected: true,
     order: 1,
     createdAt: 0,
@@ -79,5 +80,18 @@ it('tapping the Uncategorized row navigates with ?uncategorized=1', async () => 
   const rows = [{ categoryId: null, amountMinor: 10000, n: 4 }];
   const { getByText } = await render(<CategoryBreakdown rows={rows} categoryById={new Map()} period={period} />);
   await fireEvent.press(getByText('Uncategorized'));
-  expect(mockRouterPush).toHaveBeenCalledWith(`/transactions?uncategorized=1&from=${period.startMs}&to=${period.endMsExclusive}`);
+  expect(mockRouterPush).toHaveBeenCalledWith(`/transactions?uncategorized=1&type=expense&from=${period.startMs}&to=${period.endMsExclusive}`);
+});
+
+it('the income card is titled "Where it came from" and its Uncategorized row filters to income (CR-28)', async () => {
+  const rows = [{ categoryId: null, amountMinor: 5000, n: 2 }];
+  const { getByText, queryByText } = await render(
+    <CategoryBreakdown kind="income" rows={rows} categoryById={new Map()} period={period} />,
+  );
+  expect(getByText('Where it came from')).toBeTruthy();
+  expect(queryByText('Where it went')).toBeNull();
+  await fireEvent.press(getByText('Uncategorized'));
+  expect(mockRouterPush).toHaveBeenCalledWith(
+    `/transactions?uncategorized=1&type=income&from=${period.startMs}&to=${period.endMsExclusive}`,
+  );
 });

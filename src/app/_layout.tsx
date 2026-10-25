@@ -23,6 +23,7 @@
  *                 UndoHost           — the delete-undo snackbar
  *                 ToastHost          — the save-confirmation toast
  *                 NotificationRouter — routes a notification tap to a screen/sheet
+ *                 WidgetLinkRouter   — routes a cold-start widget tap to a screen/sheet
  *             AnimatedSplashOverlay  — sibling to AppBackground; covers everything until ready
  *
  * IMPORTANT
@@ -54,6 +55,7 @@ import { RootErrorBoundary } from '@/features/app-shell/root-error-boundary';
 import { RootNavigator } from '@/features/app-shell/root-navigator';
 import { SheetHost } from '@/features/app-shell/sheet-host';
 import { SmsReconciler } from '@/features/app-shell/sms-reconciler';
+import { WidgetLinkRouter } from '@/features/app-shell/widget-link-router';
 import { WidgetSync } from '@/features/app-shell/widget-sync';
 import { ToastHost } from '@/features/app-shell/toast-host';
 import { UndoHost } from '@/features/transactions/undo-host';
@@ -81,6 +83,7 @@ export default function RootLayout() {
                   <UndoHost />
                   <ToastHost />
                   <NotificationRouter />
+                  <WidgetLinkRouter />
                   <SmsReconciler />
                   <WidgetSync />
                 </BottomSheetModalProvider>

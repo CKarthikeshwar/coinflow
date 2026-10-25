@@ -15,7 +15,7 @@ describe('memory-db test harness', () => {
     ]) {
       expect(tables).toContain(t);
     }
-    expect(migrationTags().at(-1)).toBe('0002_v2_splits');
+    expect(migrationTags().at(-1)).toBe('0004_dismissed_suggestion_tombstone');
   });
 
   it('round-trips typed rows through Drizzle (insert / select / update / delete)', () => {

@@ -43,14 +43,17 @@ export type CategoryBreakdownProps = {
   rows: BreakdownRow[];
   categoryById: Map<string, Category>;
   period: Period;
+  /** CR-28 — `'income'` renders the "Where it came from" card. Defaults to the spending card. */
+  kind?: 'expense' | 'income';
 };
 
-export function CategoryBreakdown({ rows, categoryById, period }: CategoryBreakdownProps) {
+export function CategoryBreakdown({ rows, categoryById, period, kind = 'expense' }: CategoryBreakdownProps) {
+  const title = kind === 'income' ? 'Where it came from' : 'Where it went';
   if (rows.length === 0) {
     return (
       <Card style={styles.card}>
         <ThemedText type="label" themeColor="text3">
-          Where it went
+          {title}
         </ThemedText>
         <ThemedText type="body" themeColor="text3" style={styles.empty}>
           Nothing recorded for this period.
@@ -65,15 +68,19 @@ export function CategoryBreakdown({ rows, categoryById, period }: CategoryBreakd
 
   const openRow = (row: BreakdownRow) => {
     const range = `from=${period.startMs}&to=${period.endMsExclusive}`;
+    // `type` keeps "Fix N" consistent with the count: Uncategorized now spans expenses AND income (CR-28).
+    const type = kind === 'income' ? 'income' : 'expense';
     const href =
-      row.categoryId === null ? `/transactions?uncategorized=1&${range}` : `/transactions?categoryIds=${row.categoryId}&${range}`;
+      row.categoryId === null
+        ? `/transactions?uncategorized=1&type=${type}&${range}`
+        : `/transactions?categoryIds=${row.categoryId}&${range}`;
     router.push(href as never);
   };
 
   return (
     <Card style={styles.card}>
       <ThemedText type="label" themeColor="text3">
-        Where it went
+        {title}
       </ThemedText>
 
       <View style={styles.donutWrap}>

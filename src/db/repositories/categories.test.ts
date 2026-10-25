@@ -6,6 +6,7 @@ import {
   deleteCategory,
   DuplicateCategoryNameError,
   ProtectedCategoryError,
+  resolveDefaultCategory,
   reorderCategories,
   updateCategory,
 } from './categories';
@@ -90,6 +91,12 @@ describe('createCategory', () => {
     expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ name: 'Groceries', order: 4 }));
   });
 
+  it('defaults to an expense category, and can create an income one (CR-28)', () => {
+    expect(createCategory({ name: 'Groceries', icon: 'shopping-basket' }).appliesTo).toBe('expense');
+    expect(createCategory({ name: 'Scholarship', icon: 'gift', appliesTo: 'income' }).appliesTo).toBe('income');
+    expect(mockInsertedRows[1]).toEqual(expect.objectContaining({ name: 'Scholarship', appliesTo: 'income' }));
+  });
+
   it('rejects a duplicate name (IMP-019)', () => {
     state.nameTakenRow = { id: 'existing-cat' };
     expect(() => createCategory({ name: 'Food', icon: 'utensils' })).toThrow(DuplicateCategoryNameError);
@@ -164,5 +171,21 @@ describe('reorderCategories', () => {
     reorderCategories(['c3', 'c1', 'c2']);
     const orders = mockUpdates.map((u) => u.values.order);
     expect(orders).toEqual([0, 1, 2]);
+  });
+});
+
+describe('CR-28 helpers', () => {
+  const mk = (id: string, appliesTo: 'expense' | 'income', kind: 'system' | 'default' | 'custom' = 'default') => ({
+    id, key: null, name: id, icon: 'shapes', kind, appliesTo, isProtected: false, order: 0, createdAt: 0, updatedAt: 0,
+  });
+  const list = [mk('food', 'expense'), mk('salary', 'income'), mk('uncat', 'expense', 'system')];
+
+  it('resolveDefaultCategory only accepts a category of the requested kind, never the system row', () => {
+    expect(resolveDefaultCategory('food', list)?.id).toBe('food');
+    expect(resolveDefaultCategory('salary', list)).toBeNull(); // an income category cannot be the expense default
+    expect(resolveDefaultCategory('salary', list, 'income')?.id).toBe('salary');
+    expect(resolveDefaultCategory('food', list, 'income')).toBeNull();
+    expect(resolveDefaultCategory('uncat', list)).toBeNull();
+    expect(resolveDefaultCategory(null, list)).toBeNull();
   });
 });

@@ -107,19 +107,19 @@ describe('People stage (UI-071)', () => {
     expect(queryByText('Priya Nair')).toBeNull();
   });
 
-  it('"Add a number" rejects an invalid number and adds a valid one as a chip', async () => {
+  it('"Add a person" rejects an invalid number and adds a valid one as a chip', async () => {
     openFromConfirm();
     const { getByText, getByPlaceholderText, queryByText } = await render(<SplitSheet />);
-    await fireEvent.press(getByText('Add a number'));
-    await fireEvent.changeText(getByPlaceholderText('10-digit mobile number'), '12345');
+    await fireEvent.press(getByText('Add a person'));
+    await fireEvent.changeText(getByPlaceholderText('Mobile number (optional — only to text them)'), '12345');
     await fireEvent.press(getByText('Add'));
-    expect(getByText('Enter a 10-digit mobile number')).toBeTruthy();
+    expect(getByText('Enter a 10-digit mobile number, or leave it empty')).toBeTruthy();
     expect(useSplitDraft.getState().people).toEqual([]);
 
-    await fireEvent.changeText(getByPlaceholderText('Name (optional)'), 'Neha Rao');
-    await fireEvent.changeText(getByPlaceholderText('10-digit mobile number'), '+91 90000 11111');
+    await fireEvent.changeText(getByPlaceholderText('Name'), 'Neha Rao');
+    await fireEvent.changeText(getByPlaceholderText('Mobile number (optional — only to text them)'), '+91 90000 11111');
     await fireEvent.press(getByText('Add'));
-    expect(queryByText('Enter a 10-digit mobile number')).toBeNull();
+    expect(queryByText('Enter a 10-digit mobile number, or leave it empty')).toBeNull();
     expect(useSplitDraft.getState().people).toEqual([
       expect.objectContaining({ name: 'Neha Rao', phone: '+919000011111', personId: null, source: 'manual', key: 'n:9000011111' }),
     ]);
@@ -129,13 +129,33 @@ describe('People stage (UI-071)', () => {
     openFromConfirm();
     const { getByText, getByPlaceholderText } = await render(<SplitSheet />);
     for (let i = 0; i < 2; i++) {
-      await fireEvent.press(getByText('Add a number'));
-      await fireEvent.changeText(getByPlaceholderText('10-digit mobile number'), '98458 97555');
+      await fireEvent.press(getByText('Add a person'));
+      await fireEvent.changeText(getByPlaceholderText('Mobile number (optional — only to text them)'), '98458 97555');
       await fireEvent.press(getByText('Add'));
     }
     const people = useSplitDraft.getState().people;
     expect(people).toHaveLength(1);
     expect(people[0]).toMatchObject({ personId: 'p-rahul', name: 'Rahul Mehta' });
+  });
+
+  it('a person can be added by name only, for a split kept just for tracking (CR-31)', async () => {
+    openFromConfirm();
+    const { getByText, getByPlaceholderText } = await render(<SplitSheet />);
+    await fireEvent.press(getByText('Add a person'));
+    await fireEvent.changeText(getByPlaceholderText('Name'), 'Hostel Ravi');
+    await fireEvent.press(getByText('Add'));
+    expect(useSplitDraft.getState().people).toEqual([
+      expect.objectContaining({ name: 'Hostel Ravi', phone: null, personId: null, key: 'm:hostel ravi' }),
+    ]);
+  });
+
+  it('neither a name nor a number is refused', async () => {
+    openFromConfirm();
+    const { getByText } = await render(<SplitSheet />);
+    await fireEvent.press(getByText('Add a person'));
+    await fireEvent.press(getByText('Add'));
+    expect(getByText('Enter a name or a number')).toBeTruthy();
+    expect(useSplitDraft.getState().people).toEqual([]);
   });
 
   it('Cancel goes back to the sheet that opened it, keeping its params', async () => {
@@ -388,11 +408,11 @@ describe('Sending requests (§6.17, IMP-081)', () => {
     return r;
   }
 
-  it('the primary button offers to send, and "Don’t send now" turns it into a plain save', async () => {
+  it('the primary button offers to send, and "Just track" turns it into a plain save (CR-31)', async () => {
     mockCanSend = true;
     const { getByText } = await toAmountsFromDetails();
     expect(getByText('Send requests')).toBeTruthy();
-    await fireEvent.press(getByText('Don’t send now'));
+    await fireEvent.press(getByText('Just track'));
     expect(getByText('Save split')).toBeTruthy();
     expect(useSplitDraft.getState().sendOnSave).toBe(false);
   });
@@ -400,7 +420,7 @@ describe('Sending requests (§6.17, IMP-081)', () => {
   it('a device that cannot send never offers it', async () => {
     const { getByText, queryByText } = await toAmountsFromDetails();
     expect(getByText('Save split')).toBeTruthy();
-    expect(queryByText('Don’t send now')).toBeNull();
+    expect(queryByText('Just track')).toBeNull();
   });
 
   it('saves first, then sends, and shows a per-person result list with Done', async () => {
@@ -445,11 +465,24 @@ describe('Sending requests (§6.17, IMP-081)', () => {
     expect(getByText('Opened in Messages')).toBeTruthy();
   });
 
+  it('with only name-only people there is nothing to send: a plain save and a "just for your records" note (CR-31)', async () => {
+    mockCanSend = true;
+    openFromDetails();
+    const r = await render(<SplitSheet />);
+    await fireEvent.press(r.getByText('Add a person'));
+    await fireEvent.changeText(r.getByPlaceholderText('Name'), 'Hostel Ravi');
+    await fireEvent.press(r.getByText('Add'));
+    await fireEvent.press(r.getByRole('button', { name: 'Continue' }));
+    expect(r.getByText('Save split')).toBeTruthy();
+    expect(r.queryByText('Just track')).toBeNull();
+    expect(r.getByText('No numbers added — this split is just for your records.')).toBeTruthy();
+  });
+
   it('turning sending off saves and closes without sending', async () => {
     mockCanSend = true;
     mockPersist.mockReturnValue({ kind: 'created', splitId: 'sp-9' });
     const { getByText } = await toAmountsFromDetails();
-    await fireEvent.press(getByText('Don’t send now'));
+    await fireEvent.press(getByText('Just track'));
     await fireEvent.press(getByText('Save split'));
     expect(mockSendRequests).not.toHaveBeenCalled();
     expect(useSheetRegistry.getState().current).toBeNull();

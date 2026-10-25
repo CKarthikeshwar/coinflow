@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 
 import type { Category, Suggestion, Transaction } from '@/db/schema';
 import { useAddSheetDraft, useKeypad, useSheetRegistry } from '@/stores';
@@ -8,7 +8,8 @@ import { useToast } from '@/stores/toast';
 import { TransactionSheetBody } from './transaction-sheet';
 
 const mockCategories: Category[] = [
-  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-salary', key: 'salary', name: 'Salary', icon: 'briefcase', kind: 'default', appliesTo: 'income', isProtected: false, order: 10, createdAt: 0, updatedAt: 0 },
 ];
 
 const mockGetAccountRule = jest.fn((..._args: unknown[]) => null as unknown);
@@ -27,7 +28,11 @@ jest.mock('@/db/repositories/account-rules', () => ({
 }));
 jest.mock('@/db/repositories/categories', () => ({ useCategories: () => ({ data: mockCategories }) }));
 jest.mock('@/db/repositories/suggestions', () => ({ getSuggestion: (...args: unknown[]) => mockGetSuggestion(...args) }));
-jest.mock('@/db/repositories/transactions', () => ({ getTransaction: (...args: unknown[]) => mockGetTransaction(...args) }));
+const mockSearchNotes = jest.fn((..._args: unknown[]) => [] as string[]);
+jest.mock('@/db/repositories/transactions', () => ({
+  getTransaction: (...args: unknown[]) => mockGetTransaction(...args),
+  searchNotesByPrefix: (...args: unknown[]) => mockSearchNotes(...args),
+}));
 jest.mock('./write-confirmed-transaction', () => ({
   writeConfirmedTransaction: (...args: unknown[]) => mockWriteConfirmedTransaction(...args),
   writeEditedTransaction: (...args: unknown[]) => mockWriteEditedTransaction(...args),
@@ -61,6 +66,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     dedupeKey: 'dedupe-1',
     status: 'pending',
     confirmedTransactionId: null,
+    dismissedAt: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
@@ -126,11 +132,29 @@ describe('Add mode', () => {
     );
   });
 
-  it('hides the Category row when direction is Income (UI-022)', async () => {
-    const { getByText, queryByText } = await render(<TransactionSheetBody mode="add" />);
+  it('keeps the Category row when direction is Income (CR-28 supersedes UI-022)', async () => {
+    const { getByText } = await render(<TransactionSheetBody mode="add" />);
     expect(getByText('Category')).toBeTruthy();
     await fireEvent.press(getByText('Income'));
-    expect(queryByText('Category')).toBeNull();
+    expect(getByText('Category')).toBeTruthy();
+  });
+
+  it('drops an expense category when switching to Income, and an income one when switching back (CR-28)', async () => {
+    const { getByText } = await render(<TransactionSheetBody mode="add" />);
+    useAddSheetDraft.getState().patch({ categoryId: 'cat-food' });
+    await fireEvent.press(getByText('Income'));
+    expect(useAddSheetDraft.getState().categoryId).toBeNull();
+
+    useAddSheetDraft.getState().patch({ categoryId: 'cat-salary' });
+    await fireEvent.press(getByText('Expense'));
+    expect(useAddSheetDraft.getState().categoryId).toBeNull();
+  });
+
+  it('keeps a category that already fits when the direction is re-selected (CR-28)', async () => {
+    const { getByText } = await render(<TransactionSheetBody mode="add" />);
+    useAddSheetDraft.getState().patch({ categoryId: 'cat-food' });
+    await fireEvent.press(getByText('Expense'));
+    expect(useAddSheetDraft.getState().categoryId).toBe('cat-food');
   });
 
   it('Cancel with no changes closes without a discard prompt', async () => {
@@ -178,9 +202,100 @@ describe('Add mode', () => {
     // The keypad's own buffer must have survived too, in sync with the draft — not just the
     // draft's numeric mirror — or the very next digit press corrupts it (see the store's own
     // header comment for why the two must move together).
+    // CR-31: with an amount already typed the keypad comes back hidden; tapping the amount brings it back.
+    expect(second.queryByText('3')).toBeNull();
+    await fireEvent.press(second.getByLabelText('Amount'));
     await fireEvent.press(second.getByText('3'));
     expect(useAddSheetDraft.getState().amountMinor).toBe(5300);
     await second.unmount();
+  });
+});
+
+describe('keypad only while typing the amount or a time (CR-31)', () => {
+  it('a fresh Add opens with the keypad on the amount', async () => {
+    const { getByText } = await render(<TransactionSheetBody mode="add" />);
+    expect(getByText('5')).toBeTruthy();
+  });
+
+  it('focusing a text field puts the keypad away; tapping the amount brings it back', async () => {
+    const { getByPlaceholderText, getByLabelText, queryByText, getByText } = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent(getByPlaceholderText('Note'), 'focus');
+    expect(queryByText('5')).toBeNull();
+    await fireEvent.press(getByLabelText('Amount'));
+    expect(getByText('5')).toBeTruthy();
+  });
+
+  it('switching Expense / Income puts the keypad away', async () => {
+    const { getByText, queryByText } = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent.press(getByText('Income'));
+    expect(queryByText('5')).toBeNull();
+  });
+
+  it('Edit opens with the keypad hidden (the amount is already there)', async () => {
+    mockGetTransaction.mockReturnValue(transaction());
+    useSheetRegistry.setState({ params: { transactionId: 'txn-1' } });
+    const { queryByText } = await render(<TransactionSheetBody mode="edit" />);
+    expect(queryByText('5')).toBeNull();
+  });
+
+  it('tapping the hour lets the keypad type it, then moves on to the minutes', async () => {
+    const { getByText, getByLabelText } = await render(<TransactionSheetBody mode="add" />);
+    useAddSheetDraft.getState().patch({ occurredAt: new Date(2026, 9, 18, 10, 30).getTime() });
+    await fireEvent.press(getByText('Date & time'));
+    await fireEvent.press(getByLabelText(/^Hour \d\d, type a value$/));
+    await fireEvent.press(getByLabelText('1'));
+    await fireEvent.press(getByLabelText('8'));
+    expect(new Date(useAddSheetDraft.getState().occurredAt).getHours()).toBe(18);
+    // the hour is complete — the next digits go to the minutes (keys by label: the calendar also shows day numbers)
+    await fireEvent.press(getByLabelText('0'));
+    await fireEvent.press(getByLabelText('7'));
+    const picked = new Date(useAddSheetDraft.getState().occurredAt);
+    expect(picked.getHours()).toBe(18);
+    expect(picked.getMinutes()).toBe(7);
+    expect(useAddSheetDraft.getState().amountMinor).toBe(0); // none of that touched the amount
+  });
+});
+
+describe('note autocomplete (CR-31)', () => {
+  beforeEach(() => {
+    mockSearchNotes.mockReset().mockImplementation((prefix: unknown) =>
+      String(prefix).toLowerCase().startsWith('fre') ? ['French fries', 'Fresh juice'] : [],
+    );
+  });
+
+  it('suggests past notes for what is typed while the Note field is focused, and a tap fills it in', async () => {
+    const { getByPlaceholderText, getByText, queryByText } = await render(<TransactionSheetBody mode="add" />);
+    const field = getByPlaceholderText('Note');
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, 'Fre');
+    expect(mockSearchNotes).toHaveBeenCalledWith('Fre');
+    expect(getByText('French fries')).toBeTruthy();
+    expect(getByText('Fresh juice')).toBeTruthy();
+
+    await fireEvent.press(getByText('French fries'));
+    expect(useAddSheetDraft.getState().note).toBe('French fries');
+    expect(queryByText('Fresh juice')).toBeNull(); // the list closes after a pick
+  });
+
+  it('shows nothing while the Note field is not focused', async () => {
+    const { getByPlaceholderText, queryByText } = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent.changeText(getByPlaceholderText('Note'), 'Fre');
+    expect(queryByText('French fries')).toBeNull();
+  });
+});
+
+describe('"in the future" hint (CR-31)', () => {
+  it('does not show on a fresh Add (it used to, from a few-ms race)', async () => {
+    const { queryByText } = await render(<TransactionSheetBody mode="add" />);
+    expect(queryByText('This date is in the future')).toBeNull();
+  });
+
+  it('shows once the date really is in the future', async () => {
+    const { getByText } = await render(<TransactionSheetBody mode="add" />);
+    await act(async () => {
+      useAddSheetDraft.getState().patch({ occurredAt: Date.now() + 2 * 86_400_000 });
+    });
+    expect(getByText('This date is in the future')).toBeTruthy();
   });
 });
 

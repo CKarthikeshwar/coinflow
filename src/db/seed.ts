@@ -23,11 +23,11 @@
  * otherwise this function will skip re-checking and the change won't reach existing installs.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 
 import { db } from './client';
-import { SEED_CATEGORIES, SEED_VERSION, SEEDED_VERSION_KEY } from './seed-data';
+import { ICON_REFRESH_V3, SEED_CATEGORIES, SEED_VERSION, SEEDED_VERSION_KEY } from './seed-data';
 import { appSettings, categories } from './schema';
 
 export { SEED_CATEGORIES, SEED_VERSION, SEEDED_VERSION_KEY } from './seed-data';
@@ -56,26 +56,59 @@ function writeSeededVersion(now: number): void {
     .run();
 }
 
-/** Add any missing default categories. Never overwrites a user-modified row. */
+/**
+ * Add the default categories this install has not been seeded with yet. Never overwrites a user-modified row.
+ *
+ * CR-29: an upgrade only inserts rows introduced after the install's last seed version (`since`), so a default the
+ * user deleted stays deleted — protected rows (Uncategorized, Other, Other income) are the exception, the app needs
+ * them. Rows added by an upgrade go after the current last category, so they never interleave with the user's own.
+ */
 export function seedDatabase(): void {
-  if (readSeededVersion() >= SEED_VERSION) return;
+  const seeded = readSeededVersion();
+  if (seeded >= SEED_VERSION) return;
   const now = Date.now();
   db.transaction((tx) => {
+    const maxOrder =
+      tx.select({ v: sql<number>`coalesce(max(${categories.order}), -1)` }).from(categories).get()?.v ?? -1;
+    let nextOrder = maxOrder + 1;
     for (const c of SEED_CATEGORIES) {
-      tx.insert(categories)
+      if (c.since <= seeded && !c.isProtected) continue; // already offered once — the user may have deleted it
+      // CR-28: category names are unique across expense + income. A seed row whose name the user already
+      // took with their own category (e.g. a custom "Gift") is skipped rather than duplicated.
+      const nameUsed = tx
+        .select({ id: categories.id })
+        .from(categories)
+        .where(sql`lower(${categories.name}) = lower(${c.name}) AND ${categories.key} IS NOT ${c.key}`)
+        .get();
+      if (nameUsed) continue;
+      const res = tx
+        .insert(categories)
         .values({
           id: randomUUID(),
           key: c.key,
           name: c.name,
           icon: c.icon,
           kind: c.kind,
+          appliesTo: c.appliesTo,
           isProtected: c.isProtected,
-          order: c.order,
+          // a fresh install keeps the designed order; an upgrade appends after whatever is there now
+          order: seeded === 0 ? c.order : nextOrder,
           createdAt: now,
           updatedAt: now,
         })
         .onConflictDoNothing({ target: categories.key })
         .run();
+      if (res.changes > 0) nextOrder += 1;
+    }
+    // CR-31: an install seeded before v3 still has the old generic income icons — swap them, but only where the
+    // row still holds the old default (an icon the user chose is left alone).
+    if (seeded > 0 && seeded < 3) {
+      for (const { key, from, to } of ICON_REFRESH_V3) {
+        tx.update(categories)
+          .set({ icon: to, updatedAt: now })
+          .where(and(eq(categories.key, key), eq(categories.icon, from)))
+          .run();
+      }
     }
     writeSeededVersion(now);
   });
@@ -93,6 +126,7 @@ export function resetSeededCategories(): void {
           name: c.name,
           icon: c.icon,
           kind: c.kind,
+          appliesTo: c.appliesTo,
           isProtected: c.isProtected,
           order: c.order,
           createdAt: now,
@@ -104,6 +138,7 @@ export function resetSeededCategories(): void {
             name: c.name,
             icon: c.icon,
             kind: c.kind,
+            appliesTo: c.appliesTo,
             isProtected: c.isProtected,
             order: c.order,
             updatedAt: now,

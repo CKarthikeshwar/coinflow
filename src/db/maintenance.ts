@@ -55,6 +55,10 @@ import {
 // well past the 5 s Undo window + snackbar (§20.6)
 const PURGE_GRACE_MS = 60_000;
 const CONFIRMED_SUGGESTION_TTL_MS = 86_400_000; // 24 h
+// CR-30 — must stay comfortably above `sms-reconcile.ts`'s 48h sweep lookback: purging a dismissed
+// tombstone sooner would let the sweep re-create the very suggestion it was meant to block, if it
+// runs again while the original SMS is still inside that 48h window.
+const DISMISSED_SUGGESTION_TTL_MS = 4 * 86_400_000; // 4 days
 
 const migrations = migrationsBundle as unknown as Parameters<typeof migrate>[1];
 
@@ -70,6 +74,11 @@ export function purge(nowMs: number = Date.now()): void {
     .run();
   db.delete(suggestions)
     .where(and(eq(suggestions.status, 'confirmed'), lt(suggestions.createdAt, nowMs - CONFIRMED_SUGGESTION_TTL_MS)))
+    .run();
+  // CR-30: a dismissed tombstone is only safe to drop once the SMS-reconcile sweep can no longer reach that
+  // message (`dismissedAt`, not `createdAt` — the SMS could already have been old when it was dismissed).
+  db.delete(suggestions)
+    .where(and(eq(suggestions.status, 'dismissed'), lt(suggestions.dismissedAt, nowMs - DISMISSED_SUGGESTION_TTL_MS)))
     .run();
   // V2 (§20.6, CR-17): rows that cascade with a purged transaction (split, shares, settlements) go with it via
   // the foreign keys; received-request tombstones (rejected / withdrawn) expire 30 days after their last change.

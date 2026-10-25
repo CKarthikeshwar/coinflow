@@ -2,7 +2,7 @@
  * FILE PURPOSE
  * ------------
  * Schedules the once-a-day reminder ("Have you recorded all of today's transactions?") that fires
- * around 9:30 AM local time.
+ * around 9:30 PM local time.
  *
  * WHERE IT FITS
  * -------------
@@ -18,7 +18,7 @@ import { Platform } from 'react-native';
 import { DAILY_REMINDER_CHANNEL_ID } from './channel';
 
 export const DAILY_REMINDER_IDENTIFIER = 'daily-reminder';
-export const DAILY_REMINDER_HOUR = 9;
+export const DAILY_REMINDER_HOUR = 21;
 export const DAILY_REMINDER_MINUTE = 30;
 
 export async function ensureDailyReminder(): Promise<void> {

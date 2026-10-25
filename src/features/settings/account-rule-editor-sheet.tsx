@@ -15,6 +15,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Colors, Spacing } from '@/constants/theme';
 import { deleteAccountRule, updateAccountRule, useAccountRules } from '@/db/repositories/account-rules';
 import { useCategories } from '@/db/repositories/categories';
+import { categoriesFor } from '@/domain/categorize';
 import { useAccountRuleDraft, useSheetRegistry } from '@/stores';
 
 import { Button } from '@/ui/button';
@@ -41,6 +42,7 @@ export function AccountRuleEditorSheet() {
       normalizedKey: target.normalizedKey,
       lastNote: target.lastNote ?? '',
       categoryId: target.categoryId,
+      incomeCategoryId: target.incomeCategoryId,
     });
     // Re-seed only when the target row identity changes, not on every `rules` update (would
     // reset an in-progress edit while the sheet is open).
@@ -71,6 +73,7 @@ export function AccountRuleEditorSheet() {
     updateAccountRule(draft.normalizedKey, {
       lastNote: trimmedNote === '' ? null : trimmedNote,
       categoryId: draft.categoryId,
+      incomeCategoryId: draft.incomeCategoryId,
     });
     draft.reset();
     close();
@@ -117,33 +120,48 @@ export function AccountRuleEditorSheet() {
           placeholder="No note"
         />
 
-        <ThemedText type="label" themeColor="text3" style={styles.fieldLabel}>
-          Category
-        </ThemedText>
-        <View style={styles.categoryList} accessibilityRole="radiogroup">
-          {(categories ?? []).map((cat) => {
-            const isUncategorized = cat.key === 'uncategorized';
-            const value = isUncategorized ? null : cat.id;
-            const selected = draft.categoryId === value;
-            return (
-              <Pressable
-                key={cat.id}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                onPress={() => draft.patch({ categoryId: value })}
-                style={styles.categoryRow}
-              >
-                <View style={styles.tile}>
-                  <Icon name={cat.icon as IconName} size={18} />
-                </View>
-                <ThemedText type="body" themeColor="text" style={styles.categoryLabel}>
-                  {cat.name}
-                </ThemedText>
-                {selected ? <Icon name="check" size={18} /> : null}
-              </Pressable>
-            );
-          })}
-        </View>
+        {/* CR-28: an account remembers one expense category and one income category */}
+        {(['expense', 'income'] as const).map((kind) => {
+          const selectedId = kind === 'income' ? draft.incomeCategoryId : draft.categoryId;
+          const options = [
+            ...(categories ?? []).filter((c) => c.key === 'uncategorized'),
+            ...categoriesFor((categories ?? []).filter((c) => c.key !== 'uncategorized'), kind),
+          ];
+          return (
+            <View key={kind}>
+              <ThemedText type="label" themeColor="text3" style={styles.fieldLabel}>
+                {kind === 'income' ? 'Income category' : 'Category'}
+              </ThemedText>
+              <View style={styles.categoryList} accessibilityRole="radiogroup">
+                {options.map((cat) => {
+                  const isUncategorized = cat.key === 'uncategorized';
+                  const value = isUncategorized ? null : cat.id;
+                  const selected = selectedId === value;
+                  return (
+                    <Pressable
+                      key={cat.id}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`${kind === 'income' ? 'Income' : 'Expense'} ${cat.name}`}
+                      accessibilityState={{ selected }}
+                      onPress={() =>
+                        draft.patch(kind === 'income' ? { incomeCategoryId: value } : { categoryId: value })
+                      }
+                      style={styles.categoryRow}
+                    >
+                      <View style={styles.tile}>
+                        <Icon name={cat.icon as IconName} size={18} />
+                      </View>
+                      <ThemedText type="body" themeColor="text" style={styles.categoryLabel}>
+                        {cat.name}
+                      </ThemedText>
+                      {selected ? <Icon name="check" size={18} /> : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })}
       </View>
 
       <View style={styles.footer}>

@@ -28,6 +28,7 @@ import { useCategoryDraft, useSheetRegistry } from '@/stores';
 import { Button } from '@/ui/button';
 import { ConfirmDialog } from '@/ui/confirm-dialog';
 import { Icon, type IconName } from '@/ui/icon';
+import { SegmentedControl } from '@/ui/segmented-control';
 import { TextField } from '@/ui/text-field';
 import { ThemedText } from '@/ui/themed-text';
 
@@ -51,7 +52,9 @@ export function CategoryEditorSheet() {
   useEffect(() => {
     if (editing) {
       if (!target) return; // live category row not loaded yet
-      useCategoryDraft.getState().open({ categoryId: target.id, name: target.name, icon: target.icon });
+      useCategoryDraft
+        .getState()
+        .open({ categoryId: target.id, name: target.name, icon: target.icon, appliesTo: target.appliesTo });
     } else {
       useCategoryDraft.getState().open({ categoryId: null, name: '', icon: ICON_CHOICES[0] });
     }
@@ -95,7 +98,7 @@ export function CategoryEditorSheet() {
       if (draft.categoryId) {
         updateCategory(draft.categoryId, { name: trimmedName, icon: draft.icon });
       } else {
-        createCategory({ name: trimmedName, icon: draft.icon });
+        createCategory({ name: trimmedName, icon: draft.icon, appliesTo: draft.appliesTo });
       }
       draft.reset();
       close();
@@ -148,6 +151,25 @@ export function CategoryEditorSheet() {
             A category named &ldquo;{trimmedName}&rdquo; already exists.
           </ThemedText>
         ) : null}
+
+        {/* CR-28: pick the type when creating; it is fixed afterwards (transactions already use it). */}
+        <ThemedText type="label" themeColor="text3" style={styles.iconLabel}>
+          Type
+        </ThemedText>
+        {editing ? (
+          <ThemedText type="body" themeColor="text2">
+            {draft.appliesTo === 'income' ? 'Income' : 'Expense'}
+          </ThemedText>
+        ) : (
+          <SegmentedControl
+            options={[
+              { value: 'expense', label: 'Expense' },
+              { value: 'income', label: 'Income' },
+            ]}
+            value={draft.appliesTo}
+            onChange={(appliesTo) => draft.patch({ appliesTo })}
+          />
+        )}
 
         <ThemedText type="label" themeColor="text3" style={styles.iconLabel}>
           Icon

@@ -45,7 +45,7 @@
  * trustworthy as a running total (it can include transactions this app never saw).
  */
 
-import { and, count, desc, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
 
 import {
   buildDailySeries,
@@ -150,7 +150,7 @@ export function useMoMDeltas(period: Period = monthPeriod()) {
 }
 
 /**
- * §26.8 — `count(*) WHERE type='expense' AND categoryId IS NULL`, optionally period-scoped.
+ * §26.8 — `count(*) WHERE categoryId IS NULL` (expenses AND income since CR-28), optionally period-scoped.
  * No `period` (Home's action-strip row) = all-time. With `period` (Analytics "Fix N") = scoped
  * to it — a separate call, not a shared cache, since the two rows can legitimately disagree
  * (e.g. an old uncategorized expense outside the current period). Counts transactions, not
@@ -164,7 +164,7 @@ export function useUncategorizedCount(period?: Period) {
       .where(
         and(
           isNull(transactions.deletedAt),
-          eq(transactions.type, 'expense'),
+          inArray(transactions.type, ['expense', 'income']), // reserved types (transfer, refund…) are not user-categorized yet
           isNull(transactions.categoryId),
           ...(period ? inPeriod(period) : []),
         ),
@@ -174,8 +174,11 @@ export function useUncategorizedCount(period?: Period) {
   return { count: q.data[0]?.n ?? 0, error: q.error, updatedAt: q.updatedAt };
 }
 
-/** §26.4 — effective spend per category. Expenses whose effective amount is 0 (fully covered by others) are left out. */
-export function categoryBreakdownQuery(period: Period) {
+/**
+ * §26.4 — effective spend per category. Expenses whose effective amount is 0 (fully covered by others) are left out.
+ * CR-28: `type = 'income'` gives the same breakdown for income ("Where it came from").
+ */
+export function categoryBreakdownQuery(period: Period, type: 'expense' | 'income' = 'expense') {
   return db
     .select({
       categoryId: transactions.categoryId,
@@ -186,7 +189,7 @@ export function categoryBreakdownQuery(period: Period) {
     .where(
       and(
         isNull(transactions.deletedAt),
-        eq(transactions.type, 'expense'),
+        eq(transactions.type, type),
         ...inPeriod(period),
         sql`${effectiveAmountSql} > 0`,
       ),
@@ -200,6 +203,13 @@ export function categoryBreakdownQuery(period: Period) {
 export function useCategoryBreakdown(period: Period) {
   const signal = useSplitChangeSignal();
   const q = useLiveQuery(categoryBreakdownQuery(period), [period.startMs, period.endMsExclusive, signal]);
+  return { rows: q.data, error: q.error, updatedAt: q.updatedAt };
+}
+
+/** CR-28 — income per category for the period ("Where it came from"); `categoryId: null` is Uncategorized income. */
+export function useIncomeBreakdown(period: Period) {
+  const signal = useSplitChangeSignal();
+  const q = useLiveQuery(categoryBreakdownQuery(period, 'income'), [period.startMs, period.endMsExclusive, signal]);
   return { rows: q.data, error: q.error, updatedAt: q.updatedAt };
 }
 

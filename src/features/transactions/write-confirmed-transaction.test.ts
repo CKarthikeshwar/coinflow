@@ -119,10 +119,31 @@ describe('writeConfirmedTransaction', () => {
     expect(mockUpdates.some((u) => u.table === 'suggestion')).toBe(false);
   });
 
-  it('forces categoryId null for income (IMP-011)', () => {
-    writeConfirmedTransaction(draft({ direction: 'credit', type: 'income' }), null);
+  it('stores the chosen category on an income transaction (CR-28)', () => {
+    writeConfirmedTransaction(draft({ direction: 'credit', type: 'income', categoryId: 'cat-salary' }), null);
     const txn = mockInsertedRows.find((r) => r.__table === 'transaction');
-    expect(txn?.categoryId).toBeNull();
+    expect(txn?.categoryId).toBe('cat-salary');
+  });
+
+  it('learns an income category into the rule\'s incomeCategoryId, not its expense category (CR-28)', () => {
+    mockExistingRule.current = null;
+    writeConfirmedTransaction(
+      draft({ direction: 'credit', type: 'income', categoryId: 'cat-salary', account: 'Employer' }),
+      null,
+    );
+    const rule = mockInsertedRows.find((r) => r.__table === 'account_rule');
+    expect(rule).toEqual(expect.objectContaining({ categoryId: null, incomeCategoryId: 'cat-salary' }));
+  });
+
+  it('an income save updates only the income category of an existing rule (CR-28)', () => {
+    mockExistingRule.current = { normalizedKey: 'employer', categoryId: 'cat-food', hitCount: 1 };
+    writeConfirmedTransaction(
+      draft({ direction: 'credit', type: 'income', categoryId: 'cat-salary', account: 'Employer' }),
+      null,
+    );
+    const update = mockUpdates.find((u) => u.table === 'account_rule');
+    expect(update?.values).toEqual(expect.objectContaining({ incomeCategoryId: 'cat-salary' }));
+    expect(update?.values).not.toHaveProperty('categoryId');
   });
 
   it('creates a new AccountRule when none exists for this account', () => {
@@ -136,7 +157,8 @@ describe('writeConfirmedTransaction', () => {
     mockExistingRule.current = { normalizedKey: 'swiggy', categoryId: 'cat-food', hitCount: 3 };
     writeConfirmedTransaction(draft({ account: 'Swiggy', categoryId: null }), null);
     const update = mockUpdates.find((u) => u.table === 'account_rule');
-    expect(update?.values).toEqual(expect.objectContaining({ hitCount: 4, categoryId: 'cat-food' }));
+    expect(update?.values).toEqual(expect.objectContaining({ hitCount: 4 }));
+    expect(update?.values).not.toHaveProperty('categoryId'); // untouched, so the learned category stays
   });
 
   it('does not touch account rules when the account field is blank', () => {
@@ -189,13 +211,20 @@ describe('writeEditedTransaction', () => {
     expect(mockUpsertFromTransaction).not.toHaveBeenCalled();
   });
 
-  it('forces categoryId null for income, both in the update and the rule upsert', () => {
+  it('passes an income category to both the update and the rule upsert, with the direction (CR-28)', () => {
     writeEditedTransaction(
-      draft({ mode: 'edit', sourceId: 'txn-42', direction: 'credit', type: 'income', account: 'Employer' }),
+      draft({
+        mode: 'edit',
+        sourceId: 'txn-42',
+        direction: 'credit',
+        type: 'income',
+        account: 'Employer',
+        categoryId: 'cat-salary',
+      }),
     );
-    expect(mockUpdateTransaction).toHaveBeenCalledWith('txn-42', expect.objectContaining({ categoryId: null }));
+    expect(mockUpdateTransaction).toHaveBeenCalledWith('txn-42', expect.objectContaining({ categoryId: 'cat-salary' }));
     expect(mockUpsertFromTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({ categoryId: null, categoryIsUncategorized: true }),
+      expect.objectContaining({ direction: 'credit', categoryId: 'cat-salary', categoryIsUncategorized: false }),
     );
   });
 

@@ -49,8 +49,9 @@ export function writeConfirmedTransaction(draft: AddSheetDraft, smsRef: SmsRef):
   const note = draft.note.trim() || null;
   const description = draft.description.trim() || null;
   const normalizedAccountKey = account ? normalizeAccount(account) : null;
-  const categoryId = draft.direction === 'credit' ? null : draft.categoryId; // IMP-011
+  const categoryId = draft.categoryId; // CR-28: income can have a category too
   const categoryIsUncategorized = categoryId === null;
+  const isIncome = draft.direction === 'credit';
 
   db.transaction((tx) => {
     tx.insert(transactions)
@@ -102,7 +103,8 @@ export function writeConfirmedTransaction(draft: AddSheetDraft, smsRef: SmsRef):
             normalizedKey: normalizedAccountKey,
             displayAccount: account,
             lastNote: note,
-            categoryId,
+            categoryId: isIncome ? null : categoryId,
+            incomeCategoryId: isIncome ? categoryId : null,
             lastPaymentMethod: draft.paymentMethod,
             hitCount: 1,
             createdAt: now,
@@ -116,8 +118,9 @@ export function writeConfirmedTransaction(draft: AddSheetDraft, smsRef: SmsRef):
             hitCount: existing.hitCount + 1,
             lastNote: note,
             lastPaymentMethod: draft.paymentMethod,
-            // keep the previously learned category when this save is Uncategorized (§25.2)
-            categoryId: categoryIsUncategorized ? existing.categoryId : categoryId,
+            // keep the previously learned category when this save is Uncategorized (§25.2); CR-28: expense and
+            // income categories are learned independently, so only this direction's column changes
+            ...(categoryIsUncategorized ? {} : isIncome ? { incomeCategoryId: categoryId } : { categoryId }),
             updatedAt: now,
           })
           .where(eq(accountRules.normalizedKey, normalizedAccountKey))
@@ -133,7 +136,7 @@ export function writeConfirmedTransaction(draft: AddSheetDraft, smsRef: SmsRef):
  * §6.6/§30.8 Edit — identical fields to Add, but updates the existing row (`draft.sourceId`, the
  * transaction id) instead of inserting a new one, then upserts the `AccountRule` the same as
  * Add/Confirm (§30.8: "`updateTransaction` (+ `upsertFromTransaction`; `editedByUser=1`)").
- * `updateTransaction` already carries the row-update logic (income-null category, `editedByUser`,
+ * `updateTransaction` already carries the row-update logic (`editedByUser`,
  * `searchText`, `normalizedAccountKey`), so this is a thin draft → patch mapping plus the learn
  * step `accountRuleRepo.upsertFromTransaction` already implements.
  */
@@ -143,7 +146,7 @@ export function writeEditedTransaction(draft: AddSheetDraft): { transactionId: s
 
   const account = draft.account.trim() || null;
   const note = draft.note.trim() || null;
-  const categoryId = draft.direction === 'credit' ? null : draft.categoryId; // IMP-011
+  const categoryId = draft.categoryId; // CR-28
 
   updateTransaction(transactionId, {
     amountMinor: draft.amountMinor,
@@ -160,6 +163,7 @@ export function writeEditedTransaction(draft: AddSheetDraft): { transactionId: s
   if (account) {
     upsertFromTransaction({
       account,
+      direction: draft.direction,
       categoryId,
       categoryIsUncategorized: categoryId === null,
       note,

@@ -48,7 +48,7 @@ import { TopBar } from '@/ui/top-bar';
 
 function QueueRow({ suggestion }: { suggestion: Suggestion }) {
   const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
-  const known = isKnownAccountRule(rule);
+  const known = isKnownAccountRule(rule, suggestion.direction ?? 'debit');
   const openSheet = useSheetRegistry((s) => s.open);
 
   return (
@@ -71,7 +71,9 @@ export default function ReviewQueueScreen() {
   const smsBanner = useSetting<number | null>('smsBannerDismissedAt');
   const defaultId = useSetting<string | null>('defaultCategoryId');
   const { data: categoryList } = useCategories();
+  const defaultIncomeId = useSetting<string | null>('defaultIncomeCategoryId'); // CR-28
   const defaultCategory = resolveDefaultCategory(defaultId.value, categoryList ?? []);
+  const defaultIncome = resolveDefaultCategory(defaultIncomeId.value, categoryList ?? [], 'income');
   const showToast = useToast((s) => s.show);
   const [confirmingDismissAll, setConfirmingDismissAll] = useState(false);
   const [confirmingSaveAll, setConfirmingSaveAll] = useState(false);
@@ -105,7 +107,10 @@ export default function ReviewQueueScreen() {
   const handleConfirmSaveAll = async () => {
     setConfirmingSaveAll(false);
     if (!defaultCategory) return;
-    const { saved, skipped } = await handleSaveAll(defaultCategory.id);
+    const { saved, skipped } = await handleSaveAll({
+      expense: defaultCategory.id,
+      income: defaultIncome?.id ?? null,
+    });
     const base = `Saved ${saved} transaction${saved === 1 ? '' : 's'}`;
     showToast(skipped > 0 ? `${base} · ${skipped} left to review` : base);
   };
@@ -145,7 +150,7 @@ export default function ReviewQueueScreen() {
         visible={confirmingSaveAll}
         glyph="check"
         title={`Save ${rows.length} transaction${rows.length === 1 ? '' : 's'}?`}
-        body={`Expenses use ${defaultCategory?.name ?? 'your default category'} unless the account already has a category. Income stays uncategorized.`}
+        body={`Expenses use ${defaultCategory?.name ?? 'your default category'} unless the account already has a category. Income ${defaultIncome ? `uses ${defaultIncome.name}` : 'stays uncategorized'} the same way.`}
         confirmLabel="Save all"
         onConfirm={handleConfirmSaveAll}
         onCancel={() => setConfirmingSaveAll(false)}

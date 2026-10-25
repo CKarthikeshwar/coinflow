@@ -382,4 +382,41 @@ export const smsCorpus: SmsFixture[] = [
     receivedAt: T,
     expected: tx(fields(100, null, null, null, 'card'), ['ambiguousDirection']),
   },
+
+  // --- CR-29: the user's own account is not a counterparty (real Canara Bank / SBI shapes, anonymised) ----------
+  {
+    id: 'own-account-debited-to-your-account',
+    sender: 'AX-CANBNK-S',
+    body: 'An amount of INR 380.00 has been DEBITED to your account XXX123 on 21/06/26. Total Avail.bal INR 3,534.65.Dial 1930 to report cyber fraud - Canara Bank',
+    receivedAt: T,
+    expected: tx(fields(38000, 'debit', null, null, null)),
+  },
+  {
+    id: 'own-account-credited-towards-description',
+    sender: 'AX-CANBNK-S',
+    body: 'An amount of INR 3.60 has been CREDITED to your account XXX123 on 22/09/2026 towards Reversal of GST on Commission. Total Avail.bal INR 1,825.41 - Canara Bank',
+    receivedAt: T,
+    expected: tx(fields(360, 'credit', 'Reversal of GST', 'reversal of gst', null)),
+  },
+  {
+    id: 'own-account-neft-by-sender',
+    sender: 'AX-CANBNK-S',
+    body: 'An amount of INR 5,000.00 has been credited to XXX123 on 24/07/2026 towards NEFT by Sender EXAMPLE INSTITUTE OF SCI, IFSC SBIN0000001, Sender A/c XXXX0001, STATE BANK OF INDIA, UTR SBIN000000000001, Total Avail. Bal INR 6271.42- Canara Bank',
+    receivedAt: T,
+    expected: tx(fields(500000, 'credit', 'EXAMPLE INSTITUTE OF SCI', 'example institute of sci', 'bank_transfer')),
+  },
+  {
+    id: 'own-account-your-a-c-no',
+    sender: 'AD-SBIINB-S',
+    body: 'Dear Customer, LPG Subsidy of Rs.15.38 has been credited to your A/c No.XXXXX012345 on 22/08/25.-SBI',
+    receivedAt: T,
+    expected: tx(fields(1538, 'credit', null, null, null)),
+  },
+  {
+    id: 'footer-to-is-not-a-payee',
+    sender: 'VM-CANBNK-S',
+    body: 'Dear Customer, Acct XXX123 Dr. INR 140.00 on 23/09/26 to Sample Person; UPI: 393400000000; Bal INR 1,620.41.Not you?SMS BLOCKUPI to 9900000000-CanaraBank',
+    receivedAt: T,
+    expected: tx(fields(14000, 'debit', 'Sample Person', 'sample person', 'upi')),
+  },
 ];

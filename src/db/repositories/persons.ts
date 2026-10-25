@@ -8,7 +8,7 @@
  * typing a number. Deleting a person is only allowed while nothing refers to them.
  */
 
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 
 import { normalizePhone } from '@/domain/person';
@@ -60,6 +60,18 @@ export function findOrCreatePerson(input: PersonInput, now: number = Date.now())
       if (input.contactRef && !existing.contactRef) patch.contactRef = input.contactRef;
       db.update(persons).set(patch).where(eq(persons.id, existing.id)).run();
       return { ...existing, ...patch } as Person;
+    }
+  } else {
+    // CR-31 — a name-only person (a split kept just for tracking): reuse the one already saved under the same name
+    // (case-insensitive) instead of adding another "Rahul" to Saved people on every split.
+    const existing = db
+      .select()
+      .from(persons)
+      .where(and(isNull(persons.phoneKey), sql`lower(${persons.displayName}) = lower(${trimmedName})`))
+      .get();
+    if (existing) {
+      db.update(persons).set({ updatedAt: now }).where(eq(persons.id, existing.id)).run();
+      return { ...existing, updatedAt: now };
     }
   }
 

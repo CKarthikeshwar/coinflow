@@ -45,13 +45,13 @@ import { db } from '@/db/client';
 import { getAccountRule } from '@/db/repositories/account-rules';
 import { dismissSuggestion, getSuggestion, listPending } from '@/db/repositories/suggestions';
 import { accountRules, suggestions, transactions } from '@/db/schema';
-import { isKnownAccountRule } from '@/domain/categorize';
+import { isKnownAccountRule, ruleCategoryFor } from '@/domain/categorize';
 
 import { cancelForSuggestion } from './post';
 
 export type SaveOutcome =
   | { outcome: 'saved'; transactionId: string }
-  | { outcome: 'noop'; reason: 'gone' | 'already-confirmed' | 'no-rule' | 'incomplete' };
+  | { outcome: 'noop'; reason: 'gone' | 'already-confirmed' | 'dismissed' | 'no-rule' | 'incomplete' };
 
 /**
  * Re-loads the `Suggestion` and re-matches the `AccountRule` by `normalizedKey` (it may have
@@ -61,14 +61,18 @@ export async function handleSave(suggestionId: string): Promise<SaveOutcome> {
   const suggestion = getSuggestion(suggestionId);
   if (!suggestion) return { outcome: 'noop', reason: 'gone' };
   if (suggestion.status === 'confirmed') return { outcome: 'noop', reason: 'already-confirmed' };
+  // CR-30: dismiss is now a tombstone, not a DELETE — `getSuggestion` still finds the row. A stale Save tap
+  // (notification already cancelled, but tapped anyway in the gap) must not resurrect a dismissed suggestion.
+  if (suggestion.status === 'dismissed') return { outcome: 'noop', reason: 'dismissed' };
 
   const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
+  const direction = suggestion.direction ?? 'debit';
   // `Save` only ever appears on a known-account notification — a rule with a category OR a
   // note (§25.1, `isKnownAccountRule`; category-only was too strict, a note-only rule is still
   // "known" and a Save should be allowed to land an Uncategorized transaction with that note).
   // If the rule vanished since the notification was posted, don't write blind (§31.5) — in
   // practice unreachable (the button doesn't exist without one); the guard stays for the race.
-  if (!rule || !isKnownAccountRule(rule)) return { outcome: 'noop', reason: 'no-rule' };
+  if (!rule || !isKnownAccountRule(rule, direction)) return { outcome: 'noop', reason: 'no-rule' };
   if (suggestion.amountMinor === null || suggestion.direction === null || suggestion.occurredAt === null) {
     return { outcome: 'noop', reason: 'incomplete' };
   }
@@ -77,7 +81,6 @@ export async function handleSave(suggestionId: string): Promise<SaveOutcome> {
   const now = Date.now();
   const account = suggestion.account;
   const note = rule.lastNote?.trim() || null;
-  const direction = suggestion.direction;
   const amountMinor = suggestion.amountMinor;
   const occurredAt = suggestion.occurredAt;
 
@@ -88,7 +91,7 @@ export async function handleSave(suggestionId: string): Promise<SaveOutcome> {
         amountMinor,
         direction,
         type: direction === 'credit' ? 'income' : 'expense',
-        categoryId: direction === 'credit' ? null : rule.categoryId, // IMP-011
+        categoryId: ruleCategoryFor(rule, direction), // CR-28: expense category for a debit, income category for a credit
         paymentMethod: rule.lastPaymentMethod ?? suggestion.paymentMethod,
         account,
         normalizedAccountKey: suggestion.normalizedKey,
@@ -126,12 +129,15 @@ export type SaveAllOutcome = { saved: number; skipped: number };
 
 /**
  * CR-25 — "Save all" in the Review Queue: writes every complete pending suggestion in ONE database
- * transaction. Category per row: a credit stays Uncategorized (IMP-011); a debit takes its account
- * rule's learned category when it has one, else `defaultCategoryId`. Deliberately does not touch
- * `accountRules` — a bulk save must not teach an account the default category. Rows missing an
+ * transaction. Category per row (CR-28): the account rule's learned category for that direction when it
+ * has one (expense category for a debit, income category for a credit), else the matching default —
+ * `defaults.expense` for a debit, `defaults.income` for a credit — else Uncategorized. Deliberately does
+ * not touch `accountRules` — a bulk save must not teach an account the default category. Rows missing an
  * amount, direction or time are left pending and counted in `skipped`.
  */
-export async function handleSaveAll(defaultCategoryId: string): Promise<SaveAllOutcome> {
+export type SaveAllDefaults = { expense: string | null; income: string | null };
+
+export async function handleSaveAll(defaults: SaveAllDefaults): Promise<SaveAllOutcome> {
   const pending = listPending();
   const savedIds: string[] = [];
   const now = Date.now();
@@ -153,7 +159,9 @@ export async function handleSaveAll(defaultCategoryId: string): Promise<SaveAllO
           amountMinor: suggestion.amountMinor,
           direction,
           type: direction === 'credit' ? 'income' : 'expense',
-          categoryId: direction === 'credit' ? null : (rule?.categoryId ?? defaultCategoryId), // IMP-011
+          categoryId:
+            (rule ? ruleCategoryFor(rule, direction) : null) ??
+            (direction === 'credit' ? defaults.income : defaults.expense),
           paymentMethod: rule?.lastPaymentMethod ?? suggestion.paymentMethod,
           account,
           normalizedAccountKey: suggestion.normalizedKey,

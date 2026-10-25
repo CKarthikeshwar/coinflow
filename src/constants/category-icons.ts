@@ -33,7 +33,15 @@ export type CategoryKey =
   | 'education'
   | 'other'
   | 'uncategorized'
-  | 'income';
+  | 'income'
+  // CR-28 — income categories
+  | 'salary'
+  | 'freelance'
+  | 'interest'
+  | 'refund'
+  | 'gift'
+  | 'pocket_money'
+  | 'other_income';
 
 export const CategoryIcons: Record<CategoryKey, IconName> = {
   food: 'utensils',
@@ -47,4 +55,11 @@ export const CategoryIcons: Record<CategoryKey, IconName> = {
   other: 'shapes',
   uncategorized: 'help-circle',
   income: 'arrow-down-to-line',
+  salary: 'badge-indian-rupee',
+  freelance: 'briefcase-business',
+  interest: 'chart-line',
+  refund: 'receipt-indian-rupee',
+  gift: 'gift',
+  pocket_money: 'hand-coins',
+  other_income: 'banknote-arrow-down',
 };

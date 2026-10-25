@@ -37,7 +37,7 @@
  */
 
 import { ensureMigrated } from '@/db/maintenance';
-import { setSetting } from '@/db/repositories/settings';
+import { getSetting, setSetting } from '@/db/repositories/settings';
 import { getRecentSmsMessages, isSmsCaptureSupported } from '@/services/sms';
 
 import type { SmsCatchSource } from './catch-stats';
@@ -59,7 +59,18 @@ export async function reconcileMissedSms(options: ReconcileOptions): Promise<voi
     // A background trigger can run before the UI ever migrated the database (§17.5 / §20.4).
     await ensureMigrated();
 
-    const messages = await getRecentSmsMessages(Date.now() - (options.lookbackMs ?? LOOKBACK_MS));
+    // Never reach back further than this install has existed (`ensureInstallMarker`,
+    // `src/db/migration-gate.tsx`) — a reinstall gets a fresh, empty database, but the phone's
+    // SMS inbox itself is untouched by that, so without this clamp a fresh install's first sweep
+    // would silently resurrect anything already sitting in the last `lookbackMs` of the inbox
+    // (a still-pending split request from before the reinstall, an old bank SMS, ...) as if it
+    // had just arrived. A plain app *update* never touches this — see `ensureInstallMarker`'s
+    // own comment — so this is a no-op for every launch except a real install's very first one.
+    const since = Math.max(
+      Date.now() - (options.lookbackMs ?? LOOKBACK_MS),
+      getSetting<number>('installFirstOpenAt', 0),
+    );
+    const messages = await getRecentSmsMessages(since);
     // §17.10 (CR-12) — proves the sweep ran and how much it found, regardless of which of the
     // two triggers (§17.9) fired it; only stamped once the fetch above has actually succeeded.
     setSetting('smsLastReconcileSweepAt', Date.now());

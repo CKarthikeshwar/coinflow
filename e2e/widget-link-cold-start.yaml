@@ -1,0 +1,28 @@
+# Cold-start widget deep links (SPEC-implementation.md §43.3, IMP-092) — `WidgetLinkRouter`
+# (src/features/app-shell/widget-link-router.tsx). Kills the app between each link so
+# `coinflow://…` is delivered to a dead process, the exact scenario the Queue widget's row tap
+# hit on-device: expo-router's automatic Linking resolution races <MigrationGate> +
+# RootNavigator's async onboarding gate and silently drops the link, landing on plain Home
+# instead. Requires onboarding already completed on the target device/emulator.
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- waitForAnimationToEnd
+- stopApp
+- openLink: "coinflow://add"
+- waitForAnimationToEnd
+- assertVisible: "Add transaction"
+- takeScreenshot: widget-link-cold-add
+- tapOn: "Cancel"
+
+- stopApp
+- openLink: "coinflow://review"
+- waitForAnimationToEnd
+- assertVisible: "To review"
+- takeScreenshot: widget-link-cold-review
+
+- stopApp
+- openLink: "coinflow://"
+- waitForAnimationToEnd
+- assertVisible: "CoinFlow"
+- takeScreenshot: widget-link-cold-root

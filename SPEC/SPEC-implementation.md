@@ -178,7 +178,7 @@ navigation, notifications) · §44 Widgets · §45 Security, permissions, testin
 | D23 | **SMS-while-killed pipeline: native manifest receiver → headless JS.** A Kotlin `BroadcastReceiver` registered in `AndroidManifest.xml` (via the config plugin) fires on `SMS_RECEIVED` even when the app is terminated and starts a **headless JS task**; **all** parsing, the DB write and the notification post run in JS/TS. `expo-background-task` is **rejected** for this path — its WorkManager scheduling has a 15-minute floor and does not run when the app is killed. | Phase 1. Confirms D18. Contingency (native posts a provisional notification) documented in §17, not built. |
 | D24 | **Notification `Save` while killed: all-JS headless task.** The `expo-notifications` background response handler (a TaskManager task) spins up headless JS, reads the `AccountRule` via Drizzle, and writes the `Transaction` — no rule-matching or SQLite logic duplicated in Kotlin. The native module's surface stays "SMS receiver bridge only". | Phase 1. Preserves D18's "one testable codebase". If the rule was deleted between post and tap, the action deep-links into the Confirmation sheet instead of writing blind. |
 | D25 | **Sheets are a root-mounted `@gorhom/bottom-sheet` registry, not `expo-router` modal routes; the tab bar is custom, not `NativeTabs`.** Add / Edit / Confirmation / Filter / Category-picker / Create-Edit-Category are opened imperatively from a `SheetRegistry` mounted once in the root layout. | Phase 1. §6.4's docked keypad + collapse-on-scroll + dirty-discard + OS-keyboard swap need one controlled sheet host; the raised centre **Add** "FAB notch" (a **FAB**, "Floating Action Button," is a common mobile-design pattern for a prominent circular button that floats above the rest of the layout for the single most important action on a screen — here, one is raised up out of a notch cut into the tab bar) (§8) isn't expressible with `unstable-native-tabs`, and iOS is Future. |
-| D26 | **Undo = soft-delete + purge-on-launch.** `transaction.deletedAt` (nullable); delete sets it, Undo clears it, every read filters `deletedAt IS NULL`, and rows are hard-purged on next launch once past a ~60 s grace. **`suggestion` dismiss is a hard `DELETE`** — `suggestion.status` is `pending` \| `confirmed` only (`confirmed` kept ~24 h for stale-tap routing, then purged). | Phase 2. Survives an app-kill mid-window; keeps delete/restore as ordinary writes reachable from any context. See §19.1 / §19.4 / §20.6. |
+| D26 | **Undo = soft-delete + purge-on-launch.** `transaction.deletedAt` (nullable); delete sets it, Undo clears it, every read filters `deletedAt IS NULL`, and rows are hard-purged on next launch once past a ~60 s grace. ~~`suggestion` dismiss is a hard `DELETE`~~ — **superseded by CR-30 (2026-09-28):** dismiss now tombstones the row (`status: 'dismissed'`, `dismissedAt` set) instead of deleting it, purged ~4 days later; `suggestion.status` is `pending` \| `confirmed` \| `dismissed`. | Phase 2. Survives an app-kill mid-window; keeps delete/restore as ordinary writes reachable from any context. See §19.1 / §19.4 / §20.6. |
 | D27 | **Search = FTS5 external-content table + sync triggers.** `transaction_fts` over `note` / `description` / `account`, kept in sync by AFTER INSERT/UPDATE/DELETE triggers, shipped as a hand-written migration. SDK 57 `expo-sqlite` has `enableFTS` on by default. Fallback if a device lacks FTS5: a maintained `searchText` column + `LIKE`. | Phase 2. See §19.6. |
 | D28 | **Money is INTEGER paise end-to-end** (parse → store → `SUM()` → format); zero floating-point in the money pipeline. Timestamps are INTEGER epoch-ms UTC with local-day/week/month math in a domain helper (P-11). IDs are `expo-crypto` UUID `text`; enums are `text` with Drizzle enum guards. | Phase 2. Resolves the §6-sketch ambiguity. See §19.0. |
 | D29 | **Parser = hybrid, no confidence score.** Data tables for the sender seed + keyword sets + VPA shapes (VPA = Virtual Payment Address, the `name@bank` or `name@app` handle UPI payments use instead of a bank account number — e.g. `swiggy@paytm`); code for assembly. Output is a `ParseResult` discriminated union (`transaction` with `parsedFlags` + `warnings`, or `ignored` with a `reason`). `occurredAt` is the SMS timestamp — **no in-body date parsing** in V1. The sender seed is a curated, code-versioned constant (not a table, not user-editable); expansion is Future. | Phase 3. See §23. The corpus fixture file is the primary unit-test asset. |
@@ -1712,8 +1712,9 @@ prefix search (§6.5).
 | `smsSender` | text | no | — | |
 | `smsReceivedAt` | integer ms | no | — | |
 | `dedupeKey` | text | no | — | §17.3 step 4; **UNIQUE** |
-| `status` | text `pending`\|`confirmed` | no | `pending` | **dismiss is a hard `DELETE` (D26)** — `dismissed` is not a stored state. `confirmed` is kept briefly so a stale notification tap can route to the created transaction (§10); purged on launch when `createdAt < now − 24 h` (§20.6) |
+| `status` | text `pending`\|`confirmed`\|`dismissed` | no | `pending` | **`dismissed` tombstones the row (CR-30, supersedes D26's hard `DELETE`)** — keeps `dedupeKey` blocking the SMS-reconcile sweep; purged on launch when `dismissedAt < now − 4 days` (§20.6). `confirmed` is kept briefly so a stale notification tap can route to the created transaction (§10); purged on launch when `createdAt < now − 24 h` (§20.6) |
 | `confirmedTransactionId` | text uuid | yes | null | FK → `transaction.id` `ON DELETE SET NULL` |
+| `dismissedAt` | integer ms | yes | null | **CR-30** — set when `status` becomes `'dismissed'`; drives the tombstone's purge TTL |
 | `createdAt` | integer ms | no | `now` | |
 
 No confidence field (§6). "Which fields parsed" is implicit — a non-null column parsed. No raw
@@ -1957,7 +1958,7 @@ logic fork** (Phase 1 §17.0 rule 2).
 | `insertIfNew(input)` → `{ created, id }` | write-Sync | `SMS_INGEST_TASK` (§17.3 step 5); relies on `uniq_sugg_dedupe` + `ON CONFLICT DO NOTHING` | ✅ |
 | `getSuggestion(id)` / `…Sync` | read | notification routing, Review Queue row | ✅ |
 | `confirmSuggestion(id, transactionId)` / `…Sync` | write | set `status='confirmed'` + link — in the **same DB transaction** as the transaction insert, from both the Confirmation sheet and the headless Save | ✅ |
-| `dismissSuggestion(id)` / `…Sync` | write | **hard `DELETE`** (D26) — notification Discard + Review Queue swipe | ✅ |
+| `dismissSuggestion(id)` / `…Sync` | write | **tombstone** (`status='dismissed'`, CR-30 — supersedes D26's hard `DELETE`) — notification Discard + Review Queue swipe | ✅ |
 | `dismissAllPending()` → count | write | Review Queue "Dismiss all" (§6.3) | — |
 | `usePendingSuggestions()` | live | Review Queue list (§6.3) | — |
 | `usePendingCount()` | live | Home action strip + Home-tab badge (§6.2) | — |
@@ -2982,8 +2983,8 @@ killed and warm cases:
       Confirmation sheet (set a pending deep link, then `Notifications` will foreground on the
       next user interaction; in practice `SAVE` with no rule is impossible to reach because the
       button only exists in `txn-known`, but the guard stays for the race).
-  - **`DISCARD`** → `suggestionRepo.dismiss(suggestionId)` (hard `DELETE`, D26) → cancel
-    `sug:<id>` → recount + refresh/cancel the summary. No ledger write (IMP-007).
+  - **`DISCARD`** → `suggestionRepo.dismiss(suggestionId)` (tombstone, CR-30 — supersedes D26's
+    hard `DELETE`) → cancel `sug:<id>` → recount + refresh/cancel the summary. No ledger write (IMP-007).
 - **Foreground taps** — `ADD` button and **body taps** carry `opensAppToForeground:true`; handled
   by the JS listener in `_layout.tsx` (§28.3), not the task:
   - cold start → `Notifications.getLastNotificationResponseAsync()` after `<MigrationGate>`.
@@ -4238,6 +4239,14 @@ What shipped, and where it differs from the sketch above (the sketch was not wro
 
 - **CR-25** (2026-09-20, linked UI-UX CR-12) — **Default category + bulk save.** New setting `defaultCategoryId` (string | null; added to `SettingKey`). New `handleSaveAll(defaultCategoryId)` in `src/services/notifications/respond.ts` writes every complete pending suggestion in **one** `db.transaction` (insert transaction + mark suggestion confirmed, no account-rule writes), then cancels the answered notifications; returns `{ saved, skipped }`. Category per row: credit → `null` (IMP-011); debit → the account rule's `categoryId` if set, else the default. New route `src/app/default-category.tsx` (+ `.web.tsx`), a Settings row, and a `defaultCategoryId` that no longer matches a category is treated as unset (no `deleteCategory` change); `resolveDefaultCategory` also rejects the system *Uncategorized* row, and the picker hides it. No schema change; no new permission.
 - **CR-26** (2026-09-20, on-device verification — linked UI-UX CR-13) — **Two-phone results and corrections.** (1) The Motorola's number is **9742590888** (the spec's earlier "second phone 9845897555" was an old SIM); the Samsung is 9390787053. (2) A valid **SEND_SMS denial test** needs `pm revoke` **and** `pm set-permission-flags --user 0 <pkg> android.permission.SEND_SMS user-fixed`: on the Motorola a plain revoke is silently re-granted when the app asks, with no dialog. (3) With the permission denied the reminder/resend path falls back to an `sms:` intent; on the Motorola the OS shows an **"Open with" chooser listing WhatsApp and Messages** (UI-UX CR-13). (4) The notification **Accept/Reject buttons did nothing on the debug dev client** (see §45.10); the shade also **groups CoinFlow requests under a "N split requests" summary that must be expanded, then each request expanded, to reach its buttons** on One UI. (5) Verified results are recorded in `SPEC/traceability.md` ("On-device verification — phase 5 … 2026-09-20"). No code change.
+- **CR-27** (2026-09-26, user-reported bug — linked UI-UX CR-14) — **Daily reminder at 9:30 PM.** `DAILY_REMINDER_HOUR` 9 → **21** in `daily-reminder.ts` (the reminder was meant to be evening; the DAILY trigger is a fixed-id upsert, so the next launch re-arms it at 21:30). Swiping / clearing a transaction notification does not delete its suggestion — it stays pending in the Review Queue; only the notification's **Discard** button and the Review Queue's dismiss delete (IMP-007), unchanged. *Correction (2026-09-26, CR-29):* this was established from the code (no dismiss handler exists) and from the Samsung's queue still holding suggestions whose notifications were gone — a notification swipe itself was **not** exercised on-device. The DAILY trigger is also an inexact Android alarm with a 1-hour window (seen in `dumpsys alarm`), so the reminder arrives between 21:30 and 22:30 — left as is.
+- **CR-28** (2026-09-26, linked UI-UX CR-17) — **Income categories (supersedes IMP-011).** Income transactions can now carry a category. (1) **Schema (migration `0003_income_categories`, additive):** `category.appliesTo` (`'expense' | 'income'`, NOT NULL, default `'expense'` — every existing category stays an expense category) and `account_rule.incomeCategoryId` (nullable FK → `category.id`, `ON DELETE SET NULL`; `account_rule.categoryId` keeps meaning "remembered *expense* category"). Existing income transactions keep `categoryId = null` (Uncategorized) — no backfill. (2) **Seed v2:** 7 income categories — Salary, Freelance, Interest, Refund, Gift, Pocket money, Other income (`other_income`, protected) — inserted for existing installs by the `SEED_VERSION` 2 pass; a seed whose name a custom category already uses is skipped (names stay unique across both kinds, IMP-019). New icons added to `ui/icon.tsx`. (3) **Rules:** `appliesTo` is fixed at creation (`createCategory({ appliesTo })`); `categoriesFor(list, kind)` filters for the pickers; `resolveDefaultCategory(id, list, kind)` only accepts a category of that kind. New setting `defaultIncomeCategoryId` (Settings › Default category gains an income row; used by Save all for credits — CR-25 stays for debits). (4) **As built:** `transactions.ts` no longer forces `categoryId = null` for income (a direction flip without an explicit category clears the old one, since an expense category is wrong for income). `categorize.ts` gains `ruleCategoryFor(rule, direction)`, `categoriesFor(list, kind)` and direction-aware `resolveCategoryForAccount` / `isKnownAccountRule`. `upsertFromTransaction` takes a `direction` and writes only that direction's column (`categoryId` for debit, `incomeCategoryId` for credit); `write-confirmed-transaction.ts` does the same inside its transaction. `handleSave` uses the rule's category for the suggestion's direction (a credit whose account only remembers an expense category saves Uncategorized); `handleSaveAll({ expense, income })` uses the rule's category, else the matching default, else Uncategorized. `useUncategorizedCount` and the Uncategorized list filter count `categoryId IS NULL` for expense **and** income. `categoryBreakdownQuery(period, type)` + `useIncomeBreakdown` drive the new Analytics card. Settings › Default category is two rows (`/default-category` and `/default-category?kind=income`, writing `defaultCategoryId` / `defaultIncomeCategoryId`). The account-rule editor and list show and edit both remembered categories. Migration `0003` was hand-edited to add `ON DELETE set null` to the new FK (the generator omitted it for `ALTER TABLE … ADD`). Tests: `migration-v3.test.ts` and `seed-real.test.ts` run against real in-memory SQLite.
+- **CR-29** (2026-09-26, found in a code + on-device review — linked UI-UX CR-19) — **Parser, seed and picker fixes.** (1) **Account extraction (§23.4) no longer returns the user's own account.** Real Canara Bank SMS say "has been DEBITED/CREDITED **to your account XXX672** on …"; rule (2) took "your account XXX672" as the counterparty — 163 of 397 bank SMS on the test phone, all sharing one account rule. `extract.ts` now (a) skips any rule-(2)/(4) capture that names the user's own account (`isOwnAccountRef`: `your …`, `account|acct|a/c|ac …`, or a bare masked number like `XXX672`) and moves on to the next candidate; (b) only searches the text before the bank's footer (`beforeFooter`: total/available balance, `Dial 1930…`, `Not you?`, `SMS BLOCK…`), so the footer's "to report cyber fraud" is never a payee; (c) adds a credit-only rule ahead of (2): `by Sender <NAME>` (NEFT/IMPS), ended by `,` / `IFSC`. Result on the phone's 774-SMS inbox: 374 own-account captures → `null`, 4 NEFT credits → the real sender; no other capture changed except one non-transaction notice. Existing transactions / account rules are **not** rewritten. Corpus: 5 new fixtures (`own-account-*`, `footer-to-is-not-a-payee`). (2) **Seeding never resurrects deleted defaults.** `SeededCategory.since` records the `SEED_VERSION` that introduced each row; an upgrade inserts only rows with `since` > the install's seeded version (protected rows always), so a default removed in onboarding ("Pick your categories") or Settings stays deleted. Rows added by an upgrade get `order` = current max + 1, + 2, … (they used to reuse 10–16 and interleave with custom categories); a fresh install keeps the designed order. Tests: `seed-real.test.ts`. (3) **Category-picker pending pick.** The CR-18 delay (pick written `PICK_SETTLE_MS` after the parent reopens) is now held in `pendingPick` and applied early by `flushPendingCategoryPick()`, which the transaction sheet calls at the start of Save and Cancel — a Save within 120 ms keeps the category, Cancel still sees the change; a pick is dropped if the draft was closed or replaced meanwhile.
+- **CR-30** (2026-09-28, user-reported bug) — **Dismissing a suggestion no longer resurrects it (supersedes D26's hard `DELETE`).** `SmsReconciler` re-reads the last 48h of the phone's SMS inbox on every app foreground/cold launch (`services/tasks/sms-reconcile.ts`); dismiss used to `DELETE` the suggestion row, which freed its `dedupeKey`, so the very next sweep re-parsed the same still-present SMS and re-created the suggestion as pending — reproduced on the test phone (2 items dismissed via To review "Dismiss all", both within the 48h window, both back after reopening the app). Fix: `dismissSuggestion` / `dismissAllPending` now set `status: 'dismissed'` + `dismissedAt` instead of deleting; the row's `dedupeKey` still satisfies `hasDedupeKey` (`transactions.ts`), so `smsIngestTask` step 4 stops before ever calling `insertIfNew` again. Migration `0004_dismissed_suggestion_tombstone` adds `suggestion.dismissedAt` and the `'dismissed'` status value (additive). `db/maintenance.ts` purges dismissed tombstones after `DISMISSED_SUGGESTION_TTL_MS` (4 days — comfortably past the 48h sweep lookback + margin), the same pattern `split_request_in`'s rejected/withdrawn tombstones already use. `handleSave` (`respond.ts`) now also rejects a `'dismissed'` suggestion (a stale Save tap must not resurrect one). No UI change — this was a pure data-layer bug; "disappears, comes back on reopen" is exactly the resurrection this fixes. Tests: `suggestions-real.test.ts` (real SQLite, reproduces the exact scenario), `migration-v4.test.ts`.
+- **CR-31** (2026-10-25, linked UI-UX CR-20) — **Usability batch.** (1) `transactions.ts` `searchNotesByPrefix(prefix, limit = 4)`: non-deleted notes whose `lower(note)` starts with the typed text (`LIKE … ESCAPE '!'`, so `%`, `_`, `!` are literal — a backslash escape did not survive the SQL template), grouped by `lower(note)`, ordered by count then latest `createdAt` (selecting `max(createdAt)` makes SQLite return the latest spelling), excluding an exact match. Called during render like `searchByPrefix` (accounts); the sheet's scroll view is `keyboardShouldPersistTaps="handled"` so a tap on a suggestion lands with the keyboard up. Tests: `note-suggestions.test.ts` (real SQLite). (2) `domain/time-entry.ts` (`typeTimeDigit` / `eraseTimeDigit`): first digit replaces, second appends, a digit past the max restarts, `complete` once no further digit fits (auto-advances hour → minute). `DateTimePicker` gains `activeField` / `onFieldPress`; `MINUTE_STEP` 5 → 1. (3) Seed **v3**: new income icons in `seed-data.ts` / `category-icons.ts` / `ui/icon.tsx` (old glyphs kept in the icon map so a custom category using one still renders); `ICON_REFRESH_V3` updates an install seeded at v1/v2 only where the row still has the old default icon. (4) `findOrCreatePerson` reuses an existing name-only person with the same name (case-insensitive) instead of inserting a duplicate — two different people sharing a name and no number now merge (add a distinguishing name); a name-only person never merges with one who has a number. Split sheet: name-only `DraftPerson` key `m:<lower name>`; `willSend` also needs at least one person with a number (`send-requests.ts` already skipped people without one). `split-card.tsx` `requestLine()`. (5) Transaction sheet `keypadTarget: 'amount' | 'hour' | 'minute' | null` (initial: `'amount'` only for a fresh Add with ₹0, read from the store because the body remounts after every sub-sheet); `NumericKeypad` renders only with a target; pointing it at a field calls `Keyboard.dismiss()`; `TextField` gains a composed `onFocus`; `AmountInput` gains `active` (caret). (6) `ui/toast.tsx`: `bottom = insets.bottom + 8 + 64 (tab pill) + 24 (Add-button overhang) + 16`, opaque `surface3` + hairline, 16 px side margins. `transaction/[id].tsx`: `headline = note || account || null`. (7) The future-date hint compared `occurredAt > openedAtMs` — a fresh Add's `occurredAt` is stamped by the seeding effect a few ms after mount, so it always showed; now `> openedAtMs + FUTURE_DATE_SLACK_MS` (60 s).
+- **CR-32** (2026-10-25, found while checking CR-31 on the Samsung — linked UI-UX CR-21) — (1) **Text fields hidden by the keyboard:** the transaction sheet's Account / Note / Description fields (and the note / account suggestion lists) sat behind the phone keyboard — the sheet uses plain `TextInput`s, not gorhom's `BottomSheetTextInput`, and a 92% sheet cannot rise. Now a `keyboardDidShow`-height spacer ends the scroll content and focusing a field scrolls it to the top (`scrollFieldIntoView`, `onLayout` y of each field's wrapper). (2) **Calendar showed 8 days per row** under 7 weekday letters on this phone (fixed 40 px cells in a wider grid); a first fix with ⅐-width cells then fitted only 6 (percentages round up) — the grid is now explicit week rows (`monthWeeks`) of 7 `flex: 1` cells, the same columns as the weekday letters. (3) **"Add a person" was the last row** of the split People stage, below the whole contact list — moved under the search box.
+- **CR-33** (2026-10-25, linked UI-UX CR-21) — **Toast motion & duration.** `ui/toast.tsx` animates with React Native `Animated` (native driver): opacity 0→1 and `translateY` 14→0 over `ENTER_MS` = 340 (ease-out cubic), reverse over `EXIT_MS` = 280 (ease-in quad). It stays mounted until the exit finishes and keeps its last message/action so the text does not blank while fading. `stores/toast.ts` `TOAST_DURATION_MS` 3000 → 1000 (time before the exit starts; the animations add ~0.6 s). A new `show()` during the exit simply re-runs the entrance.
+- **CR-34** (2026-10-25, linked UI-UX CR-22) — **My accounts, balances & transfers — specified in Part IV (§46); not built.** New tables `my_account` and `account_balance`, new `transaction` columns `accountId` / `transferPeerId`, new parser outputs (own bank + last digits, balance, card due date), pure domain modules for balance / reconcile / transfer matching, a fourth widget, and a due-date reminder. Phased A–E; each phase ships on its own. Migration `0005_my_accounts`.
 
 ### 45.7 As built — phase 2 (effective-amount analytics), 2026-09-19
 
@@ -4298,3 +4307,163 @@ What shipped, and where it differs from the sketch above (the sketch was not wro
 - **JS:** `publish.ts`, `widget-sync.tsx`, `add.tsx`, `review.tsx`, `widgets.tsx` (see CR-24).
 - **Tests:** publish 8 (figures, month bounds, pending + hide, native failure, debounce), deep-link redirects 4 → the whole suite passes; typecheck and lint clean.
 - **On-device verification: partial** — the rebuilt client is installed and the user checked the three widgets visually on the Samsung (2026-09-20); still to do: add each widget, both sizes, tap targets (incl. a cold start from Quick add and from a queue row), Hide amounts, a real SMS updating the queue widget with the app closed, and a month rollover (or a simulated date).
+
+
+---
+
+# Part IV — My accounts, balances & transfers (CR-34, 2026-10-25) — SPEC ONLY
+
+> Status: **specified, not built.** Product behaviour is `SPEC-UI-UX.md` §6.25 (UI-101…UI-109). Phases A–E below each ship on their own; nothing here
+> changes behaviour for a user who never adds an account except the two relabels (UI-101) and the longer parser output.
+
+## 46. My accounts, balances & transfers
+
+### 46.1 Decisions
+
+| # | Decision | Why |
+|---|---|---|
+| D43 | **A transfer is two linked rows** (`transferPeerId`), each on its own account, both `type='transfer'` — not one row with a "to" account. | Every account's ledger stays a plain sum of its own rows (balances, reconcile); the banks themselves send two SMS; analytics already filter on `type IN ('expense','income')` (`analytics.ts`), so transfers drop out with no query change. |
+| D44 | **Balances are anchored on bank-reported figures**, not computed from zero: `balance = latest snapshot + Σ signed rows after it`. | We never see the opening balance; the bank's own number is the only authoritative one. Manual accounts anchor on what the user typed. |
+| D45 | **Discrepancies are derived, not stored** (only an "It's fine" acknowledgement is). | Adding a late transaction must fix them with no bookkeeping; a stored row would go stale. |
+| D46 | **An account is identified by `bankKey:last4`**, created automatically from SMS, mergeable by the user. | The SMS has nothing else; sender IDs differ per bank *and* per message type, so a user merge is the safety net. |
+| D47 | **Auto-link transfers only when unambiguous**; otherwise ask (a Review card). | A wrong silent link hides real spending, a missed link only shows two rows. |
+| D48 | **Keep only the last 4 digits and the balance** — never the full account number, never the SMS body. | Matches the existing privacy stance (§33); balances never leave the device (not in logs, crash reports or the widget beyond the numbers the user sees). |
+| D49 | Credit-card figure = **available limit**; the same signed arithmetic applies (spend lowers it, a payment raises it). | That is what card SMS report; keeping one rule avoids a special case. Cards are excluded from the "Total balance". |
+
+### 46.2 Data model (migration `0005_my_accounts`, generated with `drizzle-kit generate`)
+
+**`my_account`**
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | text pk | no | uuid |
+| `kind` | text `bank`\|`credit_card`\|`wallet`\|`cash` | no | decides allowed payment methods (§46.8) |
+| `nickname` | text | no | shown everywhere |
+| `bankName` | text | yes | display, e.g. "HDFC Bank" |
+| `bankKey` | text | yes | canonical key, e.g. `hdfc` (§46.4) |
+| `last4` | text | yes | 3–4 digits as printed in the SMS |
+| `matchKey` | text unique | yes | `bankKey:last4`; null for manual / cash accounts |
+| `autoCreated` | integer bool | no, 0 | drives the **New** pill / Review card until the user opens it |
+| `archivedAt` | integer ms | yes | hidden, kept for history |
+| `creditLimitMinor` | integer | yes | optional, display only |
+| `dueAt` / `dueAmountMinor` | integer | yes | latest card bill from SMS (§46.4) |
+| `createdAt` / `updatedAt` | integer ms | no | |
+
+**`account_balance`** (snapshots; the only balance store)
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | text pk | |
+| `accountId` | text fk → `my_account` on delete cascade | |
+| `balanceMinor` | integer | paise; for a card, available limit |
+| `asOf` | integer ms | SMS `receivedAt`, or "now" for a manual entry |
+| `source` | text `sms`\|`manual` | |
+| `dedupeKey` | text unique | `accountId:asOf:balanceMinor` — the same SMS re-read by the reconcile sweep adds nothing |
+| `acknowledgedAt` | integer ms, null | set by "It's fine" on the discrepancy that *ends* at this snapshot |
+
+Index `(accountId, asOf)`. **Retention:** on launch (with the existing `maintenance.ts` purge) keep the newest 200 snapshots per account and nothing older than 90 days
+except the newest one.
+
+**`transaction`** gains `accountId` (text, fk → `my_account` **on delete set null**, indexed) and `transferPeerId` (text, null — the other row of a pair; no fk, kept
+consistent by the repository). **`suggestion`** gains `accountId` (text, null) so the account chosen at ingest survives to Confirm. Existing rows: both null ("No
+account") — **no backfill** (the SMS body is not stored; D48).
+
+Guards: a transfer row has `categoryId = null`; `type='transfer'` rows cannot be split (extends the "only debits can be split" guard, §39.6); a row with a
+`transferPeerId` always has a peer with the reverse id and opposite direction (repository invariant, tested).
+
+### 46.3 Domain modules (pure, `src/domain/accounts/`, unit-tested first)
+
+- `account-key.ts` — `bankKeyFromSender(sender)`: strips the DLT prefix/suffix (`AX-HDFCBK-S` → `HDFCBK`), maps known headers to one key
+  (`HDFCBK`/`HDFCBN`→`hdfc`, `SBIINB`/`SBIPSG`/`SBIUPI`→`sbi`, `ICICIB`→`icici`, `AXISBK`→`axis`, `KOTAKB`→`kotak`, `CANBNK`→`canara`, `PNBSMS`→`pnb`, …); an unknown header becomes its own
+  lower-cased key (so it still works, merely un-prettified). `matchKey(bankKey, last4)`. The header → name table is data, extended from `sms-corpus.ts`.
+- `balance.ts` — `currentBalance(snapshots, rows)` = newest snapshot + Σ signed(rows where `occurredAt > asOf`, not deleted); signed = credit `+`, debit `−`. No snapshot ⇒ `null` (unknown, never 0).
+  `totalBalance(accounts)` = Σ of non-card, non-archived accounts with a known balance, plus `knownCount` / `unknownCount` and the oldest `asOf`.
+- `reconcile.ts` — `findDiscrepancies(snapshots, rows, toleranceMinor = 100)`: for each consecutive pair `(s₁, s₂)` of an account,
+  `expected = s₁.balance + Σ signed(rows with s₁.asOf < occurredAt ≤ s₂.asOf)`, `diff = s₂.balance − expected`; report when `|diff| > tolerance` and `s₂.acknowledgedAt` is null.
+  Only the newest 10 pairs are evaluated. Pairs more than 30 days apart are skipped (too much can legitimately have happened).
+- `transfers.ts` — `matchTransfer(row, candidates, now)`: candidates = other non-deleted, un-linked rows, `type ∈ {expense, income}`, opposite direction, **equal `amountMinor`**,
+  different non-null `accountId`, `|occurredAt − row.occurredAt| ≤ 15 min`. Result: `{ kind:'link', peer }` when exactly one candidate **and** at least one of the pair has `source='sms'`;
+  `{ kind:'ask', peers }` when ≥ 2 candidates, or one candidate but neither is an SMS; `{ kind:'none' }` otherwise.
+- `card-bill.ts` — `looksLikeCardBillPayment(body)`: the bank's debit SMS mentions a credit-card payment ("towards … credit card", "card bill", "CC payment") **and** a last-4 that equals one of the user's card accounts ⇒ `ask` (single-sided transfer, §46.6).
+
+### 46.4 Parser changes (`domain/parser/`)
+
+`ParsedFields` gains `ownAccount: { bankKey, bankName, last4 } | null`, `balanceMinor: number | null`, `due: { amountMinor, dueAt } | null`.
+
+- **Own account.** `last4` from "A/c XX672", "a/c no. XXXX1234", "card ending 4321", "A/c *1234" (the shapes `isOwnAccountRef` already recognises — that function stays; it now *also* feeds this value
+  instead of discarding it). `bankKey` from the sender (§46.3), falling back to a bank name in the body.
+- **Balance.** Amount following "Avl Bal" / "Available balance" / "Avail. Bal" / "Bal:" (cards: "Avl limit" / "Available credit limit"). Zero or negative is legal (overdraft), so it is accepted;
+  rejected only when it is not a plain number, exceeds ₹100 crore, or the message is a *request* / promo. Balance is still **never** used as the transaction amount (existing rule).
+- **Balance-only messages.** `IgnoreReason 'balance-only'` stays for messages with no transaction *and no recognisable own account*; a message with a balance **and** an own account becomes a new
+  `ParseResult` variant `{ kind: 'balance', ownAccount, balanceMinor, receivedAt }` — no suggestion, no notification, just a snapshot (§46.5).
+- **Due date.** "Total due Rs 14,200.00 … due date 05-Nov-26" (several formats) ⇒ `due`; both fields required, else ignored.
+- The ignore gates (OTP, promo, request-money, foreign currency) run **first**, unchanged: a promo that mentions "available balance" can never write a balance.
+- Each new pattern gets corpus fixtures in `__fixtures__/sms-corpus.ts` from real messages (HDFC, SBI, ICICI, Axis, Kotak, Canara + two card banks); the corpus test asserts account, balance and "no regression in amount / direction".
+
+### 46.5 Ingest (`services/tasks/sms-ingest.ts`, `sms-reconcile.ts`)
+
+For every parsed SMS with `ownAccount`: `resolveAccount()` finds the account by `matchKey`, or **creates it** (`autoCreated = true`, nickname "HDFC ··672", kind `credit_card` when the SMS says card, else `bank`).
+The result id is stored on the suggestion (`accountId`) and copied to the transaction on Confirm; the notification text and the Confirm sheet show it. A `balanceMinor`, when present, is written as an
+`account_balance` snapshot **at ingest** (so it counts even while the transaction is still pending in the Review Queue); the unique `dedupeKey` makes the 48-hour reconcile sweep idempotent. A snapshot with
+`asOf` older than the account's newest snapshot is still stored (it participates in `findDiscrepancies` ordering) but never becomes "current". Card `due` updates `dueAt` / `dueAmountMinor` only when newer.
+
+A user's **manual** edit of a balance writes a `source='manual'` snapshot with `asOf = now`.
+
+### 46.6 Transfers
+
+- **Auto-link hook:** after any insert / confirm of a row with an `accountId`, `matchTransfer` runs (repository `linkTransferIfAny(txnId)`, inside the same write transaction). `link` ⇒ both rows `type='transfer'`, `categoryId=null`,
+  `transferPeerId` set both ways, undo entry pushed. `ask` ⇒ a `transfer_hint` is recorded (a `suggestion`-style Review item: `kind='transfer'` with both row ids) — **no schema table**; derived on read by running `matchTransfer` over un-linked rows of the last 48 h that have no recorded "No" (stored as a key in `app_setting`, `transferHintDismissed:<idA>:<idB>`).
+- **Manual transfer** (Add sheet, Transfer segment): `createTransfer({ fromId, toId, amountMinor, occurredAt, note })` inserts the pair atomically.
+- **Single-sided transfer** (bill payment whose card-side SMS never came; or "Yes" on a `card-bill` hint): one row `type='transfer'`, no peer.
+- **Unlink:** each row returns to `expense` (debit) / `income` (credit), `transferPeerId = null`, category null; the user can then categorise normally.
+- **Edit / delete:** editing the amount or account of one side of a pair unlinks automatically (the pair no longer matches); deleting one side leaves the other as a single-sided transfer, flagged in details ("its other half was deleted — Unlink?"); Undo restores both.
+- **Analytics & splits:** nothing to change in the SQL (`type IN ('expense','income')`) but a regression test asserts a transfer pair moves none of income / spending / mean / median / category totals / widget figures. CSV export (`export.ts`) gains `account` and `transfer_peer_id` columns; a transfer exports as `type=transfer`.
+
+### 46.7 Repositories (`src/db/repositories/`, `.test.ts` each, against the real in-memory SQLite)
+
+`accounts.ts` — `listAccounts({ includeArchived })`, `getAccount`, `createAccount`, `updateAccount`, `archiveAccount`, `mergeAccounts(fromId, intoId)` (re-points `transaction.accountId`, `suggestion.accountId`, snapshots; keeps the target's nickname; deletes the source),
+`resolveAccountFromSms(own)`, `listAccountsWithBalance()` (account + `currentBalance` + oldest/newest `asOf` + discrepancy count). `balances.ts` — `recordSnapshot`, `acknowledgeDiscrepancy(snapshotId)`, `purgeOldSnapshots`. `transfers.ts` — `createTransfer`, `linkTransferIfAny`, `unlinkTransfer`, `listTransferHints`, `dismissTransferHint`.
+`transactions.ts` — `accountId` on create / update / list filter; the list query and the Filter sheet gain an `accountIds` filter. Settings: `cardBillRemindersEnabled` (default true).
+
+### 46.8 Payment-method ↔ account kind
+
+`ACCOUNT_KINDS_FOR_METHOD`: `upi → [bank]`, `bank_transfer → [bank]`, `card → [credit_card, bank]`, `wallet → [wallet]`, `cash → [cash]`. Used by the sheet's **Paid from** row and by the parser to pick a default
+`paymentMethod`↔account pairing (a UPI debit on `hdfc:672` ⇒ method `upi`, account HDFC ··672). Choosing an account whose kind does not fit the method (possible when editing an old row) is allowed but the chip shows a ⚠.
+
+### 46.9 UI implementation map
+
+`src/app/my-accounts.tsx` (+ test) · `src/features/accounts/` — `account-row.tsx`, `account-sheet.tsx` (registered in `SheetHost` like the category editor), `new-account-card.tsx`, `transfer-hint-card.tsx`, `needs-a-look-card.tsx` ·
+`transaction-sheet.tsx` — Transfer segment, **Paid from** chips, relabel · Settings rows (My accounts, Card bill reminders, "Merchant rules") · Home `Total balance` card · Transactions list meta line + Filter sheet group ·
+`review-queue.tsx` — three new card types at the top · `transaction/[id].tsx` — account row, Unlink. No change to the tab bar or routing beyond `my-accounts`.
+
+### 46.10 Notifications & widget
+
+- **Card bill reminder:** a scheduled local notification per card with a future `dueAt`, 10:00 two days before (same exact-alarm approach as the daily reminder, `services/notifications/daily-reminder.ts`), cancelled when the due date changes or the setting is turned off; tapping opens My accounts.
+  Channel `card-bills`, default importance.
+- **Widget schema v2** (additive — v1 keys unchanged, old native code ignores new keys): `"accounts": { "totalMinor": 0, "knownCount": 0, "updatedAt": 0, "items": [ { "id": "", "nickname": "", "balanceMinor": 0, "asOf": 0 } ] }` (≤ 3 items, largest balance first).
+  Fourth provider `BalancesWidgetProvider` + `cf_widget_balances*.xml` + `cf_widget_balances_info.xml`; same masking and staleness rules as §44.5–§44.6 (an `asOf` older than 3 days prints "· 3d old"). **Needs a prototype shown to the user before any Kotlin/XML (as UI-099 did for the first three).**
+
+### 46.11 Phases (each ends with typecheck, lint, tests green and an on-device check)
+
+| Phase | Delivers | Needs on-device |
+|---|---|---|
+| **A — Accounts exist** | migration 0005, `accounts.ts`, `account-key.ts`, parser own-account + corpus, auto-create at ingest, My accounts page + Add/Edit sheet, relabels | real SMS from ≥ 2 banks |
+| **B — Transactions know their account** | `accountId` on sheet / notification / Confirm / details / list / filter, **Paid from** chips, manual **Transfer** | yes |
+| **C — Transfers** | `transfers.ts`, auto-link + Review card + Unlink, card-bill hint, analytics regression test | a real SBI → HDFC move |
+| **D — Balances** | snapshots from SMS, `balance.ts`, `reconcile.ts`, Home total, **Needs a look** | two consecutive balance SMS |
+| **E — Cards & widget** | due date parse + reminder, Balances widget (after prototype approval) | release build |
+
+### 46.12 Risks & open questions
+
+- **SMS formats vary.** Balance / last-4 patterns will miss some banks. Failure mode is benign: no account, no balance — the app behaves exactly as today. Each miss becomes a corpus fixture.
+- **A wrong auto-created account** (a bank sending two header styles) shows as two accounts; **Merge** is the remedy. This overlaps the known "same SMS from two sender IDs" bug — fixing one should be looked at together with the other.
+- **Existing history has no accounts.** Left as "No account" (D48). Open question: offer "assign all past transactions from sender X to this account"? (smsSender *is* stored on SMS-sourced rows, so a bulk assign by sender is feasible.)
+- **UPI to your own other account** where only one side is texted stays unlinked (a hint appears only when both sides exist). Acceptable for now.
+- **Balance staleness.** Banks skip the balance on some messages; the figure may be days old. UI-103 shows its age and never presents it as live.
+- **Release train.** Independent of auto split detection; ship as the next minor version after `v2.0.0`.
+
+### 46.13 Test plan (extends §34 / §45.3)
+
+Pure: `account-key`, `balance`, `reconcile` (in-order / out-of-order / gap > 30 d / acknowledged / tolerance edge / late transaction clears it), `transfers` (exactly one / two candidates / manual-only / 15-min edge / same account / amount mismatch), `card-bill`.
+Parser corpus: balance, last-4, due date, balance-only-with-account → `balance` variant, promo-with-balance → ignored. Repositories (real SQLite): create / merge / archive, snapshot idempotency, retention, link / unlink / delete-one-side / edit-unlinks invariants, **analytics unchanged by a transfer pair**, widget snapshot v2, `accountId` filter.
+UI: My accounts empty / populated / hidden amounts / stale amber, sheet validation, **Paid from** filtering by method (the 5 methods × 4 kinds), Transfer segment (From ≠ To), Review cards, Home total fallback, Transactions meta line.

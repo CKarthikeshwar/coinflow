@@ -5,7 +5,7 @@
  */
 
 import { ensureMigrated } from '@/db/maintenance';
-import { setSetting } from '@/db/repositories/settings';
+import { getSetting, setSetting } from '@/db/repositories/settings';
 import { getRecentSmsMessages, isSmsCaptureSupported } from '@/services/sms';
 
 import { reconcileMissedSms } from './sms-reconcile';
@@ -16,13 +16,14 @@ jest.mock('@/services/sms', () => ({
   getRecentSmsMessages: jest.fn().mockResolvedValue([]),
 }));
 jest.mock('./sms-ingest', () => ({ smsIngestTask: jest.fn().mockResolvedValue(undefined) }));
-jest.mock('@/db/repositories/settings', () => ({ setSetting: jest.fn() }));
+jest.mock('@/db/repositories/settings', () => ({ setSetting: jest.fn(), getSetting: jest.fn() }));
 jest.mock('@/db/maintenance', () => ({ ensureMigrated: jest.fn().mockResolvedValue(undefined) }));
 
 const isSmsCaptureSupportedMock = isSmsCaptureSupported as jest.Mock;
 const getRecentSmsMessagesMock = getRecentSmsMessages as jest.Mock;
 const smsIngestTaskMock = smsIngestTask as jest.Mock;
 const setSettingMock = setSetting as jest.Mock;
+const getSettingMock = getSetting as jest.Mock;
 
 const MESSAGE = { sender: 'AD-PNBSMS-S', body: 'A/c credited for INR 1.00.', timestampMs: 1_700_000_000_000 };
 
@@ -30,6 +31,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   isSmsCaptureSupportedMock.mockReturnValue(true);
   getRecentSmsMessagesMock.mockResolvedValue([]);
+  // An install old enough to never clamp the lookback window, unless a test says otherwise.
+  getSettingMock.mockReturnValue(0);
 });
 
 describe('reconcileMissedSms', () => {
@@ -72,6 +75,23 @@ describe('reconcileMissedSms', () => {
     jest.spyOn(Date, 'now').mockReturnValue(now);
     await reconcileMissedSms({ notify: true, source: 'storeTrigger', lookbackMs: 6 * 60 * 60 * 1000 });
     expect(getRecentSmsMessagesMock).toHaveBeenCalledWith(now - 6 * 60 * 60 * 1000);
+  });
+
+  it('never reaches back further than this install has existed (a fresh reinstall must not resurrect old SMS)', async () => {
+    const now = 1_800_000_000_000;
+    const installedAt = now - 60 * 60 * 1000; // 1h ago — inside the default 48h window
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    getSettingMock.mockReturnValue(installedAt);
+    await reconcileMissedSms({ notify: false });
+    expect(getRecentSmsMessagesMock).toHaveBeenCalledWith(installedAt);
+  });
+
+  it('does not clamp a long-lived install — the requested window still wins', async () => {
+    const now = 1_800_000_000_000;
+    getSettingMock.mockReturnValue(now - 365 * 86_400_000); // installed a year ago
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    await reconcileMissedSms({ notify: false });
+    expect(getRecentSmsMessagesMock).toHaveBeenCalledWith(now - 48 * 60 * 60 * 1000);
   });
 
   it('runs migrations first — a background trigger can beat the UI to the database', async () => {

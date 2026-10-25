@@ -70,14 +70,14 @@ beforeEach(() => {
 
 describe('upsertFromTransaction', () => {
   it('does nothing when the account is blank', () => {
-    upsertFromTransaction({ account: '   ', categoryId: null, categoryIsUncategorized: true, note: null, paymentMethod: null });
+    upsertFromTransaction({ direction: 'debit', account: '   ', categoryId: null, categoryIsUncategorized: true, note: null, paymentMethod: null });
     expect(mockInsertedRows).toHaveLength(0);
     expect(mockUpdates).toHaveLength(0);
   });
 
   it('inserts a new rule with hitCount 1 when none exists for the normalized key', () => {
     state.existingRule = null;
-    upsertFromTransaction({ account: 'Swiggy', categoryId: 'cat-food', categoryIsUncategorized: false, note: 'Lunch', paymentMethod: 'upi' });
+    upsertFromTransaction({ direction: 'debit', account: 'Swiggy', categoryId: 'cat-food', categoryIsUncategorized: false, note: 'Lunch', paymentMethod: 'upi' });
     expect(mockInsertedRows[0]).toEqual(
       expect.objectContaining({ normalizedKey: 'swiggy', displayAccount: 'Swiggy', hitCount: 1, categoryId: 'cat-food' }),
     );
@@ -85,7 +85,7 @@ describe('upsertFromTransaction', () => {
 
   it('bumps hitCount and overwrites lastNote/lastPaymentMethod on an existing rule', () => {
     state.existingRule = { normalizedKey: 'swiggy', hitCount: 3, categoryId: 'cat-food' };
-    upsertFromTransaction({ account: 'Swiggy', categoryId: 'cat-food', categoryIsUncategorized: false, note: 'Dinner', paymentMethod: 'cash' });
+    upsertFromTransaction({ direction: 'debit', account: 'Swiggy', categoryId: 'cat-food', categoryIsUncategorized: false, note: 'Dinner', paymentMethod: 'cash' });
     expect(mockUpdates[0].values).toEqual(
       expect.objectContaining({ hitCount: 4, lastNote: 'Dinner', lastPaymentMethod: 'cash', categoryId: 'cat-food' }),
     );
@@ -93,13 +93,33 @@ describe('upsertFromTransaction', () => {
 
   it('keeps the previously learned category when the new save is Uncategorized', () => {
     state.existingRule = { normalizedKey: 'swiggy', hitCount: 3, categoryId: 'cat-food' };
-    upsertFromTransaction({ account: 'Swiggy', categoryId: null, categoryIsUncategorized: true, note: null, paymentMethod: null });
+    upsertFromTransaction({ direction: 'debit', account: 'Swiggy', categoryId: null, categoryIsUncategorized: true, note: null, paymentMethod: null });
+    expect(mockUpdates[0].values).not.toHaveProperty('categoryId'); // untouched, so the learned one stays
+  });
+
+  it('a credit with a category is learned into incomeCategoryId, leaving the expense category alone (CR-28)', () => {
+    state.existingRule = { normalizedKey: 'akarsh', hitCount: 2, categoryId: 'cat-food', incomeCategoryId: null };
+    upsertFromTransaction({ direction: 'credit', account: 'Akarsh', categoryId: 'cat-refund', categoryIsUncategorized: false, note: null, paymentMethod: 'upi' });
+    expect(mockUpdates[0].values).toEqual(expect.objectContaining({ incomeCategoryId: 'cat-refund' }));
+    expect(mockUpdates[0].values).not.toHaveProperty('categoryId');
+  });
+
+  it('a debit with a category is learned into categoryId, leaving the income category alone (CR-28)', () => {
+    state.existingRule = { normalizedKey: 'akarsh', hitCount: 2, categoryId: null, incomeCategoryId: 'cat-refund' };
+    upsertFromTransaction({ direction: 'debit', account: 'Akarsh', categoryId: 'cat-food', categoryIsUncategorized: false, note: null, paymentMethod: 'upi' });
     expect(mockUpdates[0].values).toEqual(expect.objectContaining({ categoryId: 'cat-food' }));
+    expect(mockUpdates[0].values).not.toHaveProperty('incomeCategoryId');
+  });
+
+  it('a brand-new rule from a credit stores the category as the income one (CR-28)', () => {
+    state.existingRule = null;
+    upsertFromTransaction({ direction: 'credit', account: 'Employer', categoryId: 'cat-salary', categoryIsUncategorized: false, note: null, paymentMethod: 'bank_transfer' });
+    expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ categoryId: null, incomeCategoryId: 'cat-salary' }));
   });
 
   it('an explicit null note clears lastNote (P-6), not left as-is', () => {
     state.existingRule = { normalizedKey: 'swiggy', hitCount: 1, categoryId: null };
-    upsertFromTransaction({ account: 'Swiggy', categoryId: null, categoryIsUncategorized: true, note: null, paymentMethod: null });
+    upsertFromTransaction({ direction: 'debit', account: 'Swiggy', categoryId: null, categoryIsUncategorized: true, note: null, paymentMethod: null });
     expect(mockUpdates[0].values).toEqual(expect.objectContaining({ lastNote: null }));
   });
 });

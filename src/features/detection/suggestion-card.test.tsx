@@ -18,18 +18,33 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     dedupeKey: 'dedupe-1',
     status: 'pending',
     confirmedTransactionId: null,
+    dismissedAt: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
 }
 
 describe('SuggestionCard', () => {
-  it('shows the signed amount and a payment descriptor', async () => {
+  it('shows a debit with a minus sign and a payment descriptor', async () => {
     const { getByText } = await render(
       <SuggestionCard suggestion={suggestion()} known={false} onOpen={jest.fn()} onDismiss={jest.fn()} />,
     );
-    expect(getByText('+ ₹450')).toBeTruthy();
+    expect(getByText('− ₹450')).toBeTruthy();
     expect(getByText(/UPI payment/)).toBeTruthy();
+  });
+
+  it('shows a credit with a plus sign', async () => {
+    const { getByText } = await render(
+      <SuggestionCard suggestion={suggestion({ direction: 'credit' })} known={false} onOpen={jest.fn()} onDismiss={jest.fn()} />,
+    );
+    expect(getByText('+ ₹450')).toBeTruthy();
+  });
+
+  it('shows no sign when the direction could not be parsed', async () => {
+    const { getByText } = await render(
+      <SuggestionCard suggestion={suggestion({ direction: null })} known={false} onOpen={jest.fn()} onDismiss={jest.fn()} />,
+    );
+    expect(getByText('₹450')).toBeTruthy();
   });
 
   it('shows an inline Save button only when known', async () => {
@@ -51,7 +66,7 @@ describe('SuggestionCard', () => {
     const { getByText } = await render(
       <SuggestionCard suggestion={suggestion()} known={false} onOpen={onOpen} onDismiss={jest.fn()} />,
     );
-    fireEvent.press(getByText('+ ₹450'));
+    fireEvent.press(getByText('− ₹450'));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 

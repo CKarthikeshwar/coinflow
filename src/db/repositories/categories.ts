@@ -28,7 +28,7 @@ import { randomUUID } from 'expo-crypto';
 import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
-import { categories, transactions, type Category } from '../schema';
+import { categories, transactions, type Category, type CategoryAppliesTo } from '../schema';
 
 export class DuplicateCategoryNameError extends Error {
   constructor(name: string) {
@@ -56,11 +56,17 @@ export function listCategories(): Category[] {
  * CR-25: the stored default category, or `null` when unset, deleted, or the system "Uncategorized" row —
  * Uncategorized means `categoryId = null` everywhere else, so it can never be a default.
  */
-export function resolveDefaultCategory(id: string | null | undefined, list: Category[]): Category | null {
+export function resolveDefaultCategory(
+  id: string | null | undefined,
+  list: Category[],
+  appliesTo: CategoryAppliesTo = 'expense',
+): Category | null {
   if (!id) return null;
   const found = list.find((c) => c.id === id);
-  return found && found.kind !== 'system' ? found : null;
+  // CR-28: the expense default must be an expense category, the income default an income one.
+  return found && found.kind !== 'system' && found.appliesTo === appliesTo ? found : null;
 }
+
 
 export function getCategoryMap(): Map<string, Category> {
   return new Map(listCategories().map((c) => [c.id, c]));
@@ -75,7 +81,8 @@ function nameTaken(name: string, exceptId?: string): boolean {
   return !!row && row.id !== exceptId;
 }
 
-export function createCategory(input: { name: string; icon: string }): Category {
+/** CR-28: `appliesTo` is fixed at creation (changing it later would strand the transactions already using it). */
+export function createCategory(input: { name: string; icon: string; appliesTo?: CategoryAppliesTo }): Category {
   const name = input.name.trim();
   if (nameTaken(name)) throw new DuplicateCategoryNameError(name);
   const now = Date.now();
@@ -86,6 +93,7 @@ export function createCategory(input: { name: string; icon: string }): Category 
     name,
     icon: input.icon,
     kind: 'custom',
+    appliesTo: input.appliesTo ?? 'expense',
     isProtected: false,
     order: (maxOrder?.v ?? 0) + 1,
     createdAt: now,

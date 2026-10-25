@@ -27,7 +27,8 @@ export function BalanceHero({ balanceMinor }: BalanceHeroProps) {
         Total balance
       </ThemedText>
       <ThemedText type="balanceHero" style={styles.figure}>
-        {negative ? <ThemedText type="balanceHero">−</ThemedText> : null}
+        {/* thin space after the sign, the same as every other amount (`− ₹140`, §27.1; CR-19) */}
+        {negative ? <ThemedText type="balanceHero">{'− '}</ThemedText> : null}
         <ThemedText type="balanceHero" themeColor="text3">
           ₹
         </ThemedText>

@@ -20,7 +20,6 @@ import {
   addDays,
   addMonths,
   eachDayOfInterval,
-  endOfMonth,
   format,
   isSameDay,
   isSameMonth,
@@ -35,28 +34,43 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Colors, Radius, Spacing } from '@/constants/theme';
 
+import type { TimeField } from '@/domain/time-entry';
+
 import { Icon } from './icon';
 import { ThemedText } from './themed-text';
 
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-const MINUTE_STEP = 5;
+// CR-31: was 5 — exact minutes are now one tap each way (or typed, see `onFieldPress`).
+const MINUTE_STEP = 1;
 
 export type DateTimePickerProps = {
   valueMs: number;
   onChange: (ms: number) => void;
+  /**
+   * CR-31 — which time field the parent's numeric keypad is typing into, if any; it is highlighted. Tapping the
+   * hour or minute number calls `onFieldPress` so the parent can point its keypad at it (digits only — never the
+   * phone's full keyboard). Without `onFieldPress` the numbers are plain text, as before.
+   */
+  activeField?: TimeField | null;
+  onFieldPress?: (field: TimeField) => void;
 };
 
-export function DateTimePicker({ valueMs, onChange }: DateTimePickerProps) {
+/**
+ * The month grid as 6 Monday-first weeks of 7 days (42 cells, so the height never jumps between months), including
+ * the leading / trailing days of the neighbouring months. CR-32: rendered row by row, so a day can't drift under the
+ * wrong weekday.
+ */
+export function monthWeeks(month: Date): Date[][] {
+  const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start: gridStart, end: addDays(gridStart, 41) });
+  return Array.from({ length: 6 }, (_, i) => days.slice(i * 7, i * 7 + 7));
+}
+
+export function DateTimePicker({ valueMs, onChange, activeField = null, onFieldPress }: DateTimePickerProps) {
   const selected = useMemo(() => new Date(valueMs), [valueMs]);
   const [viewedMonth, setViewedMonth] = useState(() => startOfMonth(selected));
 
-  const days = useMemo(() => {
-    const gridStart = startOfWeek(startOfMonth(viewedMonth), { weekStartsOn: 1 });
-    const gridEnd = endOfMonth(viewedMonth);
-    // Always render 6 full weeks (42 cells) so the grid's height doesn't jump between months.
-    const end = addDays(gridStart, 41);
-    return eachDayOfInterval({ start: gridStart, end: end < gridEnd ? gridEnd : end }).slice(0, 42);
-  }, [viewedMonth]);
+  const weeks = useMemo(() => monthWeeks(viewedMonth), [viewedMonth]);
 
   const pickDay = (day: Date) => {
     const next = setMinutes(setHours(day, selected.getHours()), selected.getMinutes());
@@ -111,39 +125,54 @@ export function DateTimePicker({ valueMs, onChange }: DateTimePickerProps) {
         ))}
       </View>
 
+      {/* CR-32: explicit week rows of 7 equal cells — a wrapping grid fitted 8 (fixed px) or 6 (rounded %) on the
+          Samsung, putting dates under the wrong weekday */}
       <View style={styles.grid}>
-        {days.map((day) => {
-          const inMonth = isSameMonth(day, viewedMonth);
-          const isSelected = isSameDay(day, selected);
-          return (
-            <Pressable
-              key={day.toISOString()}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              onPress={() => pickDay(day)}
-              style={styles.dayCell}
-            >
-              <View style={[styles.dayInner, isSelected ? styles.dayInnerSelected : null]}>
-                <ThemedText
-                  type="label"
-                  themeColor={isSelected ? 'primaryInk' : inMonth ? 'text' : 'text3'}
+        {weeks.map((week) => (
+          <View key={week[0].toISOString()} style={styles.weekRow}>
+            {week.map((day) => {
+              const inMonth = isSameMonth(day, viewedMonth);
+              const isSelected = isSameDay(day, selected);
+              return (
+                <Pressable
+                  key={day.toISOString()}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => pickDay(day)}
+                  style={styles.dayCell}
                 >
-                  {format(day, 'd')}
-                </ThemedText>
-              </View>
-            </Pressable>
-          );
-        })}
+                  <View style={[styles.dayInner, isSelected ? styles.dayInnerSelected : null]}>
+                    <ThemedText
+                      type="label"
+                      themeColor={isSelected ? 'primaryInk' : inMonth ? 'text' : 'text3'}
+                    >
+                      {format(day, 'd')}
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
 
       <View style={styles.timeRow}>
-        <TimeStepper label="Hour" value={format(selected, 'HH')} onDecrement={() => stepHour(-1)} onIncrement={() => stepHour(1)} />
+        <TimeStepper
+          label="Hour"
+          value={format(selected, 'HH')}
+          active={activeField === 'hour'}
+          onPressValue={onFieldPress ? () => onFieldPress('hour') : undefined}
+          onDecrement={() => stepHour(-1)}
+          onIncrement={() => stepHour(1)}
+        />
         <ThemedText type="title" themeColor="text3" style={styles.timeColon}>
           :
         </ThemedText>
         <TimeStepper
           label="Minute"
           value={format(selected, 'mm')}
+          active={activeField === 'minute'}
+          onPressValue={onFieldPress ? () => onFieldPress('minute') : undefined}
           onDecrement={() => stepMinute(-MINUTE_STEP)}
           onIncrement={() => stepMinute(MINUTE_STEP)}
         />
@@ -155,14 +184,23 @@ export function DateTimePicker({ valueMs, onChange }: DateTimePickerProps) {
 function TimeStepper({
   label,
   value,
+  active,
+  onPressValue,
   onDecrement,
   onIncrement,
 }: {
   label: string;
   value: string;
+  active: boolean;
+  onPressValue?: () => void;
   onDecrement: () => void;
   onIncrement: () => void;
 }) {
+  const valueText = (
+    <ThemedText type="title" style={styles.stepperValueText}>
+      {value}
+    </ThemedText>
+  );
   return (
     <View style={styles.stepper}>
       <Pressable
@@ -176,9 +214,19 @@ function TimeStepper({
           −
         </ThemedText>
       </Pressable>
-      <ThemedText type="title" style={styles.stepperValue}>
-        {value}
-      </ThemedText>
+      {onPressValue ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${label} ${value}, type a value`}
+          accessibilityState={{ selected: active }}
+          onPress={onPressValue}
+          style={[styles.stepperValue, active ? styles.stepperValueActive : null]}
+        >
+          {valueText}
+        </Pressable>
+      ) : (
+        <View style={styles.stepperValue}>{valueText}</View>
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Increase ${label}`}
@@ -208,9 +256,11 @@ const styles = StyleSheet.create({
   chevronLeft: { transform: [{ rotate: '180deg' }] },
   monthLabel: { fontWeight: '600' },
   weekdayRow: { flexDirection: 'row' },
-  weekdayCell: { width: CELL_SIZE, textAlign: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  dayCell: { width: CELL_SIZE, height: CELL_SIZE, alignItems: 'center', justifyContent: 'center' },
+  // CR-32: weekday letters and day cells share the same flex: 1 columns, so they always line up
+  weekdayCell: { flex: 1, textAlign: 'center' },
+  grid: {},
+  weekRow: { flexDirection: 'row' },
+  dayCell: { flex: 1, height: CELL_SIZE, alignItems: 'center', justifyContent: 'center' },
   dayInner: {
     width: 32,
     height: 32,
@@ -238,6 +288,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepperValue: { width: 36, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  stepperValue: {
+    minWidth: 44,
+    paddingVertical: Spacing.half,
+    borderRadius: Radius.control,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    alignItems: 'center',
+  },
+  // CR-31: the field the keypad is typing into
+  stepperValueActive: { borderColor: Colors.dark.primary, backgroundColor: Colors.dark.surface3 },
+  stepperValueText: { textAlign: 'center', fontVariant: ['tabular-nums'] },
   timeColon: { marginTop: -4 },
 });

@@ -76,7 +76,7 @@ export function buildTxnNotification(
 ): TxnNotificationContent {
   return {
     identifier: `sug:${suggestion.id}`,
-    categoryIdentifier: isKnownAccountRule(rule) ? TXN_KNOWN_CATEGORY : TXN_NEW_CATEGORY,
+    categoryIdentifier: isKnownAccountRule(rule, suggestion.direction ?? 'debit') ? TXN_KNOWN_CATEGORY : TXN_NEW_CATEGORY,
     title: buildTitle(suggestion),
     body: buildBody(suggestion),
     threadId: TXN_REVIEW_THREAD_ID,

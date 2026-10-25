@@ -60,12 +60,17 @@ const nowMs = () => Date.now();
 
 const PAYMENT_METHODS = ['upi', 'card', 'cash', 'bank_transfer', 'wallet'] as const;
 
+export type CategoryAppliesTo = 'expense' | 'income';
+
 export const categories = sqliteTable('category', {
   id: text('id').primaryKey(),
   key: text('key').unique(), // stable slug for seeded rows; null for custom
   name: text('name').notNull(),
   icon: text('icon').notNull(), // Lucide glyph name (§3.4)
   kind: text('kind', { enum: ['system', 'default', 'custom'] }).notNull(),
+  // CR-28: which kind of transaction the category is offered for. One combined list in Settings, but the
+  // Add / Confirm picker only offers the kind matching the transaction's direction.
+  appliesTo: text('appliesTo', { enum: ['expense', 'income'] }).notNull().default('expense'),
   isProtected: integer('isProtected', { mode: 'boolean' }).notNull().default(false),
   order: integer('order').notNull(),
   createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
@@ -117,7 +122,9 @@ export const accountRules = sqliteTable(
     normalizedKey: text('normalizedKey').primaryKey(), // the §24 normalized account string
     displayAccount: text('displayAccount').notNull(),
     lastNote: text('lastNote'), // explicit NULL when the user cleared the note (P-6)
-    categoryId: text('categoryId').references(() => categories.id, { onDelete: 'set null' }),
+    categoryId: text('categoryId').references(() => categories.id, { onDelete: 'set null' }), // remembered EXPENSE category
+    // CR-28: remembered INCOME category — one account can be both paid by you and pay you back.
+    incomeCategoryId: text('incomeCategoryId').references(() => categories.id, { onDelete: 'set null' }),
     lastPaymentMethod: text('lastPaymentMethod', { enum: PAYMENT_METHODS }),
     hitCount: integer('hitCount').notNull().default(0),
     createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
@@ -139,14 +146,18 @@ export const suggestions = sqliteTable(
     smsSender: text('smsSender').notNull(),
     smsReceivedAt: integer('smsReceivedAt').notNull(),
     dedupeKey: text('dedupeKey').notNull(),
-    // dismiss is a hard DELETE (D26); `confirmed` is kept briefly for stale-tap routing.
-    status: text('status', { enum: ['pending', 'confirmed'] })
+    // CR-30 — supersedes D26's "dismiss is a hard DELETE": a dismissed suggestion is kept as a hidden tombstone
+    // (same dedupeKey, `status: 'dismissed'`) so the SMS-reconcile sweep's `hasDedupeKey` check still finds it and
+    // never re-creates it from the same message. `confirmed` is kept briefly for stale-tap routing.
+    status: text('status', { enum: ['pending', 'confirmed', 'dismissed'] })
       .notNull()
       .default('pending'),
     confirmedTransactionId: text('confirmedTransactionId').references(() => transactions.id, {
       onDelete: 'set null',
     }),
     createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
+    // CR-30 — when `status` became `'dismissed'`; drives the tombstone's purge TTL (`maintenance.ts`).
+    dismissedAt: integer('dismissedAt'),
   },
   (t) => [
     index('idx_sugg_status').on(t.status, t.createdAt),

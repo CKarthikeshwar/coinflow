@@ -20,7 +20,8 @@
 
 import { create } from 'zustand';
 
-const TOAST_DURATION_MS = 3000;
+// CR-33: 3 s -> 1 s on screen (the soft fade in / out in `ui/toast.tsx` comes on top of this).
+const TOAST_DURATION_MS = 1000;
 
 type ToastAction = { label: string; onPress: () => void };
 

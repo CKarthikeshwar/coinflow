@@ -26,7 +26,7 @@ jest.mock('expo-router/js-tabs', () => ({
 }));
 
 const mockCategories: Category[] = [
-  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
 ];
 
 let mockListResult: { rows: Transaction[]; daySubtotals: { dayStartMs: number; spentMinor: number }[]; updatedAt: number | undefined };

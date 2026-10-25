@@ -17,9 +17,11 @@ export type AmountInputProps = {
   amountMinor: number;
   mode: 'full' | 'summary';
   helper?: string;
+  /** CR-31 — whether the keypad is typing into this amount; the caret only shows then. Defaults to true. */
+  active?: boolean;
 };
 
-export function AmountInput({ amountMinor, mode, helper }: AmountInputProps) {
+export function AmountInput({ amountMinor, mode, helper, active = true }: AmountInputProps) {
   const digits = formatMoney(amountMinor, { sign: 'none', withCurrency: false });
 
   if (mode === 'summary') {
@@ -40,7 +42,7 @@ export function AmountInput({ amountMinor, mode, helper }: AmountInputProps) {
           ₹
         </ThemedText>
         <ThemedText type="amountHero">{digits}</ThemedText>
-        <View style={styles.caret} />
+        {active ? <View style={styles.caret} /> : null}
       </View>
       {helper ? (
         <ThemedText type="label" themeColor="text3" style={styles.helper}>

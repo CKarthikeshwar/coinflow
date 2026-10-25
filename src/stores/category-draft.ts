@@ -11,27 +11,32 @@
 
 import { create } from 'zustand';
 
+import type { CategoryAppliesTo } from '@/db/schema';
+
 export type CategoryDraft = {
   categoryId: string | null; // null = creating a new category
   name: string;
   icon: string;
+  /** CR-28 — chosen when creating; fixed once the category exists. */
+  appliesTo: CategoryAppliesTo;
   dirty: boolean;
   submitting: boolean;
   error: string | null;
 };
 
-export type CategoryDraftSeed = Pick<CategoryDraft, 'categoryId' | 'name' | 'icon'>;
+export type CategoryDraftSeed = Pick<CategoryDraft, 'categoryId' | 'name' | 'icon'> & Partial<Pick<CategoryDraft, 'appliesTo'>>;
 
 const BLANK: CategoryDraft = {
   categoryId: null,
   name: '',
   icon: 'shapes',
+  appliesTo: 'expense',
   dirty: false,
   submitting: false,
   error: null,
 };
 
-const DIRTY_KEYS = ['name', 'icon'] as const satisfies readonly (keyof CategoryDraft)[];
+const DIRTY_KEYS = ['name', 'icon', 'appliesTo'] as const satisfies readonly (keyof CategoryDraft)[];
 
 function computeDirty(current: CategoryDraft, initial: CategoryDraft): boolean {
   return DIRTY_KEYS.some((key) => current[key] !== initial[key]);
@@ -40,7 +45,7 @@ function computeDirty(current: CategoryDraft, initial: CategoryDraft): boolean {
 type CategoryDraftStore = CategoryDraft & {
   _initial: CategoryDraft;
   open: (seed: CategoryDraftSeed) => void;
-  patch: (fields: Partial<Pick<CategoryDraft, 'name' | 'icon'>>) => void;
+  patch: (fields: Partial<Pick<CategoryDraft, 'name' | 'icon' | 'appliesTo'>>) => void;
   setSubmitting: (submitting: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;

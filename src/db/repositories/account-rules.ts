@@ -41,10 +41,12 @@ import { normalizeAccount } from '@/domain/normalize';
 import { useLiveQuery } from '@/hooks/use-live-query';
 
 import { db } from '../client';
-import { accountRules, type AccountRule, type PaymentMethod } from '../schema';
+import { accountRules, type AccountRule, type Direction, type PaymentMethod } from '../schema';
 
 export type RuleSource = {
   account: string;
+  /** CR-28 — decides which remembered category is written: expense (debit) or income (credit). */
+  direction: Direction;
   categoryId: string | null;
   /** true when the saved transaction's category is Uncategorized — keeps the learned one */
   categoryIsUncategorized: boolean;
@@ -72,7 +74,8 @@ export function upsertFromTransaction(src: RuleSource): void {
         normalizedKey,
         displayAccount: account,
         lastNote: src.note,
-        categoryId: src.categoryIsUncategorized ? null : src.categoryId,
+        categoryId: src.direction === 'debit' && !src.categoryIsUncategorized ? src.categoryId : null,
+        incomeCategoryId: src.direction === 'credit' && !src.categoryIsUncategorized ? src.categoryId : null,
         lastPaymentMethod: src.paymentMethod,
         hitCount: 1,
         createdAt: now,
@@ -88,8 +91,13 @@ export function upsertFromTransaction(src: RuleSource): void {
       hitCount: existing.hitCount + 1,
       lastNote: src.note,
       lastPaymentMethod: src.paymentMethod,
-      // keep the previously learned category when the new save is Uncategorized
-      categoryId: src.categoryIsUncategorized ? existing.categoryId : src.categoryId,
+      // keep the previously learned category when the new save is Uncategorized; only the column for this
+      // direction is touched, so an account's expense and income categories are learned independently
+      ...(src.categoryIsUncategorized
+        ? {}
+        : src.direction === 'credit'
+          ? { incomeCategoryId: src.categoryId }
+          : { categoryId: src.categoryId }),
       updatedAt: now,
     })
     .where(eq(accountRules.normalizedKey, normalizedKey))
@@ -121,12 +129,13 @@ export function searchByPrefix(prefix: string, limit = 8): AccountRule[] {
 
 export function updateAccountRule(
   normalizedKey: string,
-  patch: { lastNote?: string | null; categoryId?: string | null },
+  patch: { lastNote?: string | null; categoryId?: string | null; incomeCategoryId?: string | null },
 ): void {
   db.update(accountRules)
     .set({
       ...(patch.lastNote !== undefined ? { lastNote: patch.lastNote } : {}),
       ...(patch.categoryId !== undefined ? { categoryId: patch.categoryId } : {}),
+      ...(patch.incomeCategoryId !== undefined ? { incomeCategoryId: patch.incomeCategoryId } : {}),
       updatedAt: Date.now(),
     })
     .where(eq(accountRules.normalizedKey, normalizedKey))

@@ -58,8 +58,8 @@ beforeEach(() => {
   mockMem = createMemoryDb();
   mockCounter = 0;
   db().insert(categories).values([
-    { id: 'c-food', key: 'food', name: 'Food', icon: 'x', kind: 'default', isProtected: false, order: 1, createdAt: 1, updatedAt: 1 },
-    { id: 'c-cab', key: 'cab', name: 'Cab', icon: 'x', kind: 'default', isProtected: false, order: 2, createdAt: 1, updatedAt: 1 },
+    { id: 'c-food', key: 'food', name: 'Food', icon: 'x', kind: 'default', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 1, updatedAt: 1 },
+    { id: 'c-cab', key: 'cab', name: 'Cab', icon: 'x', kind: 'default', appliesTo: 'expense', isProtected: false, order: 2, createdAt: 1, updatedAt: 1 },
   ]).run();
 });
 
@@ -250,5 +250,36 @@ describe('period boundaries and other periods', () => {
     createSplit({ transactionId: outside.id, shares: [{ personId: a.id, amountMinor: 40_000 }] });
     expect(summary().spentMinor).toBe(60_000);
     expect(balance()).toBe(-120_000); // all-time balance counts both
+  });
+});
+
+describe('income categories (CR-28)', () => {
+  it('the income breakdown groups income by its category, with uncategorized income as its own null row', () => {
+    db().insert(categories).values({ id: 'c-salary', key: 'salary', name: 'Salary', icon: 'briefcase', kind: 'default', appliesTo: 'income', isProtected: false, order: 10 }).run();
+    income(300_000, { categoryId: 'c-salary' });
+    income(200_000, { categoryId: 'c-salary', occurredAt: inMonth(12) });
+    income(50_000); // uncategorized
+    expense(70_000, { categoryId: 'c-food' }); // an expense must not leak into the income breakdown
+    expect(categoryBreakdownQuery(period, 'income').all()).toEqual([
+      { categoryId: 'c-salary', amountMinor: 500_000, n: 2 },
+      { categoryId: null, amountMinor: 50_000, n: 1 },
+    ]);
+  });
+
+  it('the expense breakdown ignores categorized income', () => {
+    db().insert(categories).values({ id: 'c-salary', key: 'salary', name: 'Salary', icon: 'briefcase', kind: 'default', appliesTo: 'income', isProtected: false, order: 10 }).run();
+    income(300_000, { categoryId: 'c-salary' });
+    expense(70_000, { categoryId: 'c-food' });
+    expect(categoryBreakdownQuery(period).all()).toEqual([{ categoryId: 'c-food', amountMinor: 70_000, n: 1 }]);
+  });
+
+  it('categorizing income does not change the period totals or the running balance', () => {
+    income(300_000);
+    expense(70_000);
+    const before = { s: summary(), b: balance() };
+    db().insert(categories).values({ id: 'c-salary', key: 'salary', name: 'Salary', icon: 'briefcase', kind: 'default', appliesTo: 'income', isProtected: false, order: 10 }).run();
+    db().update(transactions).set({ categoryId: 'c-salary' }).where(eq(transactions.type, 'income')).run();
+    expect(summary()).toEqual(before.s);
+    expect(balance()).toBe(before.b);
   });
 });

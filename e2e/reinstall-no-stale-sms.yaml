@@ -1,0 +1,22 @@
+# Reinstall must not resurrect old SMS (`ensureInstallMarker` / `reconcileMissedSms`'s clamp,
+# src/db/repositories/settings.ts, src/services/tasks/sms-reconcile.ts). Requires the app to have
+# just been freshly installed (uninstall, then install) on a device whose SMS inbox still has
+# messages from before this install — the exact scenario that resurrected 4 old "To review"
+# suggestions before this fix. Maestro's `launchApp` auto-grants runtime permissions, so the SMS
+# permission step is already "Granted" by the time onboarding shows it — the reconcile sweep runs
+# for real. Then checks the Review Queue is empty.
+appId: com.ckworkforce.coinflow
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn: "Get started"
+- waitForAnimationToEnd
+- tapOn: "Continue"
+- waitForAnimationToEnd
+- tapOn: "Not now"
+- waitForAnimationToEnd
+- tapOn: "Done"
+- waitForAnimationToEnd
+- takeScreenshot: reinstall-home
+- assertVisible: "Add transaction"
+- assertNotVisible: "To review"

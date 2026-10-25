@@ -47,6 +47,15 @@ const REQUEST_LINE: Record<ShareView['requestState'], string> = {
   opened_in_sms_app: 'Opened in Messages',
 };
 
+/**
+ * The quiet line under a person's name: how their request went. CR-31: a name-only person (a split kept just for
+ * tracking) was never going to be texted, so they read "Tracking only" rather than "Not sent".
+ */
+export function requestLine(share: Pick<ShareView, 'requestState'> & { person: Pick<ShareView['person'], 'phoneDisplay'> }): string {
+  if (!share.person.phoneDisplay && share.requestState === 'not_sent') return 'Tracking only';
+  return REQUEST_LINE[share.requestState];
+}
+
 /** The status chip's wording for a share (UI-074). */
 export function shareChipLabel(share: Pick<ShareView, 'state' | 'settledMinor' | 'amountMinor'>): string {
   switch (share.state) {
@@ -123,7 +132,7 @@ export function SplitCard({ view, onEditSplit, onRemoveSplit, onWaive, onRestore
                   {s.person.displayName}
                 </ThemedText>
                 <ThemedText type="caption" themeColor="text3">
-                  {REQUEST_LINE[s.requestState]}
+                  {requestLine(s)}
                   {s.changedSinceRequested ? ' · changed since requested' : ''}
                   {s.person.phoneKey ? ` · ${maskPhone(s.person.phoneKey)}` : ''}
                 </ThemedText>

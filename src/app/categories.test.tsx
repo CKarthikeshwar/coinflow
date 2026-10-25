@@ -25,6 +25,7 @@ function category(overrides: Partial<Category> = {}): Category {
     name: 'Food',
     icon: 'utensils',
     kind: 'custom',
+    appliesTo: 'expense',
     isProtected: false,
     order: 1,
     createdAt: 0,
@@ -39,7 +40,7 @@ beforeEach(() => {
   mockDeleteCategory.mockReset();
   useSheetRegistry.setState({ current: null, params: {}, onRequestClose: null });
   mockCategories = [
-    category({ id: 'cat-other', key: 'other', name: 'Other', kind: 'default', isProtected: true, order: 99 }),
+    category({ id: 'cat-other', key: 'other', name: 'Other', kind: 'default', appliesTo: 'expense', isProtected: true, order: 99 }),
   ];
 });
 
@@ -50,7 +51,7 @@ it('shows "No custom categories yet." when there are none', async () => {
 
 it('splits default (non-custom) and custom categories into their own sections', async () => {
   mockCategories = [
-    category({ id: 'cat-other', key: 'other', name: 'Other', kind: 'default', isProtected: true }),
+    category({ id: 'cat-other', key: 'other', name: 'Other', kind: 'default', appliesTo: 'expense', isProtected: true }),
     category({ id: 'cat-groceries', name: 'Groceries', kind: 'custom' }),
   ];
   const { getByText, queryByText } = await render(<CategoriesScreen />);
@@ -94,4 +95,25 @@ it('"Add category" opens the Create sheet', async () => {
   const { getByLabelText } = await render(<CategoriesScreen />);
   await fireEvent.press(getByLabelText('Add category'));
   expect(useSheetRegistry.getState().current).toBe('createCategory');
+});
+
+it('shows expense and income categories together in one list, each tagged (CR-28)', async () => {
+  mockCategories = [
+    category({ id: 'cat-food', key: 'food', name: 'Food', kind: 'default', appliesTo: 'expense' }),
+    category({ id: 'cat-salary', key: 'salary', name: 'Salary', kind: 'default', appliesTo: 'income' }),
+    category({ id: 'cat-mine', name: 'Scholarship', kind: 'custom', appliesTo: 'income' }),
+  ];
+  const { getByText, getAllByText } = await render(<CategoriesScreen />);
+  expect(getByText('Food')).toBeTruthy();
+  expect(getByText('Salary')).toBeTruthy();
+  expect(getByText('Scholarship')).toBeTruthy();
+  expect(getAllByText('Income')).toHaveLength(2);
+  expect(getAllByText('Expense')).toHaveLength(1);
+});
+
+it('the system Uncategorized row has no Expense / Income tag — it applies to both (CR-19)', async () => {
+  mockCategories = [category({ id: 'cat-uncat', key: 'uncategorized', name: 'Uncategorized', kind: 'system', isProtected: true })];
+  const { getByText, queryByText } = await render(<CategoriesScreen />);
+  expect(getByText('Uncategorized')).toBeTruthy();
+  expect(queryByText('Expense')).toBeNull();
 });

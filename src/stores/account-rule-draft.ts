@@ -19,22 +19,25 @@ import { create } from 'zustand';
 export type AccountRuleDraft = {
   normalizedKey: string;
   lastNote: string;
-  categoryId: string | null;
+  categoryId: string | null; // remembered EXPENSE category
+  incomeCategoryId: string | null; // CR-28 — remembered INCOME category
   dirty: boolean;
   submitting: boolean;
 };
 
-export type AccountRuleDraftSeed = Pick<AccountRuleDraft, 'normalizedKey' | 'lastNote' | 'categoryId'>;
+export type AccountRuleDraftSeed = Pick<AccountRuleDraft, 'normalizedKey' | 'lastNote' | 'categoryId'> &
+  Partial<Pick<AccountRuleDraft, 'incomeCategoryId'>>;
 
 const BLANK: AccountRuleDraft = {
   normalizedKey: '',
   lastNote: '',
   categoryId: null,
+  incomeCategoryId: null,
   dirty: false,
   submitting: false,
 };
 
-const DIRTY_KEYS = ['lastNote', 'categoryId'] as const satisfies readonly (keyof AccountRuleDraft)[];
+const DIRTY_KEYS = ['lastNote', 'categoryId', 'incomeCategoryId'] as const satisfies readonly (keyof AccountRuleDraft)[];
 
 function computeDirty(current: AccountRuleDraft, initial: AccountRuleDraft): boolean {
   return DIRTY_KEYS.some((key) => current[key] !== initial[key]);
@@ -43,7 +46,7 @@ function computeDirty(current: AccountRuleDraft, initial: AccountRuleDraft): boo
 type AccountRuleDraftStore = AccountRuleDraft & {
   _initial: AccountRuleDraft;
   open: (seed: AccountRuleDraftSeed) => void;
-  patch: (fields: Partial<Pick<AccountRuleDraft, 'lastNote' | 'categoryId'>>) => void;
+  patch: (fields: Partial<Pick<AccountRuleDraft, 'lastNote' | 'categoryId' | 'incomeCategoryId'>>) => void;
   setSubmitting: (submitting: boolean) => void;
   reset: () => void;
 };

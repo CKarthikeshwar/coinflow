@@ -14,6 +14,7 @@ const mockRules: AccountRule[] = [
     displayAccount: 'Swiggy',
     lastNote: 'Dinner',
     categoryId: 'cat-food',
+    incomeCategoryId: null,
     lastPaymentMethod: 'upi',
     hitCount: 3,
     createdAt: 0,
@@ -22,8 +23,9 @@ const mockRules: AccountRule[] = [
 ];
 
 const mockCategories: Category[] = [
-  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
-  { id: 'cat-uncat', key: 'uncategorized', name: 'Uncategorized', icon: 'help-circle', kind: 'default', isProtected: true, order: 0, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-salary', key: 'salary', name: 'Salary', icon: 'briefcase', kind: 'default', appliesTo: 'income', isProtected: false, order: 10, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-uncat', key: 'uncategorized', name: 'Uncategorized', icon: 'help-circle', kind: 'default', appliesTo: 'expense', isProtected: true, order: 0, createdAt: 0, updatedAt: 0 },
 ];
 
 // Mocks the whole module (never `jest.requireActual` it) — the real files import `@/db/client`,
@@ -53,28 +55,28 @@ it('pre-fills the account and note from the target rule', async () => {
 it('pre-fills the selected category — saving with no changes keeps it', async () => {
   const { getByText } = await render(<AccountRuleEditorSheet />);
   await fireEvent.press(getByText('Save'));
-  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', { lastNote: 'Dinner', categoryId: 'cat-food' });
+  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', { lastNote: 'Dinner', categoryId: 'cat-food', incomeCategoryId: null });
 });
 
 it('saving with an edited note calls updateAccountRule with the trimmed note', async () => {
   const { getByDisplayValue, getByText } = await render(<AccountRuleEditorSheet />);
   await fireEvent.changeText(getByDisplayValue('Dinner'), '  Lunch  ');
   await fireEvent.press(getByText('Save'));
-  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', { lastNote: 'Lunch', categoryId: 'cat-food' });
+  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', { lastNote: 'Lunch', categoryId: 'cat-food', incomeCategoryId: null });
 });
 
 it('clearing the note saves an explicit null (P-6), not an empty string', async () => {
   const { getByDisplayValue, getByText } = await render(<AccountRuleEditorSheet />);
   await fireEvent.changeText(getByDisplayValue('Dinner'), '   ');
   await fireEvent.press(getByText('Save'));
-  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', { lastNote: null, categoryId: 'cat-food' });
+  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', { lastNote: null, categoryId: 'cat-food', incomeCategoryId: null });
 });
 
 it('picking a different category and saving calls updateAccountRule with the new categoryId', async () => {
-  const { getByText } = await render(<AccountRuleEditorSheet />);
-  await fireEvent.press(getByText('Uncategorized'));
+  const { getByText, getByLabelText } = await render(<AccountRuleEditorSheet />);
+  await fireEvent.press(getByLabelText('Expense Uncategorized'));
   await fireEvent.press(getByText('Save'));
-  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', { lastNote: 'Dinner', categoryId: null });
+  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', { lastNote: 'Dinner', categoryId: null, incomeCategoryId: null });
 });
 
 it('Cancel with no edits closes without a discard prompt', async () => {
@@ -96,4 +98,23 @@ it('Delete opens a confirm dialog, and confirming calls deleteAccountRule', asyn
   const deleteTexts = getAllByText('Delete');
   await fireEvent.press(deleteTexts[deleteTexts.length - 1]);
   expect(mockDeleteAccountRule).toHaveBeenCalledWith('swiggy');
+});
+
+it('offers only expense categories under Category and only income categories under Income category (CR-28)', async () => {
+  const { getByLabelText, queryByLabelText } = await render(<AccountRuleEditorSheet />);
+  expect(getByLabelText('Expense Food')).toBeTruthy();
+  expect(queryByLabelText('Expense Salary')).toBeNull();
+  expect(getByLabelText('Income Salary')).toBeTruthy();
+  expect(queryByLabelText('Income Food')).toBeNull();
+});
+
+it('picking an income category saves incomeCategoryId and leaves the expense category alone (CR-28)', async () => {
+  const { getByText, getByLabelText } = await render(<AccountRuleEditorSheet />);
+  await fireEvent.press(getByLabelText('Income Salary'));
+  await fireEvent.press(getByText('Save'));
+  expect(mockUpdateAccountRule).toHaveBeenCalledWith('swiggy', {
+    lastNote: 'Dinner',
+    categoryId: 'cat-food',
+    incomeCategoryId: 'cat-salary',
+  });
 });

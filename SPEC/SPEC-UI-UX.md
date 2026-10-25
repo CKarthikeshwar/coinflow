@@ -1082,7 +1082,7 @@ launch; Home tab.
   italic muted **"No note"**. Payment method is **not** on the card — it lives on Details and in
   the Filter.
 - States: *empty (new user)* — hero shows **Total balance `₹0`**; both tiles show `₹0` with "no
-  prior month" in place of a percentage; no action strip; recent section replaced by an empty
+  prior month" in place of a percentage; no action strip *unless suggestions are pending* (CR-15); recent section replaced by an empty
   state ("No transactions yet — they'll appear here as you pay." + **Add transaction**). *Error* —
   hero area shows "Couldn't load your data" + **Retry**.
 - Edge: a **lakh-scale** balance (in the Indian numbering system, one *lakh* = 100,000 — so a
@@ -1195,7 +1195,7 @@ call-to-action, a prominent actionable button, per the §3.6 decoder).
   the header.
 - States: *invalid* (amount empty / 0 → inline error, Add disabled) · *submitting* · *save error*
   (inline).
-- Edge: paise shown when typed (`₹12.50`); a future date shows a subtle "scheduled?" helper; a
+- Edge: paise shown when typed (`₹12.50`); a future date shows a subtle "This date is in the future" helper (was "scheduled?", CR-20); a
   long description scrolls inside its field; saved with no note → the card falls back to the
   account, else "No note".
 
@@ -1632,6 +1632,80 @@ action *Mark as paid…* / the **Suggested settlement** banner / the **Merge…*
   open item); **Saved people** list (name, masked number, a delete swipe — disabled with a reason while the
   person has an open share or request); **Unattended requests** row → Splits › Requests.
 
+### 6.25 My accounts, balances & transfers · V2.1 (SPEC ONLY — UI-101…UI-109)
+
+**Why.** Someone with five bank accounts, a credit card and a wallet cannot answer "where is my money?" from CoinFlow today: the app has no idea
+which of *their* accounts a transaction belongs to, "Total balance" is only this month's income minus spending, and moving ₹10,000 from SBI to HDFC
+counts as ₹10,000 spent *and* ₹10,000 earned. Every bank SMS already carries what is needed (the bank, the last digits of the account, often the balance
+left); the app currently throws it away.
+
+**Words (UI-101).** Two different things must never share a word:
+- **Your account** — somewhere your money sits (HDFC ··672, a credit card, Paytm wallet, cash in hand).
+- **Paid to / from** — the other party (a shop, a UPI ID, a person). This is what the transaction sheet's text field has always held; it was labelled
+  "Account". It is relabelled **Paid to / from** (placeholder "Shop or person"); *Settings › Account rules* becomes **Merchant rules**. Labels only —
+  the stored data is unchanged.
+
+**Accounts live under payment methods (UI-102).** An account has a *kind*, and the kind decides which payment methods it can be used with:
+
+| Account kind | Used with payment method | Shown under |
+|---|---|---|
+| Bank account | UPI · Bank · Card (it is the *debit* card) | Bank accounts |
+| Credit card | Card | Cards |
+| Wallet (Paytm, Amazon Pay…) | Wallet | Wallets |
+| Cash | Cash | Cash |
+
+In the Add / Confirm / Edit sheet, once a payment method is chosen, a chip row **Paid from** (or **Paid into** for income) lists only the accounts that
+fit that method, plus *Not sure*. One fitting account ⇒ preselected; several ⇒ the one last used with that method is preselected; none ⇒ the row is
+hidden (nothing changes for someone who never adds an account).
+
+**My accounts page (UI-103)** — *Settings › My accounts*, and by tapping the balance card on Home.
+- Top card: **Total balance** = bank + wallet + cash balances, "across 4 accounts · oldest figure 3 h ago". Credit cards are *not* in it (not your
+  money); a second line reads "Credit available ₹1,20,000" when a card has a known limit.
+- Sections in this order: Bank accounts · Cards · Wallets · Cash. Each row: kind icon, nickname, "HDFC Bank ··672", balance, "as of 3 h ago"
+  (turns amber after 3 days — an old figure must not look current), and a **Needs a look** pill when UI-107 applies.
+- Bank / wallet / cash rows: tap → Edit account. Card rows also show "Bill ₹14,200 due 5 Nov" when known.
+- **Add account** at the bottom of each section. Archived accounts are hidden behind "Show archived".
+- Hide amounts (existing setting) masks every figure here as it does on Home.
+
+**Add / Edit account sheet (UI-103a).** Kind (4 chips) · Nickname (required, e.g. "Salary – HDFC") · Bank name (bank / card only) · Last 4 digits (optional;
+needed for SMS matching) · **Current balance** (optional — type what the app shows today; SMS keeps it fresh afterwards) · Archive / Merge into… (Merge is for
+when one real account was detected twice, e.g. under two SMS sender IDs: all its transactions, balances and rules move to the chosen account).
+
+**Accounts appear on their own (UI-104).** The first SMS from an unseen bank + last digits creates the account automatically, named "HDFC ··672" with a **New**
+pill. It never blocks anything: the transaction is saved against it immediately. The Review Queue shows one card at the top — "New account found: HDFC ··672 —
+Name it" — which opens the Edit account sheet. Nothing is created from a message the parser would have ignored.
+
+**Add transaction — Transfer (UI-105).** The Expense | Income switch gains a third segment, **Transfer**. In that mode: amount; **From** and **To** chip rows
+(each lists every account, From ≠ To); date & time; optional note. No category, no payment method, no split. Saving creates one linked pair (§46.6): a debit
+on From and a credit on To. A transfer can be made between any two accounts, including cash ("took ₹5,000 out of the ATM" = Bank → Cash).
+
+**Looks like a transfer (UI-106).** When a debit on one of your accounts and a credit of the *same amount* on another of your accounts arrive within 15 minutes
+of each other, they are linked automatically (when at least one came from an SMS): the list shows **one** row "SBI ··1234 → HDFC ··672 · ₹10,000" with a ⇄ icon
+and a neutral colour (no +/−), it is left out of Income, Spending, Analytics and category totals, and an Undo toast appears ("Linked as a transfer · Undo").
+When the match is not clear (several candidates, or neither side is an SMS) nothing is linked; the Review Queue shows a card **"Looks like a transfer? ₹10,000
+out of SBI ··1234, ₹10,000 into HDFC ··672"** with *Yes, transfer* / *No*. A transfer's details page has **Unlink** (the two rows go back to being an expense and an
+income, uncategorised). Credit-card bill payments are the same thing (bank → card).
+
+**Needs a look (UI-107).** If the balance in an SMS is not what the recorded transactions explain, the account shows **Needs a look** and a card on Home /
+the account row reads "₹1,200 left HDFC ··672 that isn't recorded" (or "₹1,200 arrived that isn't recorded"). Actions: **Add transaction** (opens the Add sheet with
+the amount, direction, account and date filled in, note "Unrecorded") · **It's fine** (hides it; the balance itself stays correct). It also clears by itself as soon as
+a transaction in that window is added, so a late SMS fixes it without any action.
+
+**Credit cards (UI-108).** Spending on a card is an expense like any other. Paying the bill is a transfer (UI-106), never a second expense — this is what stops card
+spending being counted twice. A card account's figure is **available credit** (what the card SMS reports), labelled as such. When an SMS gives a due date and amount, the
+card row shows it and a notification **"HDFC card bill ₹14,200 due in 2 days"** is posted at 10:00 two days before (Settings › Notifications › Card bill reminders, on by
+default; off ⇒ nothing is scheduled).
+
+**Everywhere else (UI-109).**
+- **Home:** the "Total balance" figure becomes the real total from UI-103 ("across 4 accounts"); with no known balances yet it keeps today's meaning, labelled "This month's net".
+- **Transactions list:** the meta line gains the account — "Food · HDFC ··672 · 3 h ago"; transfers read as above. **Filter sheet:** an *Accounts* chip group (multi-select).
+- **Notifications & Confirm sheet:** an extra line "HDFC ··672" (tap to change when it is wrong); *No account* when unmatched.
+- **Widget "Balances"** (4th widget): total + up to 3 account rows (nickname, balance), "updated 3 h ago", Hide amounts honoured, tap → My accounts. Sizes 2×2 and 4×2.
+- **Empty state of My accounts:** "Accounts appear here as your bank texts arrive — or add one yourself." with Add account.
+
+**Not in this change (so nobody expects it):** per-account analytics, low-balance alerts, importing past SMS into accounts (existing transactions stay "No account"
+until you edit them — a bulk "assign" is possible later), a transfer to / from someone outside your accounts (that is just an expense or income).
+
 ### V2 design gate
 
 The widget tiles (§6.22–§6.24) are built as a coded prototype first — `design-prototype/01-midnight/widgets.html`,
@@ -1905,3 +1979,13 @@ other way around).
 
 - **CR-12** (2026-09-20, post-V2-phase-6 — `SPEC/SPEC-implementation.md` CR-25) — **Default category + "Save all with default" in the Review Queue (§6.3, §6.14).** (1) **Settings › Default category** (new subpage, §6.14): pick one existing category, shown as a single-select list; a *Clear* row removes it. Stored as the `defaultCategoryId` setting; a default whose category was deleted is treated as unset. (2) **Review Queue (§6.3):** a **Save all** button sits beside **Dismiss all** in the footer whenever the queue is non-empty. With no default set, tapping it opens Settings › Default category instead. With one set, a confirm dialog reads "Save N transactions as <Category>?"; on confirm every pending item is saved and a toast reports the count. (3) **Rules:** expenses take the account's *learned* category when its account rule has one, otherwise the default; income is saved Uncategorized (IMP-011 — income carries no category, so there is no separate income default); bulk save never teaches account rules a category. Items with no amount, direction or time stay in the queue and the toast says how many were skipped. (4) **No Undo:** the Undo snackbar holds a single transaction id, so a bulk save is reversed by deleting the transactions individually; the confirm dialog is the safeguard.
 - **CR-13** (2026-09-20, on-device — `SPEC/SPEC-implementation.md` CR-26) — **SMS-app fallback shows the system chooser.** In §6.17, when SEND_SMS is denied and a request is opened "in the SMS app", Android may first show an **"Open with" chooser** — on the Motorola edge 60 pro it lists **WhatsApp and Messages** for the `sms:` link. That is the OS's behaviour, not the app's; the app still pre-fills the text and never sends it. The user should pick their SMS app; picking another app is theirs to own. No design change.
+- **CR-14** (2026-09-26 — `SPEC/SPEC-implementation.md` CR-27) — **Daily reminder is 9:30 PM.** No other UI change: swiping or clearing a transaction notification leaves the transaction in the Review Queue; only **Discard** (notification) or dismiss (Review Queue) deletes it.
+- **CR-15** (2026-09-26, user-reported bug) — **Home shows the action strip for a new user with pending suggestions.** §6.2's empty (new user) state said "no action strip", but the SMS pipeline can queue suggestions before anything is saved, which left the Review Queue unreachable from Home ("₹0 / No transactions yet" with 3 pending). The strip is now hidden only by its own rule — each row shows when its count > 0 — regardless of whether transactions exist. `See all` and the Recent list are unchanged.
+- **CR-16** (2026-09-26, user-reported bug) — **Review Queue amounts are signed by direction.** The card showed every amount as `+ ₹…` (raw positive value into the money formatter), so a debit read like income. It now follows the Home / Transactions card rule: debit `− ₹…`, credit `+ ₹…`; if the SMS gave no direction the amount is unsigned.
+- **CR-17** (2026-09-26 — `SPEC/SPEC-implementation.md` CR-28) — **Categories for income.** Replaces "income has no category" (UI-022, IMP-011). (1) **Add / Confirm sheets (§6.5–§6.6):** the category row is shown for Income as well as Expense; the picker offers only the categories of the selected type (expense categories for an expense, income categories for income), and switching Expense↔Income drops a pick that no longer fits. (2) **Settings › Categories (§6.11): ONE combined list** — expense and income categories together (not two sections), each row carrying a small **Expense / Income** tag; creating a category asks which type (fixed afterwards). Protected: Uncategorized, Other, **Other income**. (3) **Default income categories:** Salary, Freelance, Interest, Refund, Gift, Pocket money, Other income. (4) **Cards / Details:** an income shows its category name (or Uncategorized) in place of the fixed word "Income"; the tile stays inverted. (5) **Uncategorized:** Home's "N uncategorized" and the Uncategorized filter now count income too. (6) **Default category (§6.14):** Settings shows two rows — **Default expense category** and **Default income category** (each opens the same single-select list, filtered to its kind); Save all uses the income one for credits (an account's remembered income category still wins; none set ⇒ Uncategorized). (7) **Analytics (§6.10):** a **"Where it came from"** card under "Where it went", shown only when the period has income; its Uncategorized row is "Fix N" and opens Transactions filtered to *income* (the expense card's now filters to *expense*). (8) **Account memory:** each account remembers one expense category and one income category (a person can both be paid by you and pay you back). Settings › Account rules shows a second chip for the income category, and the editor sheet has a Category list and an Income category list. (9) **Transaction filter:** the category chips list every category (expense and income) — unchanged, so income categories appear there automatically. (10) **Found on-device, fixed in the same change:** Settings › Categories is a scrollable list (17+ default rows overflowed the fixed layout and cut off the income categories); onboarding's "Pick your categories" lists only the expense defaults; money shown from a fractional paise value (Analytics mean / median) is rounded to whole paise (was `₹5.38.46153846153845`).
+- **CR-18** (2026-09-26, found on-device) — **The Confirm / Add / Edit sheet could not be scrolled after its first category pick.** Reproduced repeatedly on the Samsung: on a clean sheet, Category → pick locked the form's scrolling; it scrolled fine after a picker visit with no pick, after tapping the already-selected value, when the sheet was already dirty, and when the dirty flip came later (keypad). Cause: picking wrote `categoryId` to the draft (flipping it dirty, which turns `enablePanDownToClose` off on the shared sheet) in the same commit that swapped the picker back for the parent sheet, leaving `@gorhom/bottom-sheet`'s scroll view locked. The picker now reopens the parent first and writes the pick `PICK_SETTLE_MS` (120 ms) later (`category-picker-sheet.tsx`). A first attempt (making the picker the same fixed 92% as its parents) did **not** fix it and was reverted.
+- **CR-19** (2026-09-26, found in review — `SPEC/SPEC-implementation.md` CR-29) — **Small display fixes.** (1) **Home › Spending tile** shows `− ₹…` (it showed `+ ₹…`; §6.2 always said `+₹…` / `−₹…` for Income / Spending). (2) **Home › Total balance** has a thin space after a leading minus (`− ₹136.40`), like every other amount (§27.1). (3) **Settings › Categories**: the system **Uncategorized** row has no Expense / Income tag — it is used for both. (4) Tapping **Save** (or Cancel) right after picking a category keeps (or counts) the pick — see CR-18.
+- **CR-20** (2026-10-25, user feedback after a month of use — `SPEC/SPEC-implementation.md` CR-31) — **Seven usability changes.** (1) **Note autocomplete (§6.5–§6.6):** while the Note field has focus, up to 4 of your own past notes that *start with* what you typed (case-insensitive — "fre" → "French fries") appear under it, most-used first; a tap fills the note and closes the list. (2) **Date & time (§6.5):** the minute − / + now moves 1 minute (was 5); tapping the hour or the minute number types it on the app's own numeric keypad (digits only, never the phone keyboard) — the hour moves on to the minutes once it is complete; the field being typed is outlined. (3) **Income-category icons:** Salary → rupee badge, Freelance → business briefcase, Interest → line chart, Refund → rupee receipt, Gift → gift (unchanged), Pocket money → hand with coins, Other income → banknote arrow down. (4) **Splits you only track (§6.17):** "Add a number" becomes **Add a person** — a name alone is enough (the number is optional and only used to text them); the small "Don't send now" link becomes an explicit **Send by SMS / Just track** choice above the button, with a line saying what happens; a split with nobody to text says "No numbers added — this split is just for your records."; on the split card a name-only person reads **Tracking only** (not "Not sent"). (5) **Keypad only while typing (§6.5 / §3.5):** the numeric keypad is shown only while the amount or a time field is being typed — a fresh Add opens on the amount; Confirm / Edit open with it hidden (tap the amount to bring it back); focusing a text field or using another control puts it away; the amount's caret only shows while it is being typed. (6) **Polish:** the save toast ("Added − ₹40 · View") sits above the tab bar and the Add button with a solid background and side margins (it overlapped the tab labels); Transaction details' heading is the note, else the account (then no separate Account row), else nothing — never an "Add a note" placeholder. (7) **"Scheduled?" (§6.5 edge):** reworded **"This date is in the future"**, and it only shows for a date more than a minute ahead — it was appearing on every fresh Add (see CR-31).
+- **CR-21** (2026-10-25, user feedback — `SPEC/SPEC-implementation.md` CR-33) — **Softer save toast.** The save toast now fades in and rises a few pixels over ~0.34 s, and fades out over ~0.28 s (it used to pop in and vanish), and stays on screen for **1 second** (was 3 s). Because it is short, the toast's *View* action is a convenience only — the same transaction is always reachable from Home / Transactions.
+- **CR-22** (2026-10-25, user request — `SPEC/SPEC-implementation.md` CR-34, **spec only, not built**) — **My accounts, balances & transfers (§6.25).** For people with several bank accounts: CoinFlow learns *which of your accounts* each SMS came from, shows each account's balance (read from the bank's own "Avl Bal" text), recognises money moved between your own accounts so it stops counting as spending + income, flags money the SMS balance says moved but nothing recorded, handles credit cards (spend vs bill payment, due-date reminder) and adds a fourth home-screen widget (Balances). Accounts live under the five payment methods. The transaction sheet's text field formerly labelled "Account" (the shop / person) is relabelled **"Paid to / from"** to end the clash with your own accounts; "Account rules" becomes **"Merchant rules"** (labels only).
+- **CR-21** (2026-10-25 — `SPEC/SPEC-implementation.md` CR-32) — **Fixes found on-device:** focusing Account / Note / Description in the Add / Confirm / Edit sheet scrolls it above the keyboard (it used to stay hidden, with its suggestions); the date picker's calendar always has 7 days per row, lined up under M–S; the split sheet's **Add a person** row sits right under the search box.

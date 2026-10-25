@@ -14,7 +14,7 @@ jest.mock('expo-router', () => ({
 }));
 
 const mockCategories: Category[] = [
-  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
 ];
 const mockSoftDeleteTransaction = jest.fn();
 let mockTxnData: Transaction[] | undefined;
@@ -134,11 +134,18 @@ it('a categorized expense shows the category name, not "Set category"', async ()
   expect(queryByText('Set category')).toBeNull();
 });
 
-it('income never shows "Set category" even with no category', async () => {
+it('an income with no category offers "Set category" like an expense does (CR-28)', async () => {
   mockTxnData = [transaction({ direction: 'credit', type: 'income', categoryId: null })];
-  const { queryByText, getAllByText } = await render(<TransactionDetailsScreen />);
-  expect(queryByText('Set category')).toBeNull();
+  const { getByText, getAllByText } = await render(<TransactionDetailsScreen />);
+  expect(getByText('Set category')).toBeTruthy();
   expect(getAllByText('Income').length).toBeGreaterThan(0);
+});
+
+it('an income with a category shows the category name (CR-28)', async () => {
+  mockTxnData = [transaction({ direction: 'credit', type: 'income', categoryId: 'cat-food' })];
+  const { getByText, queryByText } = await render(<TransactionDetailsScreen />);
+  expect(getByText('Food')).toBeTruthy();
+  expect(queryByText('Set category')).toBeNull();
 });
 
 it('shows the "Detected automatically" provenance line only for an SMS-sourced transaction', async () => {
@@ -448,5 +455,28 @@ describe('V2 phase 5 — sending a request from Details (§6.17)', () => {
     const noNumber = await render(<TransactionDetailsScreen />);
     await fireEvent.press(noNumber.getByRole('button', { name: /Ghost/ }));
     expect(noNumber.queryByText('Send request')).toBeNull();
+  });
+});
+
+describe('heading (CR-31 — no "Add a note" placeholder)', () => {
+  it('shows the note when there is one', async () => {
+    mockTxnData = [transaction({ note: 'Lunch', account: 'Swiggy' })];
+    const { getByText, queryByText } = await render(<TransactionDetailsScreen />);
+    expect(getByText('Lunch')).toBeTruthy();
+    expect(queryByText('Add a note')).toBeNull();
+  });
+
+  it('falls back to the account, without repeating it in an Account row', async () => {
+    mockTxnData = [transaction({ note: null, account: 'Swiggy' })];
+    const { getAllByText, queryByText } = await render(<TransactionDetailsScreen />);
+    expect(getAllByText('Swiggy')).toHaveLength(1);
+    expect(queryByText('Account')).toBeNull();
+    expect(queryByText('Add a note')).toBeNull();
+  });
+
+  it('with neither, shows no heading at all', async () => {
+    mockTxnData = [transaction({ note: null, account: null })];
+    const { queryByText } = await render(<TransactionDetailsScreen />);
+    expect(queryByText('Add a note')).toBeNull();
   });
 });

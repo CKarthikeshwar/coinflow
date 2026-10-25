@@ -9,8 +9,8 @@ const mockRouterSetParams = jest.fn();
 jest.mock('expo-router', () => ({ router: { setParams: (...args: unknown[]) => mockRouterSetParams(...args) } }));
 
 const mockCategories: Category[] = [
-  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
-  { id: 'cat-uncat', key: 'uncategorized', name: 'Uncategorized', icon: 'help-circle', kind: 'default', isProtected: true, order: 0, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-uncat', key: 'uncategorized', name: 'Uncategorized', icon: 'help-circle', kind: 'default', appliesTo: 'expense', isProtected: true, order: 0, createdAt: 0, updatedAt: 0 },
 ];
 jest.mock('@/db/repositories/categories', () => ({ useCategories: () => ({ data: mockCategories }) }));
 

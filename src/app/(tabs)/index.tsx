@@ -129,7 +129,7 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
         />
         <StatTile
           label="Spending"
-          valueMinor={summary.spentMinor}
+          valueMinor={-summary.spentMinor} // §6.2: spending reads "− ₹…" (was "+ ₹…", CR-19)
           deltaPct={deltas.spendingDeltaPct}
           deltaLabel="vs last month"
         />
@@ -138,16 +138,15 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
       <OwedToYouRow amountMinor={owed.owedTotalMinor} onPress={() => router.push('/splits')} />
       <ActionStripRow kind="requests" count={owed.unattended.length} onPress={() => router.push('/splits?tab=requests')} />
 
-      {isNewUser ? null : (
-        <View style={styles.strip}>
-          <ActionStripRow kind="review" count={pending.count} onPress={() => router.push('/review-queue')} />
-          <ActionStripRow
-            kind="uncat"
-            count={uncategorized.count}
-            onPress={() => router.push('/transactions?uncategorized=1')}
-          />
-        </View>
-      )}
+      {/* Not gated on `isNewUser`: SMS detection can queue suggestions before any transaction is saved. */}
+      <View style={styles.strip}>
+        <ActionStripRow kind="review" count={pending.count} onPress={() => router.push('/review-queue')} />
+        <ActionStripRow
+          kind="uncat"
+          count={uncategorized.count}
+          onPress={() => router.push('/transactions?uncategorized=1')}
+        />
+      </View>
 
       <View style={styles.recentHeader}>
         <ThemedText type="title">Recent</ThemedText>

@@ -42,8 +42,8 @@
  *   via `src/domain/normalize.ts` (this is the key `accountRules` matching relies on), and
  *   `searchText` is a lower-cased combination of note/description/account for the search
  *   fallback when FTS5 isn't available (`src/db/fts.ts`).
- * - `categoryId` is always forced to `null` when `type` is `'income'` — income transactions are
- *   never categorized in this app (a deliberate product decision, not a bug).
+ * - `categoryId` is stored as given for both expenses and income (CR-28 — income categories); the
+ *   callers (the sheets, Save / Save all) are responsible for passing a category of the matching kind.
  */
 
 import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
@@ -83,9 +83,9 @@ export type InsertTransactionInput = {
 export type TransactionListQuery = {
   search?: string;
   categoryIds?: string[];
-  /** F7 — `categoryId IS NULL`, scoped to `type='expense'` (income is also uncategorized by
-   * construction, IMP-011, but isn't what "Uncategorized" means here — §26.8). ORed with
-   * `categoryIds` when both are set. Not a `category.id` (§25.3), so it's its own flag. */
+  /** F7 — `categoryId IS NULL`, for expenses AND income (CR-28: income can have a category now, so an
+   * income without one is Uncategorized too). ORed with `categoryIds` when both are set. Not a
+   * `category.id` (§25.3), so it's its own flag. */
   uncategorized?: boolean;
   type?: TransactionType;
   methods?: PaymentMethod[];
@@ -113,7 +113,7 @@ export function insertTransaction(input: InsertTransactionInput): Transaction {
     amountMinor: input.amountMinor,
     direction: input.direction,
     type,
-    categoryId: type === 'income' ? null : (input.categoryId ?? null),
+    categoryId: input.categoryId ?? null,
     paymentMethod: input.paymentMethod ?? null,
     account,
     normalizedAccountKey: account ? normalizeAccount(account) : null,
@@ -157,11 +157,13 @@ export function updateTransaction(id: string, patch: TransactionPatch): void {
       amountMinor: patch.amountMinor ?? current.amountMinor,
       direction,
       type,
+      // CR-28: a category of the wrong kind is dropped when the direction flips (expense ⇄ income),
+      // unless the caller passes an explicit category in the same patch.
       categoryId:
-        type === 'income'
-          ? null
-          : patch.categoryId !== undefined
-            ? patch.categoryId
+        patch.categoryId !== undefined
+          ? patch.categoryId
+          : type !== current.type
+            ? null
             : current.categoryId,
       paymentMethod: patch.paymentMethod !== undefined ? patch.paymentMethod : current.paymentMethod,
       account,
@@ -228,15 +230,14 @@ export function useTransactionList(query: TransactionListQuery) {
   // The category filter chip row lets the user select specific categories AND a special
   // "Uncategorized" chip at the same time — this builds the matching SQL condition for
   // whichever combination is active. "Uncategorized" isn't a real category row; it means
-  // "expense transactions with no categoryId" (income is always categoryId=null too, by the
-  // rule above, but that doesn't count as "Uncategorized" for filtering purposes here).
+  // "transactions with no categoryId" (expense or income, CR-28).
   const categoryCond =
     categoryIds?.length && uncategorized
-      ? or(inArray(transactions.categoryId, categoryIds), and(isNull(transactions.categoryId), eq(transactions.type, 'expense')))
+      ? or(inArray(transactions.categoryId, categoryIds), isNull(transactions.categoryId))
       : categoryIds?.length
         ? inArray(transactions.categoryId, categoryIds)
         : uncategorized
-          ? and(isNull(transactions.categoryId), eq(transactions.type, 'expense'))
+          ? isNull(transactions.categoryId)
           : undefined;
   if (categoryCond) conds.push(categoryCond);
 
@@ -286,4 +287,34 @@ export function hasDedupeKey(key: string): boolean {
   if (inTxn) return true;
   const inSugg = db.select({ id: suggestions.id }).from(suggestions).where(eq(suggestions.dedupeKey, key)).get();
   return !!inSugg;
+}
+
+/**
+ * CR-31 — note autocomplete for the Add / Confirm / Edit sheets: the user's own past notes that start with
+ * `prefix`, case-insensitively ("fre" → "French fries", "Fresh juice"), most-used first then most recent.
+ * Same-text notes in different casing collapse into one (the most recent spelling wins). An exact match of
+ * what is already typed is left out — there is nothing to complete. `%` / `_` in the typed text are literal.
+ */
+export function searchNotesByPrefix(prefix: string, limit = 4): string[] {
+  const typed = prefix.trim().toLowerCase();
+  if (!typed) return [];
+  // `!` as the LIKE escape character — a backslash does not survive the trip through the SQL template intact
+  const pattern = `${typed.replace(/[!%_]/g, (c) => `!${c}`)}%`;
+  const rows = db
+    // selecting `max(createdAt)` makes SQLite take the bare `note` from that same (most recent) row of each group
+    .select({ note: sql<string>`${transactions.note}`, last: sql<number>`max(${transactions.createdAt})` })
+    .from(transactions)
+    .where(
+      and(
+        isNull(transactions.deletedAt),
+        isNotNull(transactions.note),
+        sql`lower(${transactions.note}) like ${pattern} escape '!'`,
+        sql`lower(${transactions.note}) <> ${typed}`,
+      ),
+    )
+    .groupBy(sql`lower(${transactions.note})`)
+    .orderBy(desc(sql`count(*)`), desc(sql`max(${transactions.createdAt})`))
+    .limit(limit)
+    .all();
+  return rows.map((r) => r.note);
 }

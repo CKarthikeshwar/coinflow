@@ -208,7 +208,10 @@ export function SplitSheet() {
 
   // Sending needs a device that can send; without one the button is plain "Save split".
   const canSend = isSmsCaptureSupported();
-  const willSend = canSend && draft.sendOnSave;
+  // CR-31 — a split can be kept just for your own records: people can be added by name only (nobody to text), and
+  // "Just track" turns sending off for the people who do have a number.
+  const anyoneTextable = draft.people.some((p) => !!p.phone);
+  const willSend = canSend && draft.sendOnSave && anyoneTextable;
   // After *Send requests* (Details): the split id being sent for, and the per-person result list.
   const [sendState, setSendState] = useState<{ splitId: string; rows: ResultRow[] } | null>(null);
   const [sending, setSending] = useState(false);
@@ -408,16 +411,31 @@ export function SplitSheet() {
               Everyone you add needs to owe something.
             </ThemedText>
           ) : null}
+          {canSend && anyoneTextable ? (
+            // CR-31 — was a small "Don't send now" link under the button; now an explicit choice above it.
+            <View style={styles.sendChoice}>
+              <SegmentedControl
+                options={[
+                  { value: 'send', label: 'Send by SMS' },
+                  { value: 'track', label: 'Just track' },
+                ]}
+                value={draft.sendOnSave ? 'send' : 'track'}
+                onChange={(v) => draft.setSendOnSave(v === 'send')}
+              />
+              <ThemedText type="caption" themeColor="text3">
+                {draft.sendOnSave
+                  ? 'Each person with a number gets a text asking them to pay.'
+                  : 'Nothing is sent — the split is just for your records. You can send a request later from Details.'}
+              </ThemedText>
+            </View>
+          ) : draft.people.length > 0 ? (
+            <ThemedText type="caption" themeColor="text3">
+              No numbers added — this split is just for your records.
+            </ThemedText>
+          ) : null}
           <Button variant={result.canSave && !sending ? 'primary' : 'disabled'} onPress={done} style={styles.fullWidth}>
             {direct ? (willSend ? 'Send requests' : 'Save split') : 'Done'}
           </Button>
-          {canSend ? (
-            <Pressable accessibilityRole="button" onPress={() => draft.setSendOnSave(!draft.sendOnSave)} style={styles.removeTap}>
-              <ThemedText type="label" themeColor="text2">
-                {draft.sendOnSave ? 'Don’t send now' : 'Send requests when saved'}
-              </ThemedText>
-            </Pressable>
-          ) : null}
           {hasExistingOrCommitted ? (
             <Pressable accessibilityRole="button" onPress={removeSplit} style={styles.removeTap}>
               <ThemedText type="label" themeColor="text2">
@@ -494,23 +512,34 @@ function PeopleStage() {
     source: p.source,
   });
 
-  const addNumber = () => {
-    const phone = normalizePhone(newPhone);
-    if (!phone) {
-      setPhoneError('Enter a 10-digit mobile number');
+  // CR-31 — the number is optional: a name alone adds someone to a split kept just for tracking (nobody is texted).
+  const addPerson = () => {
+    const name = newName.trim();
+    const typedPhone = newPhone.trim();
+    const phone = typedPhone ? normalizePhone(typedPhone) : null;
+    if (typedPhone && !phone) {
+      setPhoneError('Enter a 10-digit mobile number, or leave it empty');
       return;
     }
-    const existing = saved.find((p) => p.phoneKey === phone.phoneKey);
+    if (!phone && !name) {
+      setPhoneError('Enter a name or a number');
+      return;
+    }
+    const existing = phone
+      ? saved.find((p) => p.phoneKey === phone.phoneKey)
+      : saved.find((p) => !p.phoneKey && p.displayName.trim().toLowerCase() === name.toLowerCase());
     const person: DraftPerson = existing
       ? asDraft(existing)
-      : {
-          key: `n:${phone.phoneKey}`,
-          personId: null,
-          name: newName.trim() || phone.phoneDisplay,
-          phone: phone.phoneDisplay,
-          contactRef: null,
-          source: 'manual',
-        };
+      : phone
+        ? {
+            key: `n:${phone.phoneKey}`,
+            personId: null,
+            name: name || phone.phoneDisplay,
+            phone: phone.phoneDisplay,
+            contactRef: null,
+            source: 'manual',
+          }
+        : { key: `m:${name.toLowerCase()}`, personId: null, name, phone: null, contactRef: null, source: 'manual' };
     if (!selectedKeys.has(person.key)) togglePerson(person); // a duplicate number merges into one chip
     setNewName('');
     setNewPhone('');
@@ -522,26 +551,36 @@ function PeopleStage() {
     <BottomSheetScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
       <TextField value={query} onChangeText={setQuery} placeholder="Search name or number" />
 
+      {/* CR-31 (found on-device): was the last row, under the whole contact list — out of reach with contacts on */}
+      <Pressable accessibilityRole="button" onPress={() => setAdding((v) => !v)} style={styles.personRow}>
+        <View style={styles.dashedAvatar}>
+          <Icon name="plus" size={16} />
+        </View>
+        <ThemedText type="body" themeColor="text" style={styles.personText}>
+          Add a person
+        </ThemedText>
+      </Pressable>
+
       {adding ? (
         <View style={styles.addForm}>
-          <TextField value={newName} onChangeText={setNewName} placeholder="Name (optional)" />
+          <TextField value={newName} onChangeText={setNewName} placeholder="Name" />
           <TextField
             value={newPhone}
             onChangeText={(t) => {
               setNewPhone(t);
               setPhoneError(null);
             }}
-            placeholder="10-digit mobile number"
+            placeholder="Mobile number (optional — only to text them)"
             keyboardType="phone-pad"
             returnKeyType="done"
-            onSubmitEditing={addNumber} // the keyboard's ✓ adds the person — the Add button can sit under the keyboard
+            onSubmitEditing={addPerson} // the keyboard's ✓ adds the person — the Add button can sit under the keyboard
           />
           {phoneError ? (
             <ThemedText type="caption" themeColor="text">
               {phoneError}
             </ThemedText>
           ) : null}
-          <Button variant="ghost" onPress={addNumber} style={styles.fullWidth}>
+          <Button variant="ghost" onPress={addPerson} style={styles.fullWidth}>
             Add
           </Button>
         </View>
@@ -648,14 +687,6 @@ function PeopleStage() {
         </Pressable>
       )}
 
-      <Pressable accessibilityRole="button" onPress={() => setAdding((v) => !v)} style={styles.personRow}>
-        <View style={styles.dashedAvatar}>
-          <Icon name="plus" size={16} />
-        </View>
-        <ThemedText type="body" themeColor="text" style={styles.personText}>
-          Add a number
-        </ThemedText>
-      </Pressable>
     </BottomSheetScrollView>
   );
 }
@@ -728,6 +759,7 @@ function AmountsStage({ rows }: { rows: SplitRow[] }) {
 }
 
 const styles = StyleSheet.create({
+  sendChoice: { alignSelf: 'stretch', gap: Spacing.one }, // CR-31
   root: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
   back: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.dark.surface2, alignItems: 'center', justifyContent: 'center' },

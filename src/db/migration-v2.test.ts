@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const V1_LAST_TAG = '0001_fts_search';
+const V2_TAG = '0002_v2_splits';
 
 function seedV1(raw: DatabaseSync) {
   raw.exec(`
@@ -41,8 +42,8 @@ function readAllV1(raw: DatabaseSync) {
 }
 
 describe('V2 migration 0002 (IMP-086)', () => {
-  it('is the newest migration and ships as plain CREATE statements only (additive)', () => {
-    expect(migrationTags().at(-1)).toBe('0002_v2_splits');
+  it('is in the journal and ships as plain CREATE statements only (additive)', () => {
+    expect(migrationTags()).toContain(V2_TAG);
     const sql = readFileSync(join(__dirname, 'migrations', '0002_v2_splits.sql'), 'utf8');
     // every statement must be a CREATE — no DROP / ALTER / INSERT / UPDATE / DELETE touching existing data
     const statements = sql.split("--> statement-breakpoint").map((x) => x.trim()).filter(Boolean);
@@ -60,7 +61,7 @@ describe('V2 migration 0002 (IMP-086)', () => {
     expect(before.transaction).toHaveLength(3);
     expect(before.fts).toHaveLength(1); // FTS index was populated by the V1 triggers
 
-    applyMigrations(raw, undefined, V1_LAST_TAG); // only 0002 on top of the populated V1 database
+    applyMigrations(raw, V2_TAG, V1_LAST_TAG); // only 0002 on top of the populated V1 database
 
     expect(readAllV1(raw)).toEqual(before);
   });
@@ -68,7 +69,7 @@ describe('V2 migration 0002 (IMP-086)', () => {
   it('adds the five V2 tables, empty, with foreign keys on', () => {
     const { raw } = createMemoryDb({ upToTag: V1_LAST_TAG });
     seedV1(raw);
-    applyMigrations(raw, undefined, V1_LAST_TAG);
+    applyMigrations(raw, V2_TAG, V1_LAST_TAG);
     for (const t of ['person', 'split', 'split_share', 'split_request_in', 'settlement']) {
       expect(raw.prepare(`SELECT count(*) AS c FROM "${t}"`).get()).toEqual({ c: 0 });
     }
@@ -79,7 +80,7 @@ describe('V2 migration 0002 (IMP-086)', () => {
   it('keeps V1 behaviour working afterwards: soft-deleted rows stay, and the FTS triggers still index new rows', () => {
     const { raw } = createMemoryDb({ upToTag: V1_LAST_TAG });
     seedV1(raw);
-    applyMigrations(raw, undefined, V1_LAST_TAG);
+    applyMigrations(raw, V2_TAG, V1_LAST_TAG);
     expect(raw.prepare('SELECT count(*) AS c FROM "transaction" WHERE deletedAt IS NOT NULL').get()).toEqual({ c: 1 });
     raw.exec(`INSERT INTO "transaction" (id, amountMinor, direction, type, occurredAt, createdAt, updatedAt, source, note, editedByUser)
               VALUES ('t9', 100, 'debit', 'expense', 1, 1, 1, 'manual', 'momos night', 0)`);
@@ -89,7 +90,7 @@ describe('V2 migration 0002 (IMP-086)', () => {
   it('a V2 split can hang off a V1 transaction, and purging that transaction cascades cleanly', () => {
     const { raw } = createMemoryDb({ upToTag: V1_LAST_TAG });
     seedV1(raw);
-    applyMigrations(raw, undefined, V1_LAST_TAG);
+    applyMigrations(raw, V2_TAG, V1_LAST_TAG);
     raw.exec(`
       INSERT INTO person (id, displayName, phoneKey, source, createdAt, updatedAt) VALUES ('p1', 'Rahul', '9845897555', 'manual', 1, 1);
       INSERT INTO split (id, ref, transactionId, createdAt, updatedAt) VALUES ('sp1', 'ab2cd3', 't1', 1, 1);

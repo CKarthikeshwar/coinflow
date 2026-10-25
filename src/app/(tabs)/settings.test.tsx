@@ -9,17 +9,22 @@ let mockDefaultCategoryId: string | null;
 
 jest.mock('expo-router', () => ({ router: { push: (...args: unknown[]) => mockRouterPush(...args) } }));
 jest.mock('expo-constants', () => ({ expoConfig: { version: '4.5.6' } }));
+let mockDefaultIncomeCategoryId: string | null;
 jest.mock('@/db/repositories/categories', () => ({
-  useCategories: () => ({ data: [{ id: 'cat-food', name: 'Food' }] }),
-  resolveDefaultCategory: (id: string | null, list: { id: string; name: string }[]) => list.find((c) => c.id === id) ?? null,
+  useCategories: () => ({ data: [{ id: 'cat-food', name: 'Food', appliesTo: 'expense' }, { id: 'cat-salary', name: 'Salary', appliesTo: 'income' }] }),
+  resolveDefaultCategory: (id: string | null, list: { id: string; name: string; appliesTo: string }[], kind = 'expense') =>
+    list.find((c) => c.id === id && c.appliesTo === kind) ?? null,
 }));
-jest.mock('@/db/repositories/settings', () => ({ useSetting: () => ({ value: mockDefaultCategoryId }) }));
+jest.mock('@/db/repositories/settings', () => ({
+  useSetting: (key: string) => ({ value: key === 'defaultIncomeCategoryId' ? mockDefaultIncomeCategoryId : mockDefaultCategoryId }),
+}));
 jest.mock('@/hooks/use-permission-status', () => ({ usePermissionStatus: () => mockPermission }));
 
 beforeEach(() => {
   mockRouterPush.mockReset();
   mockPermission = { sms: 'granted' };
   mockDefaultCategoryId = null;
+  mockDefaultIncomeCategoryId = null;
 });
 
 it('renders all six rows and the version footer', async () => {
@@ -33,12 +38,20 @@ it('renders all six rows and the version footer', async () => {
   expect(getByText('Version 4.5.6')).toBeTruthy();
 });
 
-it('Default category row shows "Not set", then the chosen name', async () => {
-  const { getByText, rerender } = await render(<SettingsScreen />);
-  expect(getByText('Not set')).toBeTruthy();
+it('Default expense category row shows "Not set", then the chosen name', async () => {
+  const { getAllByText, getByText, rerender } = await render(<SettingsScreen />);
+  expect(getAllByText('Not set')).toHaveLength(2); // expense + income defaults
   mockDefaultCategoryId = 'cat-food';
   await rerender(<SettingsScreen />);
   expect(getByText('Food')).toBeTruthy();
+});
+
+it('Default income category row shows its own choice and opens the income picker (CR-28)', async () => {
+  mockDefaultIncomeCategoryId = 'cat-salary';
+  const { getByText } = await render(<SettingsScreen />);
+  expect(getByText('Salary')).toBeTruthy();
+  await fireEvent.press(getByText('Default income category'));
+  expect(mockRouterPush).toHaveBeenCalledWith('/default-category?kind=income');
 });
 
 it('SMS granted shows "On" with no warning glyph', async () => {

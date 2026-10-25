@@ -15,8 +15,12 @@
  *     insert, so a suggestion is never left "confirmed" without a matching transaction, or
  *     vice versa (see `src/services/notifications/respond.ts` and
  *     `src/features/transactions/write-confirmed-transaction.ts`).
- *   - dismissed (`dismissSuggestion`) when the user swipes it away or taps "Discard" — this is
- *     a genuine, immediate DELETE, unlike a transaction's soft-delete.
+ *   - dismissed (`dismissSuggestion`) when the user swipes it away or taps "Discard" — CR-30:
+ *     status flips to `'dismissed'` (a tombstone, `dismissedAt` set), not a DELETE. The row keeps
+ *     its `dedupeKey`, so `hasDedupeKey` (`transactions.ts`) still finds it and the SMS-reconcile
+ *     sweep (`services/tasks/sms-reconcile.ts`, runs on every app foreground/launch) can never
+ *     re-create it from the same message — a hard DELETE let exactly that happen, since dismissing
+ *     freed the `dedupeKey` and the sweep re-reads the last 48h of the SMS inbox every time.
  *
  * USED BY
  * -------
@@ -105,13 +109,27 @@ export function confirmSuggestion(id: string, transactionId: string): void {
     .run();
 }
 
-/** Hard DELETE (D26) — notification Discard + Review Queue swipe. */
+/**
+ * CR-30 (supersedes D26's hard DELETE) — notification Discard + Review Queue dismiss/"Dismiss all".
+ * Tombstones the row (`status: 'dismissed'`) instead of deleting it, so its `dedupeKey` keeps blocking
+ * the SMS-reconcile sweep from re-creating it from the same message. Purged after
+ * `DISMISSED_SUGGESTION_TTL_MS` by `db/maintenance.ts`'s `purge()`, once the sweep's 48h lookback can
+ * no longer reach the original SMS.
+ */
 export function dismissSuggestion(id: string): void {
-  db.delete(suggestions).where(eq(suggestions.id, id)).run();
+  db.update(suggestions)
+    .set({ status: 'dismissed', dismissedAt: Date.now() })
+    .where(eq(suggestions.id, id))
+    .run();
 }
 
 export function dismissAllPending(): number {
-  const res = db.delete(suggestions).where(eq(suggestions.status, 'pending')).run();
+  const now = Date.now();
+  const res = db
+    .update(suggestions)
+    .set({ status: 'dismissed', dismissedAt: now })
+    .where(eq(suggestions.status, 'pending'))
+    .run();
   return res.changes ?? 0;
 }
 

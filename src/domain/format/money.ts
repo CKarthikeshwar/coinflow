@@ -62,8 +62,11 @@ function groupIndian(digits: string): string {
  */
 export function formatMoney(amountMinor: number, opts: FormatMoneyOptions = {}): string {
   const { sign = 'always', withCurrency = true } = opts;
-  const isNegative = amountMinor < 0;
-  const absMinor = Math.abs(amountMinor);
+  // Amounts are whole paise (D28), but a mean / median of daily spend is not (₹140 over 26 days = 538.46 paise) —
+  // round so `₹5.38` shows instead of `₹5.38.46153846153845`.
+  const rounded = Math.round(amountMinor);
+  const isNegative = rounded < 0;
+  const absMinor = Math.abs(rounded);
   const rupees = Math.trunc(absMinor / 100);
   const paise = absMinor % 100;
 

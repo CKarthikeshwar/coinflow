@@ -66,6 +66,7 @@ export default function AccountRulesScreen() {
                 key={rule.normalizedKey}
                 rule={rule}
                 category={rule.categoryId ? categoryById.get(rule.categoryId) : undefined}
+                incomeCategory={rule.incomeCategoryId ? categoryById.get(rule.incomeCategoryId) : undefined}
                 onPress={() => openSheet('editAccountRule', { normalizedKey: rule.normalizedKey })}
                 onDeletePress={() => setDeleting(rule)}
               />

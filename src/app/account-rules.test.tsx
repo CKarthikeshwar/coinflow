@@ -29,6 +29,7 @@ function rule(overrides: Partial<AccountRule> = {}): AccountRule {
     displayAccount: 'Swiggy',
     lastNote: 'Dinner',
     categoryId: 'cat-food',
+    incomeCategoryId: null,
     lastPaymentMethod: 'upi',
     hitCount: 3,
     createdAt: 0,
@@ -42,7 +43,7 @@ beforeEach(() => {
   mockDeleteAccountRule.mockReset();
   useSheetRegistry.setState({ current: null, params: {}, onRequestClose: null });
   mockCategories = [
-    { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+    { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
   ];
   mockRules = [rule()];
 });

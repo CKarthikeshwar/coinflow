@@ -86,6 +86,7 @@ function category(overrides: Partial<Category> = {}): Category {
     name: 'Food',
     icon: 'utensils',
     kind: 'custom',
+    appliesTo: 'expense',
     isProtected: false,
     order: 1,
     createdAt: 0,

@@ -56,7 +56,9 @@ export type SettingKey =
   | 'widgetHideAmounts'
   | 'widgetSnapshotAt'
   // CR-25
-  | 'defaultCategoryId';
+  | 'defaultCategoryId'
+  | 'defaultIncomeCategoryId' // CR-28
+  | 'installFirstOpenAt';
 
 export function getSetting<T>(key: SettingKey | string, fallback: T): T {
   const row = db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).get();
@@ -74,6 +76,23 @@ export function setSetting(key: SettingKey | string, value: unknown): void {
   db.insert(appSettings)
     .values({ key, value: json, updatedAt: now })
     .onConflictDoUpdate({ target: appSettings.key, set: { value: json, updatedAt: now } })
+    .run();
+}
+
+/**
+ * Stamps `installFirstOpenAt` the first time this database ever exists — a no-op on every launch
+ * after that (`onConflictDoNothing`, unlike `setSetting`'s upsert). A normal app *update* never
+ * touches this: Android only wipes app data on an actual uninstall (or "Clear storage"), so an
+ * existing install's row survives untouched and this stays a no-op for it. Only a genuinely fresh
+ * database — a real reinstall — ever writes it. Read by `reconcileMissedSms`
+ * (`src/services/tasks/sms-reconcile.ts`) so a fresh install's SMS reconciliation sweep can't
+ * reach back further than this install has existed, even though the phone's SMS inbox itself
+ * (unlike the app's database) survives a reinstall untouched.
+ */
+export function ensureInstallMarker(now: number = Date.now()): void {
+  db.insert(appSettings)
+    .values({ key: 'installFirstOpenAt', value: JSON.stringify(now), updatedAt: now })
+    .onConflictDoNothing({ target: appSettings.key })
     .run();
 }
 

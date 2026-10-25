@@ -1,8 +1,9 @@
 /**
  * FILE PURPOSE
  * ------------
- * **Settings › Default category** (SPEC-UI-UX.md §6.14, CR-12): pick the one category the Review Queue's
- * "Save all" applies to expenses that have no learned category. A single-select list plus a *None* row.
+ * **Settings › Default expense category / Default income category** (SPEC-UI-UX.md §6.14, CR-12, CR-17): pick the
+ * one category the Review Queue's "Save all" applies to expenses (or, with `?kind=income`, to income) that have no
+ * learned category. A single-select list plus a *None* row.
  *
  * WHERE IT FITS
  * -------------
@@ -11,7 +12,7 @@
  * stored id into a live category, treating a deleted category's dangling id as "not set".
  */
 
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -54,23 +55,28 @@ function OptionRow({
 }
 
 export default function DefaultCategoryScreen() {
+  const { kind: kindParam } = useLocalSearchParams<{ kind?: string }>();
+  const kind = kindParam === 'income' ? 'income' : 'expense'; // CR-28
+  const settingKey = kind === 'income' ? 'defaultIncomeCategoryId' : 'defaultCategoryId';
   const { data } = useCategories();
-  const stored = useSetting<string | null>('defaultCategoryId');
-  const categories = (data ?? []).filter((c) => c.kind !== 'system'); // "None" already means Uncategorized
-  const current = resolveDefaultCategory(stored.value, data ?? []);
+  const stored = useSetting<string | null>(settingKey);
+  // "None" already means Uncategorized; only categories of this kind can be its default
+  const categories = (data ?? []).filter((c) => c.kind !== 'system' && c.appliesTo === kind);
+  const current = resolveDefaultCategory(stored.value, data ?? [], kind);
 
   const choose = (id: string | null) => {
-    setSetting('defaultCategoryId', id);
+    setSetting(settingKey, id);
     router.back();
   };
 
   return (
     <SafeAreaView style={styles.screen}>
-      <TopBar title="Default category" onBack={() => router.back()} />
+      <TopBar title={kind === 'income' ? 'Default income category' : 'Default expense category'} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.body}>
         <ThemedText type="caption" themeColor="text3" style={styles.help}>
-          &quot;Save all&quot; in To review uses this for expenses whose account has no category of its own. Income
-          stays uncategorized.
+          {kind === 'income'
+            ? '"Save all" in To review uses this for income whose account has no income category of its own. With none set, income stays uncategorized.'
+            : '"Save all" in To review uses this for expenses whose account has no category of its own.'}
         </ThemedText>
         <View style={styles.section}>
           <OptionRow label="None" icon="x" selected={current === null} onPress={() => choose(null)} />

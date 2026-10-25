@@ -56,6 +56,7 @@ function category(overrides: Partial<Category> = {}): Category {
     name: 'Food',
     icon: 'utensils',
     kind: 'default',
+    appliesTo: 'expense',
     isProtected: false,
     order: 1,
     createdAt: 0,
@@ -76,8 +77,8 @@ beforeEach(() => {
   mockCategories = [
     category({ id: 'cat-food', key: 'food', name: 'Food' }),
     category({ id: 'cat-transport', key: 'transport', name: 'Transport', order: 2 }),
-    category({ id: 'cat-uncat', key: 'uncategorized', name: 'Uncategorized', kind: 'system', isProtected: true, order: 0 }),
-    category({ id: 'cat-other', key: 'other', name: 'Other', kind: 'default', isProtected: true, order: 9 }),
+    category({ id: 'cat-uncat', key: 'uncategorized', name: 'Uncategorized', kind: 'system', appliesTo: 'expense', isProtected: true, order: 0 }),
+    category({ id: 'cat-other', key: 'other', name: 'Other', kind: 'default', appliesTo: 'expense', isProtected: true, order: 9 }),
   ];
 });
 
@@ -126,4 +127,14 @@ it('back button calls router.back', async () => {
   const { getByLabelText } = await render(<CategoryReviewScreen />);
   await fireEvent.press(getByLabelText('Back'));
   expect(mockRouterBack).toHaveBeenCalled();
+});
+
+it('does not list the income default categories (CR-28) — onboarding is about spending categories', async () => {
+  mockCategories = [
+    ...mockCategories,
+    category({ id: 'cat-salary', key: 'salary', name: 'Salary', appliesTo: 'income' }),
+  ];
+  const { getByText, queryByText } = await render(<CategoryReviewScreen />);
+  expect(getByText('Food')).toBeTruthy();
+  expect(queryByText('Salary')).toBeNull();
 });

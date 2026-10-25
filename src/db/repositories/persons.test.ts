@@ -60,11 +60,18 @@ describe('findOrCreatePerson (IMP-077)', () => {
     expect(named).toMatchObject({ displayName: 'Neha', source: 'contact', contactRef: 'c-1' });
   });
 
-  it('accepts a name with no number, but never two people with the same number', () => {
+  it('accepts a name with no number, and reuses the same name-only person (CR-31 — no duplicate Saved people)', () => {
     const a = findOrCreatePerson({ displayName: 'Cash friend', source: 'manual' });
-    const b = findOrCreatePerson({ displayName: 'Cash friend', source: 'manual' });
-    expect(a.id).not.toBe(b.id); // no number ⇒ nothing to merge on
+    const b = findOrCreatePerson({ displayName: 'cash FRIEND', source: 'manual' });
+    expect(b.id).toBe(a.id); // same name, no number ⇒ the same person (case-insensitive)
     expect(a.phoneKey).toBeNull();
+  });
+
+  it('a name-only person is never merged with someone who has a number', () => {
+    const withNumber = findOrCreatePerson({ displayName: 'Rahul', phone: '9845897555', source: 'manual' });
+    const nameOnly = findOrCreatePerson({ displayName: 'Rahul', source: 'manual' });
+    expect(nameOnly.id).not.toBe(withNumber.id);
+    expect(nameOnly.phoneKey).toBeNull();
   });
 
   it('rejects an invalid number, or no name and no number', () => {

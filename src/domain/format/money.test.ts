@@ -2,6 +2,23 @@ import { formatMoney, formatPercentDelta } from './money';
 
 const THIN_SPACE = ' ';
 
+describe('formatMoney with fractional paise (a mean / median of daily spend)', () => {
+  it('rounds to whole paise instead of printing the raw fraction', () => {
+    expect(formatMoney(538.4615384615385, { sign: 'none' })).toBe('₹5.38');
+    expect(formatMoney(14000 / 26, { sign: 'none' })).toBe('₹5.38');
+    expect(formatMoney(50.5, { sign: 'none' })).toBe('₹0.51');
+  });
+
+  it('a fraction that rounds to a whole rupee shows no paise', () => {
+    expect(formatMoney(99.6, { sign: 'none' })).toBe('₹1');
+  });
+
+  it('keeps the sign of a rounded negative amount', () => {
+    expect(formatMoney(-538.46)).toContain('5.38');
+    expect(formatMoney(-538.46).startsWith('−')).toBe(true);
+  });
+});
+
 describe('formatMoney', () => {
   it('shows a plain amount under 1000 with no grouping', () => {
     expect(formatMoney(45000, { sign: 'none' })).toBe('₹450');

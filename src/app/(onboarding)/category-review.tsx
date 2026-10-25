@@ -43,7 +43,8 @@ export default function CategoryReviewScreen() {
     goTo(3);
   }, [goTo]);
 
-  const reviewable = (categories ?? []).filter((c) => c.kind === 'default' && !c.isProtected);
+  // CR-28: onboarding is about spending categories; the income defaults (Salary, …) are left as they are.
+  const reviewable = (categories ?? []).filter((c) => c.kind === 'default' && !c.isProtected && c.appliesTo === 'expense');
 
   const handleDone = () => {
     const { disabledCategoryIds, categoryOrder } = useOnboarding.getState();

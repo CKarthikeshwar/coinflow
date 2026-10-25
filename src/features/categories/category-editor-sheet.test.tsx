@@ -6,8 +6,8 @@ import { useCategoryDraft, useSheetRegistry } from '@/stores';
 import { CategoryEditorSheet } from './category-editor-sheet';
 
 const mockCategories: Category[] = [
-  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
-  { id: 'cat-other', key: 'other', name: 'Other', icon: 'shapes', kind: 'default', isProtected: true, order: 99, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-other', key: 'other', name: 'Other', icon: 'shapes', kind: 'default', appliesTo: 'expense', isProtected: true, order: 99, createdAt: 0, updatedAt: 0 },
 ];
 
 const mockCreateCategory = jest.fn();
@@ -63,7 +63,16 @@ describe('CategoryEditorSheet — create mode', () => {
     const { getByPlaceholderText, getByText } = await render(<CategoryEditorSheet />);
     await fireEvent.changeText(getByPlaceholderText('Category name'), 'Groceries');
     await fireEvent.press(getByText('Save'));
-    expect(mockCreateCategory).toHaveBeenCalledWith(expect.objectContaining({ name: 'Groceries' }));
+    expect(mockCreateCategory).toHaveBeenCalledWith(expect.objectContaining({ name: 'Groceries', appliesTo: 'expense' }));
+  });
+
+  it('lets you create an income category by choosing the Income type (CR-28)', async () => {
+    useSheetRegistry.setState({ params: {} });
+    const { getByPlaceholderText, getByText } = await render(<CategoryEditorSheet />);
+    await fireEvent.changeText(getByPlaceholderText('Category name'), 'Scholarship');
+    await fireEvent.press(getByText('Income'));
+    await fireEvent.press(getByText('Save'));
+    expect(mockCreateCategory).toHaveBeenCalledWith(expect.objectContaining({ name: 'Scholarship', appliesTo: 'income' }));
   });
 });
 

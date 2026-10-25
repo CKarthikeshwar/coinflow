@@ -21,7 +21,7 @@
 
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors, Spacing } from '@/constants/theme';
@@ -56,6 +56,13 @@ function CategoryRow({
         <ThemedText type="body" themeColor="text" style={styles.label} numberOfLines={1}>
           {category.name}
         </ThemedText>
+        {/* CR-28: one combined list — a small tag tells expense and income categories apart. The system
+            Uncategorized row is for both kinds, so it carries no tag (CR-19). */}
+        {category.kind !== 'system' ? (
+          <ThemedText type="caption" themeColor="text3">
+            {category.appliesTo === 'income' ? 'Income' : 'Expense'}
+          </ThemedText>
+        ) : null}
       </Pressable>
       {!category.isProtected ? (
         <Pressable
@@ -103,7 +110,8 @@ export default function CategoriesScreen() {
         right={{ icon: 'plus', label: 'Add category', onPress: () => openSheet('createCategory', {}) }}
       />
 
-      <View style={styles.body}>
+      {/* CR-28: with the income defaults there are 17+ rows — the list must scroll */}
+      <ScrollView contentContainerStyle={styles.body}>
         <ThemedText type="label" themeColor="text3" style={styles.sectionLabel}>
           Default
         </ThemedText>
@@ -139,10 +147,10 @@ export default function CategoriesScreen() {
         </View>
 
         <ThemedText type="caption" themeColor="text3" style={styles.note}>
-          Tap a category to edit it. Deleting one moves its transactions to Uncategorized. Other
-          and Uncategorized can be renamed but not removed.
+          Tap a category to edit it. Deleting one moves its transactions to Uncategorized. Other,
+          Other income and Uncategorized can be renamed but not removed.
         </ThemedText>
-      </View>
+      </ScrollView>
 
       <ConfirmDialog
         visible={deleting !== null}
@@ -163,7 +171,7 @@ export default function CategoriesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  body: { flex: 1, paddingHorizontal: Spacing.three },
+  body: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.five },
   sectionLabel: { paddingTop: Spacing.three, paddingBottom: Spacing.one },
   section: {
     borderRadius: 14,

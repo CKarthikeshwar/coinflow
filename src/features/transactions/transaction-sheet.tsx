@@ -49,22 +49,23 @@
  *  - Payment method is a `SegmentedControl` row rather than its own picker sheet.
  */
 
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetScrollView, type BottomSheetScrollViewMethods } from '@gorhom/bottom-sheet';
 import { format } from 'date-fns';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { getAccountRule, searchByPrefix } from '@/db/repositories/account-rules';
 import { useCategories } from '@/db/repositories/categories';
 import { getSuggestion } from '@/db/repositories/suggestions';
 import { getSplitForTransaction, listOpenShares } from '@/db/repositories/splits';
-import { getTransaction } from '@/db/repositories/transactions';
+import { getTransaction, searchNotesByPrefix } from '@/db/repositories/transactions';
 import type { AccountRule } from '@/db/schema';
-import { resolveCategoryForAccount } from '@/domain/categorize';
+import { resolveCategoryForAccount, ruleCategoryFor } from '@/domain/categorize';
 import { formatMoney, formatRupees } from '@/domain/format/money';
 import { recomputeYourShare } from '@/domain/split';
+import { eraseTimeDigit, TIME_FIELD_MAX, typeTimeDigit, type TimeField } from '@/domain/time-entry';
 import { sendRequests, summarizeReport } from '@/services/splits/send-requests';
 import { useAddSheetDraft, useKeypad, useSheetRegistry } from '@/stores';
 import type { KeypadKey } from '@/stores/keypad';
@@ -82,6 +83,7 @@ import { SelectorRow } from '@/ui/selector-row';
 import { TextField } from '@/ui/text-field';
 import { ThemedText } from '@/ui/themed-text';
 
+import { flushPendingCategoryPick } from '../categories/category-picker-sheet';
 import { persistSplitDraft } from '../splits/persist-split';
 import { settleAndAnnounce } from '../splits/settle-and-announce';
 import { SuggestedSettlementBanner, useSettlementSuggestion } from '../splits/suggested-settlement-banner';
@@ -97,6 +99,9 @@ const PAYMENT_METHOD_OPTIONS = [
 
 /** ₹10,00,000 in paise — §6.4 edge threshold (Confirm mode only; Add just disables the button). */
 const MAX_SANE_AMOUNT_MINOR = 10_00_000_00;
+
+/** CR-31 — how far past "now" a date must be before the "in the future" hint shows. */
+const FUTURE_DATE_SLACK_MS = 60_000;
 
 const HEADER_TITLE = {
   confirm: 'Review transaction',
@@ -135,12 +140,57 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
 
   // Date & time editing — the picker is closed by default, revealed on tap.
   const [editingDate, setEditingDate] = useState(false);
+
+  // CR-31 — the numeric keypad only shows while something is being typed with it: the amount, or the hour /
+  // minute of Date & time. A fresh Add starts on the amount; Confirm and Edit (amount already filled) start with
+  // it hidden — tap the amount to bring it back. Tapping a text field, or another control, puts it away. The
+  // initial value reads the store directly: this body remounts on every return from a sub-sheet (Category, Split).
+  const [keypadTarget, setKeypadTarget] = useState<'amount' | TimeField | null>(() =>
+    mode === 'add' && useAddSheetDraft.getState().amountMinor === 0 ? 'amount' : null,
+  );
+  // Digits typed so far into the hour / minute (`domain/time-entry.ts`); reset whenever the target changes.
+  const [timeBuffer, setTimeBuffer] = useState('');
+  const pointKeypad = (target: 'amount' | TimeField | null) => {
+    if (target) Keyboard.dismiss(); // the app keypad replaces the phone keyboard, never sits under it
+    setTimeBuffer('');
+    setKeypadTarget(target);
+  };
+
+  // CR-31 (found on-device) — the sheet does not move for the phone keyboard (it is a plain `TextInput`, not
+  // gorhom's `BottomSheetTextInput`, and the 92% sheet has no room to rise), so the Account / Note / Description
+  // fields — and their suggestion lists — ended up hidden behind the keyboard. Instead: while the keyboard is up, a
+  // spacer of its height ends the scroll content, and focusing a field scrolls it to the top of the sheet.
+  const scrollRef = useRef<BottomSheetScrollViewMethods>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  // Each text field's top within the scroll content (its wrapper is a direct child, so `onLayout` y is content-relative).
+  const fieldY = useRef<Record<'account' | 'note' | 'description', number>>({ account: 0, note: 0, description: 0 });
+  const scrollFieldIntoView = (field: 'account' | 'note' | 'description') => {
+    // after the keyboard (and the spacer) have had a moment to appear
+    setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, fieldY.current[field] - Spacing.three), animated: true }), 150);
+  };
+
+  // CR-31 — note autocomplete: past notes starting with what is typed (case-insensitive), only while the Note
+  // field has focus, hidden again right after one is picked (same idea as `pickedAccount`).
+  const [noteFocused, setNoteFocused] = useState(false);
+  const [pickedNote, setPickedNote] = useState<string | null>(null);
+  const noteSuggestions: string[] =
+    noteFocused && draft.note.trim() && draft.note !== pickedNote ? searchNotesByPrefix(draft.note) : [];
   // `Date.now()` can't be called inline during render (React Compiler purity rule) — a lazy
   // `useState` initializer is the sanctioned one-time-impure-read escape hatch, so "now" here
   // means "whenever this sheet instance was mounted," stable for its lifetime. Good enough for
   // an edge-case helper that doesn't need to react to the clock ticking while the sheet is open.
   const [openedAtMs] = useState(() => Date.now());
-  const isFutureDate = draft.occurredAt > openedAtMs;
+  // CR-31: a fresh Add stamps `occurredAt` a few ms *after* this sheet mounted, so a strict `>` flagged every new
+  // transaction as future. A minute of slack keeps the hint for real future picks only.
+  const isFutureDate = draft.occurredAt > openedAtMs + FUTURE_DATE_SLACK_MS;
 
   useEffect(() => {
     if (mode === 'add') {
@@ -239,8 +289,8 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
       return;
     }
     const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
-    const resolved = resolveCategoryForAccount(rule);
     const direction = suggestion.direction ?? 'debit';
+    const resolved = resolveCategoryForAccount(rule, direction); // CR-28: expense vs income category
     const amountMinor = suggestion.amountMinor ?? 0;
 
     useAddSheetDraft.getState().open({
@@ -265,13 +315,30 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   }, [mode, suggestionId, params.transactionId, close]);
 
   const handleKey = (key: KeypadKey) => {
-    useKeypad.getState().press(key);
-    draft.patch({ amountMinor: useKeypad.getState().amountMinor });
+    if (keypadTarget === 'amount') {
+      useKeypad.getState().press(key);
+      draft.patch({ amountMinor: useKeypad.getState().amountMinor });
+      return;
+    }
+    if (keypadTarget !== 'hour' && keypadTarget !== 'minute') return;
+    if (key === '.') return; // no decimals in a time
+    // CR-31: typing an hour / minute — see `domain/time-entry.ts` for the digit rules.
+    const entry = key === 'back' ? eraseTimeDigit(timeBuffer) : typeTimeDigit(timeBuffer, key, TIME_FIELD_MAX[keypadTarget]);
+    const next = new Date(useAddSheetDraft.getState().occurredAt);
+    if (keypadTarget === 'hour') next.setHours(entry.value);
+    else next.setMinutes(entry.value);
+    draft.patch({ occurredAt: next.getTime() });
+    if (entry.complete && keypadTarget === 'hour') {
+      setKeypadTarget('minute'); // a finished hour moves on to the minutes, like a phone's time entry
+      setTimeBuffer('');
+    } else {
+      setTimeBuffer(entry.buffer);
+    }
   };
 
   const pickAccountSuggestion = (rule: AccountRule) => {
     setPickedAccount(rule.displayAccount);
-    draft.patch({ account: rule.displayAccount, categoryId: rule.categoryId });
+    draft.patch({ account: rule.displayAccount, categoryId: ruleCategoryFor(rule, draft.direction) });
   };
 
   const categoryName =
@@ -308,9 +375,10 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
 
   const handleCancel = useCallback(() => {
-    if (draft.dirty || splitDirty) setShowDiscardConfirm(true);
+    flushPendingCategoryPick(); // a pick made a moment ago still counts as a change (CR-19)
+    if (useAddSheetDraft.getState().dirty || splitDirty) setShowDiscardConfirm(true);
     else close();
-  }, [draft.dirty, splitDirty, close]);
+  }, [splitDirty, close]);
 
   // Registers this sheet's own Cancel logic (dirty-check + discard confirm, V-6) as the
   // handler `useSheetRegistry().requestClose()` invokes — so the hardware/gesture back button
@@ -328,6 +396,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   };
 
   const submit = () => {
+    flushPendingCategoryPick(); // CR-19: a category picked a moment ago must be in what gets saved
     draft.setSubmitting(true);
     try {
       const current = useAddSheetDraft.getState();
@@ -404,20 +473,29 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
         </Pressable>
       </View>
 
-      <BottomSheetScrollView contentContainerStyle={styles.scroll}>
-        <AmountInput
-          amountMinor={draft.amountMinor}
-          mode="full"
-          helper={
-            mode === 'confirm' && isEdgeAmount
-              ? draft.amountMinor === 0
-                ? 'Amount is ₹0'
-                : "That's a large amount"
-              : mode !== 'confirm' && draft.amountMinor === 0
-                ? 'Enter an amount'
-                : undefined
-          }
-        />
+      {/* `handled`: a tap on a suggestion row lands while the phone keyboard is still up (CR-31 note autocomplete) */}
+      <BottomSheetScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Amount"
+          accessibilityHint="Opens the keypad to type the amount"
+          onPress={() => pointKeypad('amount')}
+        >
+          <AmountInput
+            amountMinor={draft.amountMinor}
+            mode="full"
+            active={keypadTarget === 'amount'}
+            helper={
+              mode === 'confirm' && isEdgeAmount
+                ? draft.amountMinor === 0
+                  ? 'Amount is ₹0'
+                  : "That's a large amount"
+                : mode !== 'confirm' && draft.amountMinor === 0
+                  ? 'Enter an amount'
+                  : undefined
+            }
+          />
+        </Pressable>
 
         <SegmentedControl
           options={[
@@ -425,9 +503,17 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
             { value: 'credit', label: 'Income' },
           ]}
           value={draft.direction}
-          onChange={(direction) =>
-            draft.patch({ direction, type: direction === 'credit' ? 'income' : 'expense' })
-          }
+          onChange={(direction) => {
+            pointKeypad(null);
+            // CR-28: an expense category is wrong for income (and vice versa) — drop a pick that no longer fits.
+            const kind = direction === 'credit' ? 'income' : 'expense';
+            const picked = (categories ?? []).find((c) => c.id === useAddSheetDraft.getState().categoryId);
+            draft.patch({
+              direction,
+              type: kind,
+              ...(picked && picked.appliesTo !== kind ? { categoryId: null } : {}),
+            });
+          }}
         />
 
         {settlementSuggestion && !suggestionDismissed ? (
@@ -440,14 +526,12 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           />
         ) : null}
 
-        {draft.type !== 'income' ? (
-          <SelectorRow
-            icon="tag"
-            label="Category"
-            value={categoryName}
-            onPress={() => open('categoryPicker', { ...params, returnTo: mode })}
-          />
-        ) : null}
+        <SelectorRow
+          icon="tag"
+          label="Category"
+          value={categoryName}
+          onPress={() => open('categoryPicker', { ...params, returnTo: mode })}
+        />
 
         <View style={styles.methodBlock}>
           <ThemedText type="label" themeColor="text3">
@@ -456,11 +540,20 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           <SegmentedControl
             options={PAYMENT_METHOD_OPTIONS}
             value={draft.paymentMethod ?? 'upi'}
-            onChange={(paymentMethod) => draft.patch({ paymentMethod })}
+            onChange={(paymentMethod) => {
+              pointKeypad(null);
+              draft.patch({ paymentMethod });
+            }}
           />
         </View>
 
-        <Pressable accessibilityRole="button" onPress={() => setEditingDate((v) => !v)}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            pointKeypad(null); // opening shows the calendar; tap the hour or minute to type it
+            setEditingDate((v) => !v);
+          }}
+        >
           <View style={styles.staticRow}>
             <Icon name="calendar" size={18} color="text3" />
             <ThemedText type="body" themeColor="text" style={styles.staticLabel}>
@@ -472,16 +565,29 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           </View>
         </Pressable>
         {editingDate ? (
-          <DateTimePicker valueMs={draft.occurredAt} onChange={(ms) => draft.patch({ occurredAt: ms })} />
+          <DateTimePicker
+            valueMs={draft.occurredAt}
+            onChange={(ms) => draft.patch({ occurredAt: ms })}
+            activeField={keypadTarget === 'hour' || keypadTarget === 'minute' ? keypadTarget : null}
+            onFieldPress={(field) => pointKeypad(field)}
+          />
         ) : null}
         {isFutureDate ? (
           <ThemedText type="caption" themeColor="text3">
-            Scheduled?
+            This date is in the future
           </ThemedText>
         ) : null}
 
-        <View>
-          <TextField value={draft.account} onChangeText={(account) => draft.patch({ account })} placeholder="Account" />
+        <View onLayout={(e) => (fieldY.current.account = e.nativeEvent.layout.y)}>
+          <TextField
+            value={draft.account}
+            onChangeText={(account) => draft.patch({ account })}
+            placeholder="Account"
+            onFocus={() => {
+              pointKeypad(null);
+              scrollFieldIntoView('account');
+            }}
+          />
           {accountSuggestions.length > 0 ? (
             <View style={styles.suggestionList}>
               {accountSuggestions.map((rule) => (
@@ -495,8 +601,8 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
                     {rule.displayAccount}
                   </ThemedText>
                   <ThemedText type="caption" themeColor="text3">
-                    {rule.categoryId
-                      ? ((categories ?? []).find((c) => c.id === rule.categoryId)?.name ?? 'Category')
+                    {ruleCategoryFor(rule, draft.direction)
+                      ? ((categories ?? []).find((c) => c.id === ruleCategoryFor(rule, draft.direction))?.name ?? 'Category')
                       : 'Uncategorized'}
                   </ThemedText>
                 </Pressable>
@@ -504,13 +610,52 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
             </View>
           ) : null}
         </View>
-        <TextField value={draft.note} onChangeText={(note) => draft.patch({ note })} placeholder="Note" />
-        <TextField
-          value={draft.description}
-          onChangeText={(description) => draft.patch({ description })}
-          placeholder="Description (optional)"
-          multiline
-        />
+        <View onLayout={(e) => (fieldY.current.note = e.nativeEvent.layout.y)}>
+          <TextField
+            value={draft.note}
+            onChangeText={(note) => draft.patch({ note })}
+            placeholder="Note"
+            onFocus={() => {
+              pointKeypad(null);
+              setNoteFocused(true);
+              scrollFieldIntoView('note');
+            }}
+            onBlur={() => setNoteFocused(false)}
+          />
+          {noteSuggestions.length > 0 ? (
+            <View style={styles.suggestionList}>
+              {noteSuggestions.map((note) => (
+                <Pressable
+                  key={note}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use note ${note}`}
+                  onPress={() => {
+                    setPickedNote(note);
+                    draft.patch({ note });
+                  }}
+                  style={styles.suggestionRow}
+                >
+                  <Icon name="history" size={16} color="text3" />
+                  <ThemedText type="body" themeColor="text" style={styles.suggestionText} numberOfLines={1}>
+                    {note}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
+        <View onLayout={(e) => (fieldY.current.description = e.nativeEvent.layout.y)}>
+          <TextField
+            value={draft.description}
+            onChangeText={(description) => draft.patch({ description })}
+            placeholder="Description (optional)"
+            multiline
+            onFocus={() => {
+              pointKeypad(null);
+              scrollFieldIntoView('description');
+            }}
+          />
+        </View>
 
         {mode !== 'add' && draft.direction === 'debit' && draft.amountMinor > 0 ? (
           <SplitRow
@@ -526,9 +671,10 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
             {draft.error}
           </ThemedText>
         ) : null}
+        {keyboardHeight > 0 ? <View style={{ height: keyboardHeight }} /> : null}
       </BottomSheetScrollView>
 
-      <NumericKeypad onKey={handleKey} />
+      {keypadTarget ? <NumericKeypad onKey={handleKey} /> : null}
       <View style={styles.primaryRow}>
         <Button
           variant={addDisabled || splitBlocked ? 'disabled' : 'primary'}
@@ -635,6 +781,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.dark.hairline,
   },
+  // CR-31 — a note suggestion: history glyph + the note, left-aligned
+  suggestionText: { flex: 1, marginLeft: Spacing.two },
   error: { paddingHorizontal: Spacing.one },
   primaryRow: {
     paddingHorizontal: Spacing.three,

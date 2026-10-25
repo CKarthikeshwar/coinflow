@@ -27,11 +27,17 @@ export type TransactionCardProps = {
 
 export function TransactionCard({ txn, category, showTime = false, split, onPress }: TransactionCardProps) {
   const isIncome = txn.type === 'income';
-  const isUncategorized = !isIncome && category === null;
-  const iconName: IconName = isIncome ? 'arrow-down-to-line' : isUncategorized ? 'help-circle' : ((category?.icon ?? 'shapes') as IconName);
+  // CR-28: income can be categorized too. The tile stays inverted for income; it shows the category's icon, or the
+  // plain income arrow while uncategorized (expenses show "?" instead).
+  const isUncategorized = category === null;
+  const iconName: IconName = category
+    ? (category.icon as IconName)
+    : isIncome
+      ? 'arrow-down-to-line'
+      : 'help-circle';
 
   const label = txn.note?.trim() || txn.account?.trim() || 'No note';
-  const categoryLabel = isIncome ? 'Income' : (category?.name ?? 'Uncategorized');
+  const categoryLabel = category?.name ?? 'Uncategorized';
 
   const signedMinor = txn.direction === 'credit' ? txn.amountMinor : -txn.amountMinor;
 

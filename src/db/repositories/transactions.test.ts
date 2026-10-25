@@ -91,10 +91,10 @@ describe('insertTransaction', () => {
     );
   });
 
-  it('forces categoryId null for income even if one was passed (IMP-011)', () => {
-    const row = insertTransaction({ ...baseInput(), direction: 'credit', categoryId: 'cat-food' });
+  it('keeps the category on an income transaction (CR-28 — income categories)', () => {
+    const row = insertTransaction({ ...baseInput(), direction: 'credit', categoryId: 'cat-salary' });
     expect(row.type).toBe('income');
-    expect(row.categoryId).toBeNull();
+    expect(row.categoryId).toBe('cat-salary');
   });
 
   it('normalizes a non-blank account and builds searchText from note/description/account', () => {
@@ -112,10 +112,22 @@ describe('updateTransaction', () => {
     expect(mockUpdates).toHaveLength(0);
   });
 
-  it('forces categoryId null when the patched direction makes it income', () => {
+  it('takes an explicit category passed together with a direction flip (CR-28)', () => {
     state.txnRow = { id: 'txn-1', direction: 'debit', type: 'expense', categoryId: 'cat-food', account: null, note: null, description: null };
-    updateTransaction('txn-1', { direction: 'credit', categoryId: 'cat-food' });
+    updateTransaction('txn-1', { direction: 'credit', categoryId: 'cat-salary' });
+    expect(mockUpdates[0].values).toEqual(expect.objectContaining({ type: 'income', categoryId: 'cat-salary' }));
+  });
+
+  it('drops the old category when the direction flips and none is passed (an expense category is wrong for income)', () => {
+    state.txnRow = { id: 'txn-1', direction: 'debit', type: 'expense', categoryId: 'cat-food', account: null, note: null, description: null };
+    updateTransaction('txn-1', { direction: 'credit' });
     expect(mockUpdates[0].values).toEqual(expect.objectContaining({ type: 'income', categoryId: null }));
+  });
+
+  it('keeps the current category when the direction is unchanged and none is passed', () => {
+    state.txnRow = { id: 'txn-1', direction: 'credit', type: 'income', categoryId: 'cat-salary', account: null, note: null, description: null };
+    updateTransaction('txn-1', { amountMinor: 500 });
+    expect(mockUpdates[0].values).toEqual(expect.objectContaining({ categoryId: 'cat-salary' }));
   });
 
   it('always marks editedByUser true and bumps updatedAt', () => {

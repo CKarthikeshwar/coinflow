@@ -30,6 +30,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     dedupeKey: 'dedupe-1',
     status: 'pending',
     confirmedTransactionId: null,
+    dismissedAt: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
@@ -40,6 +41,7 @@ const KNOWN_RULE: AccountRule = {
   displayAccount: 'Swiggy',
   lastNote: null,
   categoryId: 'cat-food',
+  incomeCategoryId: null,
   lastPaymentMethod: 'upi',
   hitCount: 1,
   createdAt: 0,

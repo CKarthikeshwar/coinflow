@@ -17,11 +17,14 @@ import { ThemedText } from '@/ui/themed-text';
 export function AccountRuleRow({
   rule,
   category,
+  incomeCategory,
   onPress,
   onDeletePress,
 }: {
   rule: AccountRule;
   category: Category | undefined;
+  /** CR-28 — the remembered income category, shown as a second chip when the account has one. */
+  incomeCategory?: Category | undefined;
   onPress: () => void;
   onDeletePress: () => void;
 }) {
@@ -36,6 +39,7 @@ export function AccountRuleRow({
         </ThemedText>
         <View style={styles.meta}>
           <Chip label={category?.name ?? 'Uncategorized'} />
+          {incomeCategory ? <Chip label={incomeCategory.name} /> : null}
           <ThemedText type="caption" themeColor="text3">
             {rule.hitCount} use{rule.hitCount === 1 ? '' : 's'}
           </ThemedText>

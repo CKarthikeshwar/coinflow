@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import type { Transaction } from '@/db/schema';
+import type { Category, Transaction } from '@/db/schema';
 
 import { TransactionCard } from './transaction-card';
 
@@ -34,5 +34,26 @@ describe('TransactionCard split badge (V2 — UI-075)', () => {
       <TransactionCard txn={txn()} category={null} split={{ total: 2, paid: 2, yourMinor: 60_000 }} onPress={() => undefined} />,
     );
     expect(getByText('Split · all paid')).toBeTruthy();
+  });
+});
+
+describe('income categories (CR-28)', () => {
+  const salary: Category = {
+    id: 'cat-salary', key: 'salary', name: 'Salary', icon: 'briefcase', kind: 'default', appliesTo: 'income',
+    isProtected: false, order: 10, createdAt: 0, updatedAt: 0,
+  };
+  const income = (over: Partial<Transaction> = {}) => txn({ direction: 'credit', type: 'income', ...over });
+
+  it('an income with a category shows the category name instead of the fixed word "Income"', async () => {
+    const { getByText, queryByText } = await render(
+      <TransactionCard txn={income({ categoryId: 'cat-salary' })} category={salary} onPress={() => undefined} />,
+    );
+    expect(getByText('Salary')).toBeTruthy();
+    expect(queryByText('Income')).toBeNull();
+  });
+
+  it('an income without a category reads Uncategorized', async () => {
+    const { getByText } = await render(<TransactionCard txn={income()} category={null} onPress={() => undefined} />);
+    expect(getByText('Uncategorized')).toBeTruthy();
   });
 });

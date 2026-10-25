@@ -23,7 +23,7 @@ jest.mock('@/services/sms', () => ({ requestSmsPermissions: jest.fn().mockResolv
 jest.mock('expo-notifications', () => ({ requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }) }));
 
 const mockCategories: Category[] = [
-  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
+  { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
 ];
 let mockOwedTotalMinor = 0;
 let mockUnattended: unknown[] = [];
@@ -125,11 +125,18 @@ describe('empty (new user)', () => {
     mockRecent = { data: [], error: undefined, updatedAt: loadedAt };
   });
 
-  it('shows the zero-state hero, no action strip, and an Add-transaction empty state', async () => {
+  it('shows the zero-state hero, no action strip (nothing pending), and an Add-transaction empty state', async () => {
     const { getByText, queryByText } = await render(<HomeScreen />);
     expect(getByText('₹0')).toBeTruthy();
     expect(getByText(/no transactions yet/i)).toBeTruthy();
     expect(queryByText('See all')).toBeNull();
+  });
+
+  it('still shows the "to review" row when detected transactions are pending but none are saved yet', async () => {
+    mockPendingCount = { count: 3 };
+    const { getByText } = await render(<HomeScreen />);
+    await fireEvent.press(getByText('3 to review'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/review-queue');
   });
 
   it('tapping Add transaction opens the Add sheet', async () => {
@@ -151,7 +158,13 @@ describe('loaded, with data', () => {
 
   it('shows a negative running balance with a leading "−"', async () => {
     const { getByText } = await render(<HomeScreen />);
-    expect(getByText(/^−\s?₹500$/)).toBeTruthy();
+    expect(getByText(/^−\s₹500$/)).toBeTruthy(); // a (thin) space after the sign, like every other amount (CR-19); the matcher normalises whitespace
+  });
+
+  it('shows Spending with a minus sign and Income with a plus sign (§6.2, CR-19)', async () => {
+    const { getByText } = await render(<HomeScreen />);
+    expect(getByText('− ₹2,000')).toBeTruthy(); // spent 200000 paise
+    expect(getByText('+ ₹1,500')).toBeTruthy(); // income 150000 paise
   });
 
   it('shows the Spending tile delta and "No prior month" for Income (no comparison figure)', async () => {

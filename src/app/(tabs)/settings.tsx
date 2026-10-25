@@ -60,6 +60,8 @@ export default function SettingsScreen() {
   const { data: categoryList } = useCategories();
   const defaultId = useSetting<string | null>('defaultCategoryId');
   const defaultName = resolveDefaultCategory(defaultId.value, categoryList ?? [])?.name;
+  const defaultIncomeId = useSetting<string | null>('defaultIncomeCategoryId'); // CR-28
+  const defaultIncomeName = resolveDefaultCategory(defaultIncomeId.value, categoryList ?? [], 'income')?.name;
   const version = Constants.expoConfig?.version ?? '—';
 
   return (
@@ -70,7 +72,13 @@ export default function SettingsScreen() {
       <View style={styles.body}>
         <View style={styles.section}>
           <Row label="Categories" icon="tag" href="/categories" />
-          <Row label="Default category" icon="bookmark" href="/default-category" subtitle={defaultName ?? 'Not set'} />
+          <Row label="Default expense category" icon="bookmark" href="/default-category" subtitle={defaultName ?? 'Not set'} />
+          <Row
+            label="Default income category"
+            icon="bookmark"
+            href="/default-category?kind=income"
+            subtitle={defaultIncomeName ?? 'Not set'}
+          />
           <Row label="Payment methods" icon="wallet" href="/payment-methods" />
           <Row
             label="SMS & notifications"

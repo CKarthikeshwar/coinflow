@@ -102,7 +102,8 @@ export default function TransactionDetailsScreen() {
   };
 
   const openEdit = () => useSheetRegistry.getState().open('edit', { transactionId: txn.id });
-  const isUncategorized = txn.type !== 'income' && !category;
+  const isUncategorized = !category; // CR-28: income can be categorized too
+  const headline = txn.note?.trim() || txn.account?.trim() || null; // CR-31
 
   // V2 — only a debit can be split (CR-8). The Split sheet opens "direct": it saves straight to the database.
   const openSplit = () => useSheetRegistry.getState().open('split', { direct: true, transactionId: txn.id });
@@ -193,7 +194,7 @@ export default function TransactionDetailsScreen() {
             </Pressable>
           ) : (
             <ThemedText type="label" themeColor="text3">
-              {txn.type === 'income' ? 'Income' : (category?.name ?? 'Uncategorized')}
+              {category?.name ?? 'Uncategorized'}
             </ThemedText>
           )}
           {txn.paymentMethod ? (
@@ -208,13 +209,15 @@ export default function TransactionDetailsScreen() {
           ) : null}
         </View>
 
-        <ThemedText type="title" style={styles.field}>
-          {txn.note?.trim() || 'Add a note'}
-        </ThemedText>
-
-        {txn.account ? (
-          <DetailRow label="Account" value={txn.account} />
+        {/* CR-31: the heading is the note, else the account — never an "Add a note" placeholder; with neither,
+            there is no heading at all (Edit is the way to add one). */}
+        {headline ? (
+          <ThemedText type="title" style={styles.field}>
+            {headline}
+          </ThemedText>
         ) : null}
+
+        {txn.account && headline !== txn.account.trim() ? <DetailRow label="Account" value={txn.account} /> : null}
         <DetailRow label="Date & time" value={format(new Date(txn.occurredAt), 'd MMM yyyy · h:mm a')} />
         {txn.description ? <DetailRow label="Description" value={txn.description} /> : null}
 

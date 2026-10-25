@@ -61,6 +61,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     dedupeKey: 'dedupe-1',
     status: 'pending',
     confirmedTransactionId: null,
+    dismissedAt: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
@@ -72,6 +73,7 @@ function rule(overrides: Partial<AccountRule> = {}): AccountRule {
     displayAccount: 'Swiggy',
     lastNote: 'Lunch',
     categoryId: 'cat-food',
+    incomeCategoryId: null,
     lastPaymentMethod: 'upi',
     hitCount: 3,
     createdAt: 1_700_000_000_000,
@@ -98,6 +100,13 @@ describe('handleSave', () => {
     getSuggestionMock.mockReturnValue(suggestion({ status: 'confirmed' }));
     const result = await handleSave('sug-1');
     expect(result).toEqual({ outcome: 'noop', reason: 'already-confirmed' });
+    expect(mockInsertedRows).toHaveLength(0);
+  });
+
+  it('is a noop when already dismissed (CR-30 — a stale Save on a tombstoned suggestion must not resurrect it)', async () => {
+    getSuggestionMock.mockReturnValue(suggestion({ status: 'dismissed' }));
+    const result = await handleSave('sug-1');
+    expect(result).toEqual({ outcome: 'noop', reason: 'dismissed' });
     expect(mockInsertedRows).toHaveLength(0);
   });
 
@@ -160,9 +169,18 @@ describe('handleSave', () => {
     expect(cancelForSuggestionMock).toHaveBeenCalledWith('sug-1');
   });
 
-  it('forces categoryId null for a credit (IMP-011 — income has no category)', async () => {
+  it("uses the rule's remembered INCOME category for a credit (CR-28)", async () => {
     getSuggestionMock.mockReturnValue(suggestion({ direction: 'credit' }));
-    getAccountRuleMock.mockReturnValue(rule());
+    getAccountRuleMock.mockReturnValue(rule({ categoryId: 'cat-food', incomeCategoryId: 'cat-refund' }));
+
+    await handleSave('sug-1');
+
+    expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ type: 'income', categoryId: 'cat-refund' }));
+  });
+
+  it('a credit whose account only remembers an expense category is saved uncategorized, not with that expense category (CR-28)', async () => {
+    getSuggestionMock.mockReturnValue(suggestion({ direction: 'credit' }));
+    getAccountRuleMock.mockReturnValue(rule({ categoryId: 'cat-food', incomeCategoryId: null }));
 
     await handleSave('sug-1');
 
@@ -197,39 +215,57 @@ describe('handleDiscard', () => {
 });
 
 describe('handleSaveAll (CR-25)', () => {
-  it('saves debits with the default category, credits uncategorized, and touches no account rule', async () => {
+  it('saves debits with the expense default, credits with the income default, and touches no account rule', async () => {
     listPendingMock.mockReturnValue([
       suggestion({ id: 's1' }),
       suggestion({ id: 's2', direction: 'credit', normalizedKey: 'salary' }),
     ]);
     getAccountRuleMock.mockReturnValue(null);
-    const result = await handleSaveAll('cat-default');
+    const result = await handleSaveAll({ expense: 'cat-default', income: 'cat-salary' });
     expect(result).toEqual({ saved: 2, skipped: 0 });
     expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ type: 'expense', categoryId: 'cat-default' }));
-    expect(mockInsertedRows[1]).toEqual(expect.objectContaining({ type: 'income', categoryId: null }));
+    expect(mockInsertedRows[1]).toEqual(expect.objectContaining({ type: 'income', categoryId: 'cat-salary' }));
     expect(mockUpdates.map((u) => u.table)).toEqual(['suggestion', 'suggestion']);
     expect(cancelForSuggestionMock).toHaveBeenCalledWith('s1');
     expect(cancelForSuggestionMock).toHaveBeenCalledWith('s2');
   });
 
+  it('leaves a credit uncategorized when no income default is set (CR-28)', async () => {
+    listPendingMock.mockReturnValue([suggestion({ direction: 'credit', normalizedKey: 'salary' })]);
+    getAccountRuleMock.mockReturnValue(null);
+    await handleSaveAll({ expense: 'cat-default', income: null });
+    expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ type: 'income', categoryId: null }));
+  });
+
+  it("uses the account's remembered income category for a credit, and its expense category for a debit (CR-28)", async () => {
+    listPendingMock.mockReturnValue([
+      suggestion({ id: 's1' }),
+      suggestion({ id: 's2', direction: 'credit' }),
+    ]);
+    getAccountRuleMock.mockReturnValue(rule({ categoryId: 'cat-food', incomeCategoryId: 'cat-refund' }));
+    await handleSaveAll({ expense: 'cat-default', income: 'cat-salary' });
+    expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ type: 'expense', categoryId: 'cat-food' }));
+    expect(mockInsertedRows[1]).toEqual(expect.objectContaining({ type: 'income', categoryId: 'cat-refund' }));
+  });
+
   it("prefers the account rule's learned category over the default", async () => {
     listPendingMock.mockReturnValue([suggestion()]);
     getAccountRuleMock.mockReturnValue(rule({ categoryId: 'cat-food' }));
-    await handleSaveAll('cat-default');
+    await handleSaveAll({ expense: 'cat-default', income: null });
     expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ categoryId: 'cat-food', note: 'Lunch' }));
   });
 
   it('falls back to the default when the rule has no category', async () => {
     listPendingMock.mockReturnValue([suggestion()]);
     getAccountRuleMock.mockReturnValue(rule({ categoryId: null }));
-    await handleSaveAll('cat-default');
+    await handleSaveAll({ expense: 'cat-default', income: null });
     expect(mockInsertedRows[0]).toEqual(expect.objectContaining({ categoryId: 'cat-default' }));
   });
 
   it('leaves incomplete suggestions pending and counts them as skipped', async () => {
     listPendingMock.mockReturnValue([suggestion({ id: 's1' }), suggestion({ id: 's2', amountMinor: null })]);
     getAccountRuleMock.mockReturnValue(null);
-    const result = await handleSaveAll('cat-default');
+    const result = await handleSaveAll({ expense: 'cat-default', income: null });
     expect(result).toEqual({ saved: 1, skipped: 1 });
     expect(mockInsertedRows).toHaveLength(1);
     expect(cancelForSuggestionMock).not.toHaveBeenCalledWith('s2');

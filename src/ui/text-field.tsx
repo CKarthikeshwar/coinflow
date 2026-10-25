@@ -19,10 +19,10 @@ export type TextFieldProps = {
   maxLength?: number;
 } & Pick<
   TextInputProps,
-  'keyboardType' | 'autoCapitalize' | 'returnKeyType' | 'onSubmitEditing' | 'autoFocus' | 'onBlur'
+  'keyboardType' | 'autoCapitalize' | 'returnKeyType' | 'onSubmitEditing' | 'autoFocus' | 'onBlur' | 'onFocus'
 >;
 
-export function TextField({ value, onChangeText, placeholder, multiline, maxLength, onBlur, ...rest }: TextFieldProps) {
+export function TextField({ value, onChangeText, placeholder, multiline, maxLength, onBlur, onFocus, ...rest }: TextFieldProps) {
   const [focused, setFocused] = useState(false);
   const borderColor = focused ? Colors.dark.primary : value ? Colors.dark.hairline : 'transparent';
 
@@ -34,7 +34,10 @@ export function TextField({ value, onChangeText, placeholder, multiline, maxLeng
       placeholderTextColor={Colors.dark.text3}
       multiline={multiline}
       maxLength={maxLength}
-      onFocus={() => setFocused(true)}
+      onFocus={(e) => {
+        setFocused(true);
+        onFocus?.(e); // like onBlur: a caller's handler must not replace the focus tracking
+      }}
       onBlur={(e) => {
         setFocused(false);
         onBlur?.(e); // a caller's blur handler must not replace the focus tracking above

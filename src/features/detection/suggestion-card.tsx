@@ -39,6 +39,13 @@ const METHOD_DESCRIPTOR: Record<PaymentMethod, (direction: Suggestion['direction
   wallet: () => 'Wallet payment',
 };
 
+/** Debit → `− ₹…`, credit → `+ ₹…` (same convention as `TransactionCard`); no direction parsed → unsigned. */
+function amountLabel(suggestion: Suggestion): string {
+  if (suggestion.amountMinor === null) return '—';
+  if (suggestion.direction === null) return formatMoney(suggestion.amountMinor, { sign: 'none' });
+  return formatMoney(suggestion.direction === 'credit' ? suggestion.amountMinor : -suggestion.amountMinor);
+}
+
 function descriptorFor(suggestion: Suggestion): string {
   if (!suggestion.paymentMethod) return 'Transaction';
   return METHOD_DESCRIPTOR[suggestion.paymentMethod](suggestion.direction);
@@ -63,7 +70,7 @@ export function SuggestionCard({ suggestion, known, onOpen, onSave, onDismiss }:
         </View>
         <View style={styles.textCol}>
           <ThemedText type="title">
-            {suggestion.amountMinor !== null ? formatMoney(suggestion.amountMinor) : '—'}
+            {amountLabel(suggestion)}
           </ThemedText>
           <ThemedText type="label" themeColor="text3">
             {descriptorFor(suggestion)} · {formatWhen(suggestion.smsReceivedAt)}

@@ -30,6 +30,7 @@ import { getCategoryMap } from '@/db/repositories/categories';
 import { getSetting } from '@/db/repositories/settings';
 import {
   useCategoryBreakdown,
+  useIncomeBreakdown,
   useDailySeries,
   useLargestExpenses,
   usePeriodSummary,
@@ -74,15 +75,17 @@ function AnalyticsContent({ onRetry }: { onRetry: () => void }) {
 
   const summary = usePeriodSummary(period);
   const breakdown = useCategoryBreakdown(period);
+  const incomeBreakdown = useIncomeBreakdown(period); // CR-28
   const daily = useDailySeries(period);
   const largest = useLargestExpenses(period);
   const categoryMap = getCategoryMap();
 
-  const error = summary.error ?? breakdown.error ?? daily.error ?? largest.error;
+  const error = summary.error ?? breakdown.error ?? incomeBreakdown.error ?? daily.error ?? largest.error;
   const loading =
     !error &&
     (summary.updatedAt === undefined ||
       breakdown.updatedAt === undefined ||
+      incomeBreakdown.updatedAt === undefined ||
       daily.updatedAt === undefined ||
       largest.updatedAt === undefined);
   const isEmptyPeriod = !loading && !error && summary.spentMinor === 0 && summary.incomeMinor === 0;
@@ -133,6 +136,10 @@ function AnalyticsContent({ onRetry }: { onRetry: () => void }) {
           </View>
 
           <CategoryBreakdown rows={breakdown.rows} categoryById={categoryMap} period={period} />
+
+          {incomeBreakdown.rows.length > 0 ? (
+            <CategoryBreakdown kind="income" rows={incomeBreakdown.rows} categoryById={categoryMap} period={period} />
+          ) : null}
 
           <DailyChart series={daily.series} yMax={daily.yMax} mean={daily.mean} />
 

@@ -16,6 +16,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     dedupeKey: 'dedupe-1',
     status: 'pending',
     confirmedTransactionId: null,
+    dismissedAt: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
@@ -27,6 +28,7 @@ function rule(overrides: Partial<AccountRule> = {}): AccountRule {
     displayAccount: 'merchant@okhdfcbank',
     lastNote: null,
     categoryId: 'cat-food',
+    incomeCategoryId: null,
     lastPaymentMethod: 'upi',
     hitCount: 3,
     createdAt: 1_700_000_000_000,
