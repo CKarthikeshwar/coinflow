@@ -59,6 +59,8 @@ export type InsertSuggestionInput = {
   smsSender: string;
   smsReceivedAt: number;
   dedupeKey: string;
+  /** §46.5 — the user's own account resolved at ingest. */
+  accountId?: string | null;
 };
 
 /** §17.3 step 5 — relies on `uniq_sugg_dedupe` + ON CONFLICT DO NOTHING. */
@@ -84,6 +86,7 @@ export function insertIfNew(input: InsertSuggestionInput): { created: boolean; i
       smsSender: input.smsSender,
       smsReceivedAt: input.smsReceivedAt,
       dedupeKey: input.dedupeKey,
+      accountId: input.accountId ?? null,
       status: 'pending',
       createdAt: Date.now(),
     })

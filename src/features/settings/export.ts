@@ -36,6 +36,7 @@ import { db } from '@/db/client';
 import {
   accountRules,
   categories,
+  myAccounts,
   persons,
   settlements,
   splitRequestsIn,
@@ -85,6 +86,7 @@ export async function exportJson(): Promise<void> {
     splitShares: liveShares,
     splitRequests: liveRequests,
     settlements: liveSettlements,
+    myAccounts: db.select().from(myAccounts).all(), // CR-34
   };
 
   const file = ensureFile('coinflow-export.json');
@@ -103,12 +105,17 @@ const CSV_HEADER = [
   'note',
   'description',
   'source',
+  // CR-34 (§46.6) — which of YOUR accounts (its nickname; `account` above is the other party), and a transfer's
+  // other half
+  'myAccount',
+  'transferPeerId',
 ];
 
 /** §20.8 — transactions only; amounts as signed rupees (2dp), `occurredAt` as ISO-8601 local. */
 export async function exportCsv(): Promise<void> {
   const liveTransactions = db.select().from(transactions).where(isNull(transactions.deletedAt)).all();
   const categoryById = getCategoryMap();
+  const accountById = new Map(db.select().from(myAccounts).all().map((a) => [a.id, a.nickname]));
 
   const rows = liveTransactions.map((t) => {
     const signedMinor = t.direction === 'debit' ? -t.amountMinor : t.amountMinor;
@@ -126,6 +133,8 @@ export async function exportCsv(): Promise<void> {
       t.note ?? '',
       t.description ?? '',
       t.source,
+      t.accountId ? (accountById.get(t.accountId) ?? '') : '',
+      t.transferPeerId ?? '',
     ].map((v) => csvField(String(v)));
   });
 

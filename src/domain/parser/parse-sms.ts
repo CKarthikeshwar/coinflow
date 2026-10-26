@@ -48,10 +48,32 @@
  */
 
 import { isKnownSender } from '@/constants/sms-senders';
+import { bankFromSms } from '@/domain/accounts/account-key';
 
-import { collapseWhitespace, extractAccount, extractAmountAndDirection, extractPaymentMethod, hasVpa } from './extract';
+import {
+  collapseWhitespace,
+  extractAccount,
+  extractAmountAndDirection,
+  extractOwnAccount,
+  extractPaymentMethod,
+  hasVpa,
+} from './extract';
 import { checkIgnoreGate } from './ignore-rules';
-import type { ParseResult, ParseWarning, RawSms } from './types';
+import type { OwnAccountRef, ParseResult, ParseWarning, RawSms } from './types';
+
+/** §46.4 — both halves are required: a bank we can name and masked digits in the body. */
+function ownAccountOf(sender: string, body: string): OwnAccountRef | null {
+  const digits = extractOwnAccount(body);
+  if (!digits) return null;
+  const bank = bankFromSms(sender, body);
+  if (!bank) return null;
+  return {
+    bankKey: bank.bankKey,
+    bankName: bank.bankName,
+    last4: digits.last4,
+    kind: digits.isCreditCard ? 'credit_card' : 'bank',
+  };
+}
 
 export function parseSms(input: RawSms): ParseResult {
   if (!isKnownSender(input.sender)) {
@@ -87,6 +109,7 @@ export function parseSms(input: RawSms): ParseResult {
       normalizedKey: account?.normalizedKey ?? null,
       paymentMethod,
       occurredAt: input.receivedAt,
+      ownAccount: ownAccountOf(input.sender, body),
     },
     parsedFlags: {
       amount: amount.value !== null,
@@ -98,4 +121,4 @@ export function parseSms(input: RawSms): ParseResult {
   };
 }
 
-export type { ParseResult, ParsedFields, RawSms } from './types';
+export type { OwnAccountRef, ParseResult, ParsedFields, RawSms } from './types';

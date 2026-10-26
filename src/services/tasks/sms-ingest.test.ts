@@ -6,6 +6,8 @@
  */
 
 import { getAccountRule } from '@/db/repositories/account-rules';
+import { listCardLast4s, resolveAccountFromSms } from '@/db/repositories/accounts';
+import { recordCardBillHint } from '@/db/repositories/transfers';
 import { ensureMigrated } from '@/db/maintenance';
 import { getSuggestion, insertIfNew } from '@/db/repositories/suggestions';
 import { hasDedupeKey } from '@/db/repositories/transactions';
@@ -21,6 +23,11 @@ jest.mock('@/db/maintenance', () => ({ ensureMigrated: jest.fn().mockResolvedVal
 jest.mock('@/db/repositories/account-rules', () => ({
   getAccountRule: jest.fn().mockReturnValue(null),
 }));
+jest.mock('@/db/repositories/accounts', () => ({
+  resolveAccountFromSms: jest.fn().mockReturnValue({ id: 'acc-hdfc', created: true }),
+  listCardLast4s: jest.fn().mockReturnValue([]),
+}));
+jest.mock('@/db/repositories/transfers', () => ({ recordCardBillHint: jest.fn() }));
 jest.mock('@/db/repositories/transactions', () => ({
   hasDedupeKey: jest.fn().mockReturnValue(false),
 }));
@@ -72,6 +79,62 @@ beforeEach(() => {
   insertIfNewMock.mockReturnValue({ created: true, id: 'test-id' });
   hasDedupeKeyMock.mockReturnValue(false);
   getAccountRuleMock.mockReturnValue(null);
+  (resolveAccountFromSms as jest.Mock).mockReturnValue({ id: 'acc-hdfc', created: true });
+  (listCardLast4s as jest.Mock).mockReturnValue([]);
+});
+
+describe('smsIngestTask — own account (§46.5, CR-34)', () => {
+  it('resolves the account the SMS names and stores it on the suggestion', async () => {
+    await smsIngestTask(QUALIFYING_SMS);
+    expect(resolveAccountFromSms).toHaveBeenCalledWith({ bankKey: 'hdfc', bankName: 'HDFC Bank', last4: '1234', kind: 'bank' });
+    expect(insertIfNewMock).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'acc-hdfc' }));
+  });
+
+  it('no account in the SMS ⇒ accountId null, nothing created', async () => {
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Rs.450.00 debited to VPA merchant@okhdfcbank UPI Ref 4.' });
+    expect(resolveAccountFromSms).not.toHaveBeenCalled();
+    expect(insertIfNewMock).toHaveBeenCalledWith(expect.objectContaining({ accountId: null }));
+  });
+
+  it('an ignored SMS never creates an account', async () => {
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Your A/c XX1234 Avl Bal is Rs.12,340.00.' });
+    expect(resolveAccountFromSms).not.toHaveBeenCalled();
+  });
+
+  it('a duplicate SMS never creates an account', async () => {
+    hasDedupeKeyMock.mockReturnValue(true);
+    await smsIngestTask(QUALIFYING_SMS);
+    expect(resolveAccountFromSms).not.toHaveBeenCalled();
+  });
+
+  it('an account failure still saves the suggestion, with no account', async () => {
+    (resolveAccountFromSms as jest.Mock).mockImplementation(() => {
+      throw new Error('boom');
+    });
+    await smsIngestTask(QUALIFYING_SMS);
+    expect(insertIfNewMock).toHaveBeenCalledWith(expect.objectContaining({ accountId: null }));
+  });
+
+  it('a card spend with no method word is a card payment', async () => {
+    (resolveAccountFromSms as jest.Mock).mockReturnValue({ id: 'acc-card', created: false });
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Rs.500.00 debited on Credit Card XX4321 at SHOP.' });
+    expect(insertIfNewMock).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'acc-card' }));
+  });
+
+  it('records a card-bill hint when a bank debit pays one of your cards (UI-108)', async () => {
+    (listCardLast4s as jest.Mock).mockReturnValue([{ id: 'acc-card', last4: '4321' }]);
+    await smsIngestTask({
+      ...QUALIFYING_SMS,
+      body: 'Rs.14,200.00 debited from A/c XX1234 towards HDFC Bank Credit Card XX4321 payment.',
+    });
+    expect(recordCardBillHint).toHaveBeenCalledWith(expect.any(String), 'acc-card');
+  });
+
+  it('no hint for an ordinary debit', async () => {
+    (listCardLast4s as jest.Mock).mockReturnValue([{ id: 'acc-card', last4: '4321' }]);
+    await smsIngestTask(QUALIFYING_SMS);
+    expect(recordCardBillHint).not.toHaveBeenCalled();
+  });
 });
 
 describe('smsIngestTask — IMP-001 (qualifying SMS)', () => {

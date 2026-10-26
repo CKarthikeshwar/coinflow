@@ -35,14 +35,18 @@ import { randomUUID } from 'expo-crypto';
 
 import { db } from '@/db/client';
 import { upsertFromTransaction } from '@/db/repositories/account-rules';
-import { updateTransaction } from '@/db/repositories/transactions';
+import { getTransaction, updateTransaction } from '@/db/repositories/transactions';
+import { createTransfer, linkTransferIfAny, unlinkTransfer, updateTransfer } from '@/db/repositories/transfers';
 import { accountRules, suggestions, transactions } from '@/db/schema';
 import { normalizeAccount } from '@/domain/normalize';
 import type { AddSheetDraft } from '@/stores/add-sheet-draft';
 
 export type SmsRef = { sender: string; receivedAt: number; dedupeKey: string } | null;
 
-export function writeConfirmedTransaction(draft: AddSheetDraft, smsRef: SmsRef): { transactionId: string } {
+export function writeConfirmedTransaction(
+  draft: AddSheetDraft,
+  smsRef: SmsRef,
+): { transactionId: string; linkedPeerId: string | null } {
   const transactionId = randomUUID();
   const now = Date.now();
   const account = draft.account.trim() || null;
@@ -79,6 +83,8 @@ export function writeConfirmedTransaction(draft: AddSheetDraft, smsRef: SmsRef):
         smsReceivedAt: smsRef?.receivedAt ?? null,
         dedupeKey: smsRef?.dedupeKey ?? null,
         editedByUser: draft.mode === 'confirm',
+        accountId: draft.accountId,
+        transferPeerId: null,
       })
       .run();
 
@@ -129,7 +135,41 @@ export function writeConfirmedTransaction(draft: AddSheetDraft, smsRef: SmsRef):
     }
   });
 
-  return { transactionId };
+  // §46.6 — right after the write: an unambiguous twin on another of your accounts makes this a transfer.
+  let linkedPeerId: string | null = null;
+  if (draft.accountId) {
+    try {
+      const match = linkTransferIfAny(transactionId);
+      if (match.kind === 'link') linkedPeerId = match.peer.id;
+    } catch {
+      // no link — the transaction itself is saved
+    }
+  }
+
+  return { transactionId, linkedPeerId };
+}
+
+/** UI-105 — the Add sheet's Transfer segment: a linked debit on From and credit on To. */
+export function writeTransfer(draft: AddSheetDraft): { transactionId: string } {
+  if (!draft.accountId || !draft.toAccountId) throw new Error('writeTransfer: From and To are required');
+  if (draft.mode === 'edit' && draft.sourceId) {
+    updateTransfer(draft.sourceId, {
+      amountMinor: draft.amountMinor,
+      occurredAt: draft.occurredAt,
+      note: draft.note,
+      fromId: draft.accountId,
+      toId: draft.toAccountId,
+    });
+    return { transactionId: draft.sourceId };
+  }
+  const { outId } = createTransfer({
+    fromId: draft.accountId,
+    toId: draft.toAccountId,
+    amountMinor: draft.amountMinor,
+    occurredAt: draft.occurredAt,
+    note: draft.note,
+  });
+  return { transactionId: outId };
 }
 
 /**
@@ -148,6 +188,9 @@ export function writeEditedTransaction(draft: AddSheetDraft): { transactionId: s
   const note = draft.note.trim() || null;
   const categoryId = draft.categoryId; // CR-28
 
+  // §46.6 — a transfer switched to Expense / Income in the sheet: unlink first, then edit it as a plain row.
+  if (draft.type !== 'transfer' && getTransaction(transactionId)?.type === 'transfer') unlinkTransfer(transactionId);
+
   updateTransaction(transactionId, {
     amountMinor: draft.amountMinor,
     direction: draft.direction,
@@ -158,6 +201,7 @@ export function writeEditedTransaction(draft: AddSheetDraft): { transactionId: s
     note,
     description: draft.description.trim() || null,
     occurredAt: draft.occurredAt,
+    accountId: draft.accountId,
   });
 
   if (account) {

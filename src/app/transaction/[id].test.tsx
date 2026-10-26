@@ -24,9 +24,23 @@ const mockWaiveShare = jest.fn();
 const mockUnwaiveShare = jest.fn();
 
 jest.mock('@/db/repositories/categories', () => ({ getCategoryMap: () => new Map(mockCategories.map((c) => [c.id, c])) }));
+// CR-34 — `useTransaction('')` is the "no transfer peer" read; a peer id resolves from `mockPeers`
+let mockPeers: Record<string, Transaction | null> = {};
 jest.mock('@/db/repositories/transactions', () => ({
   softDeleteTransaction: (...args: unknown[]) => mockSoftDeleteTransaction(...args),
-  useTransaction: () => ({ data: mockTxnData }),
+  useTransaction: (id: string) => ({ data: id in mockPeers ? (mockPeers[id] ? [mockPeers[id]] : []) : id ? mockTxnData : [] }),
+}));
+const mockUnlinkTransfer = jest.fn();
+const mockSoftDeleteTransfer = jest.fn();
+jest.mock('@/db/repositories/transfers', () => ({
+  unlinkTransfer: (...a: unknown[]) => mockUnlinkTransfer(...a),
+  softDeleteTransfer: (...a: unknown[]) => mockSoftDeleteTransfer(...a),
+}));
+jest.mock('@/db/repositories/accounts', () => ({
+  useAccounts: () => ({ data: [
+    { id: 'sbi', kind: 'bank', nickname: 'SBI ··1234' },
+    { id: 'hdfc', kind: 'bank', nickname: 'HDFC ··672' },
+  ] }),
 }));
 
 let mockOverview: { owed: { items: unknown[] }[]; youOwe: unknown[] } = { owed: [], youOwe: [] };
@@ -80,6 +94,8 @@ function transaction(overrides: Partial<Transaction> = {}): Transaction {
     smsReceivedAt: null,
     dedupeKey: null,
     editedByUser: false,
+    accountId: null,
+    transferPeerId: null,
     ...overrides,
   };
 }
@@ -90,6 +106,9 @@ beforeEach(() => {
   useSheetRegistry.setState({ current: null, params: {}, onRequestClose: null });
   useUndo.getState().clear();
   mockTxnData = undefined;
+  mockPeers = {};
+  mockUnlinkTransfer.mockReset();
+  mockSoftDeleteTransfer.mockReset();
   mockSplit = undefined;
   mockOverview = { owed: [], youOwe: [] };
   mockSettled = { lines: [], allocatedMinor: 0 };
@@ -470,7 +489,7 @@ describe('heading (CR-31 — no "Add a note" placeholder)', () => {
     mockTxnData = [transaction({ note: null, account: 'Swiggy' })];
     const { getAllByText, queryByText } = await render(<TransactionDetailsScreen />);
     expect(getAllByText('Swiggy')).toHaveLength(1);
-    expect(queryByText('Account')).toBeNull();
+    expect(queryByText('Paid to / from')).toBeNull();
     expect(queryByText('Add a note')).toBeNull();
   });
 
@@ -478,5 +497,46 @@ describe('heading (CR-31 — no "Add a note" placeholder)', () => {
     mockTxnData = [transaction({ note: null, account: null })];
     const { queryByText } = await render(<TransactionDetailsScreen />);
     expect(queryByText('Add a note')).toBeNull();
+  });
+});
+
+
+describe('CR-34 — accounts and transfers', () => {
+  it('shows which of your accounts paid', async () => {
+    mockTxnData = [transaction({ accountId: 'sbi' })];
+    const { getByText } = await render(<TransactionDetailsScreen />);
+    expect(getByText('Paid from')).toBeTruthy();
+    expect(getByText('SBI ··1234')).toBeTruthy();
+  });
+
+  it('a linked transfer reads From → To, unsigned, with Unlink and no split / category', async () => {
+    mockTxnData = [transaction({ type: 'transfer', direction: 'debit', amountMinor: 1_000_000, accountId: 'sbi', transferPeerId: 'peer', categoryId: null })];
+    mockPeers = { peer: transaction({ id: 'peer', type: 'transfer', direction: 'credit', amountMinor: 1_000_000, accountId: 'hdfc', transferPeerId: 'txn-1' }) };
+    const { getByText, queryByText } = await render(<TransactionDetailsScreen />);
+    expect(getByText('Transfer · SBI ··1234 → HDFC ··672')).toBeTruthy();
+    expect(getByText('₹10,000')).toBeTruthy();
+    expect(queryByText('Split…')).toBeNull();
+    expect(queryByText('Set category')).toBeNull();
+    await fireEvent.press(getByText('Unlink'));
+    expect(mockUnlinkTransfer).toHaveBeenCalledWith('txn-1');
+  });
+
+  it('deleting a transfer removes both halves', async () => {
+    mockTxnData = [transaction({ type: 'transfer', accountId: 'sbi', transferPeerId: 'peer' })];
+    mockPeers = { peer: transaction({ id: 'peer', type: 'transfer', direction: 'credit', accountId: 'hdfc' }) };
+    const { getByLabelText, getByText } = await render(<TransactionDetailsScreen />);
+    await fireEvent.press(getByLabelText('Delete'));
+    expect(getByText('Delete transfer?')).toBeTruthy();
+    await fireEvent.press(getByText('Delete'));
+    expect(mockSoftDeleteTransfer).toHaveBeenCalledWith('txn-1');
+    expect(mockSoftDeleteTransaction).not.toHaveBeenCalled();
+  });
+
+  it('flags a transfer whose other half was deleted', async () => {
+    mockTxnData = [transaction({ type: 'transfer', accountId: 'sbi', transferPeerId: 'gone' })];
+    mockPeers = { gone: null };
+    const { getByText } = await render(<TransactionDetailsScreen />);
+    expect(getByText(/Its other half was deleted/)).toBeTruthy();
+    expect(getByText('Transfer · From SBI ··1234')).toBeTruthy();
   });
 });

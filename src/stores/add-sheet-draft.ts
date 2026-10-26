@@ -63,6 +63,10 @@ export type AddSheetDraft = {
   note: string;
   description: string;
   occurredAt: number;
+  /** §46 / UI-102 — **Paid from** (expense) / **Paid into** (income); for a transfer, **From**. null = Not sure. */
+  accountId: string | null;
+  /** UI-105 — a transfer's **To** account. */
+  toAccountId: string | null;
   dirty: boolean;
   submitting: boolean;
   error: string | null;
@@ -81,6 +85,8 @@ const BLANK: AddSheetDraft = {
   note: '',
   description: '',
   occurredAt: 0,
+  accountId: null,
+  toAccountId: null,
   dirty: false,
   submitting: false,
   error: null,

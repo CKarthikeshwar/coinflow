@@ -184,7 +184,7 @@ describe('exportCsv', () => {
 
     const csv: string = mockWrite.mock.calls[0][0];
     const lines = csv.split('\n');
-    expect(lines[0]).toBe('date,direction,type,amount,category,paymentMethod,account,note,description,source');
+    expect(lines[0]).toBe('date,direction,type,amount,category,paymentMethod,account,note,description,source,myAccount,transferPeerId');
     expect(lines[1]).toContain('debit,expense,-450.50,Food,upi,Swiggy,Dinner,,sms');
   });
 

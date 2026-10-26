@@ -15,7 +15,7 @@ describe('memory-db test harness', () => {
     ]) {
       expect(tables).toContain(t);
     }
-    expect(migrationTags().at(-1)).toBe('0004_dismissed_suggestion_tombstone');
+    expect(migrationTags().at(-1)).toBe('0005_my_accounts');
   });
 
   it('round-trips typed rows through Drizzle (insert / select / update / delete)', () => {

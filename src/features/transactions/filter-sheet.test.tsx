@@ -12,6 +12,8 @@ const mockCategories: Category[] = [
   { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
   { id: 'cat-uncat', key: 'uncategorized', name: 'Uncategorized', icon: 'help-circle', kind: 'default', appliesTo: 'expense', isProtected: true, order: 0, createdAt: 0, updatedAt: 0 },
 ];
+let mockAccounts: { id: string; nickname: string; archivedAt: number | null }[] = [];
+jest.mock('@/db/repositories/accounts', () => ({ useAccounts: () => ({ data: mockAccounts }) }));
 jest.mock('@/db/repositories/categories', () => ({ useCategories: () => ({ data: mockCategories }) }));
 
 beforeEach(() => {
@@ -94,4 +96,26 @@ it('Reset clears every picked filter', async () => {
   expect(getByRole('button', { name: 'Reset' }).props.accessibilityState).toEqual(
     expect.objectContaining({ disabled: true }),
   );
+});
+
+describe('CR-34 — Accounts group (UI-109)', () => {
+  it('is absent with no accounts', async () => {
+    mockAccounts = [];
+    const { queryByText } = await render(<FilterSheet />);
+    expect(queryByText('Accounts')).toBeNull();
+  });
+
+  it('multi-selects accounts into the route params; archived ones are hidden', async () => {
+    mockAccounts = [
+      { id: 'sbi', nickname: 'SBI ··1234', archivedAt: null },
+      { id: 'hdfc', nickname: 'HDFC ··672', archivedAt: null },
+      { id: 'old', nickname: 'Old', archivedAt: 1 },
+    ];
+    const { getByText, queryByText } = await render(<FilterSheet />);
+    expect(queryByText('Old')).toBeNull();
+    await fireEvent.press(getByText('SBI ··1234'));
+    await fireEvent.press(getByText('HDFC ··672'));
+    await fireEvent.press(getByText('Apply'));
+    expect(mockRouterSetParams).toHaveBeenCalledWith(expect.objectContaining({ accountIds: 'sbi,hdfc' }));
+  });
 });

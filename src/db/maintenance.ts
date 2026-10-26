@@ -39,6 +39,7 @@ import { isFtsAvailable } from './fts';
 import migrationsBundle from './migrations/migrations';
 import { resetSeededCategories, seedDatabase } from './seed';
 import { purgeRequestTombstones } from './repositories/split-requests';
+import { purgeStaleCardBillHints } from './repositories/transfers';
 import {
   accountRules,
   appSettings,
@@ -83,6 +84,7 @@ export function purge(nowMs: number = Date.now()): void {
   // V2 (§20.6, CR-17): rows that cascade with a purged transaction (split, shares, settlements) go with it via
   // the foreign keys; received-request tombstones (rejected / withdrawn) expire 30 days after their last change.
   purgeRequestTombstones(nowMs);
+  purgeStaleCardBillHints(nowMs); // CR-34 — card-bill hints nobody answered within 30 days
   db.insert(appSettings)
     .values({ key: 'lastPurgeAt', value: JSON.stringify(nowMs), updatedAt: nowMs })
     .onConflictDoUpdate({ target: appSettings.key, set: { value: JSON.stringify(nowMs), updatedAt: nowMs } })

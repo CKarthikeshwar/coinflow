@@ -33,7 +33,7 @@ import * as Notifications from 'expo-notifications';
 import { getAccountRule } from '@/db/repositories/account-rules';
 import { listPending } from '@/db/repositories/suggestions';
 
-import { buildTxnNotification } from './content';
+import { buildTxnNotification, suggestionAccountLabel } from './content';
 import { refreshGroupSummary } from './post';
 
 export async function reconcileNotifications(): Promise<void> {
@@ -48,7 +48,7 @@ export async function reconcileNotifications(): Promise<void> {
     if (presentedIds.has(`sug:${suggestion.id}`)) continue;
 
     const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
-    const content = buildTxnNotification(suggestion, rule);
+    const content = buildTxnNotification(suggestion, rule, suggestionAccountLabel(suggestion));
     await Notifications.scheduleNotificationAsync({
       identifier: content.identifier,
       content: {

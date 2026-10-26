@@ -29,6 +29,8 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     smsReceivedAt: null,
     dedupeKey: null,
     editedByUser: false,
+    accountId: null,
+    transferPeerId: null,
     ...overrides,
   };
 }

@@ -8,7 +8,7 @@
  *
  * WHERE IT FITS
  * -------------
- * Reached from the Settings tab (`(tabs)/settings.tsx`'s "Account rules" row, `href="/account-rules"`).
+ * Reached from the Settings tab (`(tabs)/settings.tsx`'s "Merchant rules" row — labelled "Account rules" before UI-101, `href="/account-rules"`).
  * A root-relative route (flat under `src/app/`, not nested under `(tabs)/`) since it's a pushed
  * detail screen, not a tab destination — same pattern as `categories.tsx`/`review-queue.tsx`.
  * Tapping a row opens `src/features/settings/account-rule-editor-sheet.tsx` to edit it.
@@ -51,7 +51,7 @@ export default function AccountRulesScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <TopBar title="Account rules" onBack={() => router.back()} />
+      <TopBar title="Merchant rules" onBack={() => router.back()} />
 
       <View style={styles.body}>
         {(rules ?? []).length === 0 ? (

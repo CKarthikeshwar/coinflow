@@ -1,6 +1,9 @@
 import type { AccountRule, Suggestion } from '@/db/schema';
 
-import { buildTxnNotification } from './content';
+import { buildTxnNotification, suggestionAccountLabel } from './content';
+
+const mockGetAccount = jest.fn((..._a: unknown[]) => null as unknown);
+jest.mock('@/db/repositories/accounts', () => ({ getAccount: (...a: unknown[]) => mockGetAccount(...a) }));
 
 function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
   return {
@@ -17,6 +20,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     status: 'pending',
     confirmedTransactionId: null,
     dismissedAt: null,
+    accountId: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
@@ -97,5 +101,23 @@ describe('buildTxnNotification', () => {
   it("uses identifier 'sug:<id>' so a later run can find it deterministically", () => {
     const content = buildTxnNotification(suggestion({ id: 'abc-123' }), null);
     expect(content.identifier).toBe('sug:abc-123');
+  });
+});
+
+
+describe('UI-109 — your account on the notification (CR-34)', () => {
+  it('appends the account the SMS named', () => {
+    expect(buildTxnNotification(suggestion(), null, 'HDFC ··672').body).toBe('merchant@okhdfcbank · UPI · HDFC ··672');
+    expect(buildTxnNotification(suggestion({ account: null }), null, 'HDFC ··672').body).toBe('Unknown account · HDFC ··672');
+  });
+
+  it('suggestionAccountLabel resolves the nickname, null when there is none', () => {
+    mockGetAccount.mockReturnValueOnce({ nickname: 'Salary', bankKey: 'hdfc', last4: '672' });
+    expect(suggestionAccountLabel({ accountId: 'a' })).toBe('Salary');
+    expect(suggestionAccountLabel({ accountId: null })).toBeNull();
+    mockGetAccount.mockImplementationOnce(() => {
+      throw new Error('db');
+    });
+    expect(suggestionAccountLabel({ accountId: 'a' })).toBeNull();
   });
 });

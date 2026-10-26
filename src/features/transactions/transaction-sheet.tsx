@@ -38,9 +38,14 @@
  * `src/ui/date-time-picker.tsx`) revealed on tap — no native date-picker dependency, consistent
  * with the app's other hand-rolled controls.
  *
- * Account autocomplete (`searchByPrefix`) shows past accounts as you type; picking one pre-fills
+ * "Paid to / from" autocomplete (`searchByPrefix`) shows past merchants as you type; picking one pre-fills
  * its remembered category (§6.5) — not note/payment method, which is F8's broader "known-rule"
- * pre-fill on a *detected* suggestion (a different trigger from typing here).
+ * pre-fill on a *detected* suggestion (a different trigger from typing here). The field was labelled
+ * "Account" before CR-34 (UI-101); "account" now means one of YOUR accounts.
+ *
+ * CR-34 (§6.25): **Paid from / Paid into** chips pick which of your accounts the money moved on (only the
+ * accounts that fit the payment method, UI-102); the **Transfer** segment (Add, or editing a transfer) moves
+ * money between two of your accounts — amount, From, To, date, note, nothing else (UI-105).
  *
  * Deferred for both (documented, not silent — see `SPEC/traceability.md`):
  *  - The amount block doesn't collapse to a sticky summary bar on scroll, and the numeric
@@ -57,11 +62,14 @@ import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { getAccountRule, searchByPrefix } from '@/db/repositories/account-rules';
+import { lastUsedAccountForMethod, listAccounts, useAccounts } from '@/db/repositories/accounts';
 import { useCategories } from '@/db/repositories/categories';
 import { getSuggestion } from '@/db/repositories/suggestions';
 import { getSplitForTransaction, listOpenShares } from '@/db/repositories/splits';
 import { getTransaction, searchNotesByPrefix } from '@/db/repositories/transactions';
-import type { AccountRule } from '@/db/schema';
+import { unlinkTransfer } from '@/db/repositories/transfers';
+import type { AccountRule, PaymentMethod } from '@/db/schema';
+import { accountFitsMethod, preselectAccount } from '@/domain/accounts/method-kinds';
 import { resolveCategoryForAccount, ruleCategoryFor } from '@/domain/categorize';
 import { formatMoney, formatRupees } from '@/domain/format/money';
 import { recomputeYourShare } from '@/domain/split';
@@ -83,11 +91,12 @@ import { SelectorRow } from '@/ui/selector-row';
 import { TextField } from '@/ui/text-field';
 import { ThemedText } from '@/ui/themed-text';
 
+import { AccountChips } from '../accounts/account-chips';
 import { flushPendingCategoryPick } from '../categories/category-picker-sheet';
 import { persistSplitDraft } from '../splits/persist-split';
 import { settleAndAnnounce } from '../splits/settle-and-announce';
 import { SuggestedSettlementBanner, useSettlementSuggestion } from '../splits/suggested-settlement-banner';
-import { writeConfirmedTransaction, writeEditedTransaction, type SmsRef } from './write-confirmed-transaction';
+import { writeConfirmedTransaction, writeEditedTransaction, writeTransfer, type SmsRef } from './write-confirmed-transaction';
 
 const PAYMENT_METHOD_OPTIONS = [
   { value: 'upi', label: 'UPI' },
@@ -112,6 +121,17 @@ const HEADER_TITLE = {
 const PRIMARY_LABEL = { confirm: 'Add', add: 'Add', edit: 'Save' } as const;
 
 export type TransactionSheetMode = 'confirm' | 'add' | 'edit';
+
+/**
+ * UI-102 — the account to show selected for `method`: `current` while it still fits, else the one fitting account /
+ * the one last used with this method, else none (*Not sure*).
+ */
+function accountForMethod(method: PaymentMethod | null, current: string | null): string | null {
+  const accounts = listAccounts();
+  const cur = current ? accounts.find((a) => a.id === current) : undefined;
+  if (cur && accountFitsMethod(cur.kind, method)) return cur.id;
+  return preselectAccount(accounts, method, lastUsedAccountForMethod(method));
+}
 
 export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   const params = useSheetRegistry((s) => s.params) as {
@@ -214,6 +234,8 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           note: '',
           description: '',
           occurredAt: Date.now(),
+          accountId: accountForMethod('upi', null),
+          toAccountId: null,
         });
         useKeypad.getState().reset();
       }
@@ -239,6 +261,9 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
         close();
         return;
       }
+      // a transfer is edited as a pair: From = the debit side's account, To = the credit side's (§46.6)
+      const peer = txn.transferPeerId ? getTransaction(txn.transferPeerId) : null;
+      const isTransferRow = txn.type === 'transfer';
       useAddSheetDraft.getState().open({
         mode: 'edit',
         sourceId: txn.id,
@@ -251,6 +276,8 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
         note: txn.note ?? '',
         description: txn.description ?? '',
         occurredAt: txn.occurredAt,
+        accountId: isTransferRow && txn.direction === 'credit' ? (peer?.accountId ?? null) : txn.accountId,
+        toAccountId: isTransferRow ? (txn.direction === 'credit' ? txn.accountId : (peer?.accountId ?? null)) : null,
       });
       useKeypad.getState().setFromMinor(txn.amountMinor);
       // V2: show the transaction's existing split in the "Split with N" row; Cancel drops any change to it.
@@ -305,6 +332,9 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
       note: resolved.note ?? '',
       description: '',
       occurredAt: suggestion.occurredAt ?? Date.now(),
+      // §46.5 — the account the SMS named; else the UI-102 preselection for the method
+      accountId: suggestion.accountId ?? accountForMethod(resolved.paymentMethod ?? suggestion.paymentMethod, null),
+      toAccountId: null,
     });
     useKeypad.getState().setFromMinor(amountMinor);
     smsRefRef.current = {
@@ -346,10 +376,36 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
       ? 'Uncategorized'
       : (categories ?? []).find((c) => c.id === draft.categoryId)?.name ?? 'Uncategorized';
 
+  // CR-34 — your accounts. Archived ones are only shown when a row already uses one.
+  const { data: accountRows } = useAccounts();
+  const allAccounts = accountRows ?? [];
+  const liveAccounts = allAccounts.filter((a) => !a.archivedAt);
+  const isTransfer = draft.type === 'transfer';
+  const seededAsTransfer = useAddSheetDraft((s) => s._initial.type === 'transfer');
+  const canTransfer = mode === 'add' ? liveAccounts.length >= 2 : mode === 'edit' && seededAsTransfer;
+  const withCurrent = (list: typeof allAccounts, id: string | null) => {
+    const cur = id ? allAccounts.find((a) => a.id === id) : undefined;
+    return cur && !list.some((a) => a.id === cur.id) ? [...list, cur] : list;
+  };
+  // UI-102 — only the accounts that fit the payment method, plus the current one (with a ⚠) when it does not
+  const paidFromAccounts = withCurrent(
+    liveAccounts.filter((a) => accountFitsMethod(a.kind, draft.paymentMethod)),
+    draft.accountId,
+  );
+  const misfitIds = new Set(
+    paidFromAccounts.filter((a) => !accountFitsMethod(a.kind, draft.paymentMethod)).map((a) => a.id),
+  );
+  const fromAccounts = withCurrent(liveAccounts, draft.accountId);
+  const toAccounts = withCurrent(liveAccounts, draft.toAccountId).filter((a) => a.id !== draft.accountId);
+
   const isEdgeAmount = draft.amountMinor === 0 || draft.amountMinor > MAX_SANE_AMOUNT_MINOR;
   // Confirm allows ₹0 through its own edge-amount extra-confirm gate below; Add and Edit both
   // just stay disabled until there's a real amount (§6.5/§6.6 — Edit is "identical to Add").
-  const addDisabled = mode !== 'confirm' && draft.amountMinor <= 0;
+  // A transfer needs From, and (when adding) a different To — a single-sided transfer (a card bill) has no To.
+  const transferIncomplete =
+    isTransfer &&
+    (!draft.accountId || (mode === 'add' && !draft.toAccountId) || draft.accountId === draft.toAccountId);
+  const addDisabled = (mode !== 'confirm' && draft.amountMinor <= 0) || transferIncomplete;
 
   // V2 (IMP-089): with a split on this transaction other people's shares stay fixed and YOUR share is
   // recomputed from the amount — if that would go below ₹0, Save is blocked until the split is edited.
@@ -400,19 +456,33 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
     draft.setSubmitting(true);
     try {
       const current = useAddSheetDraft.getState();
+      if (current.type === 'transfer') {
+        // UI-105 — a transfer has no split, settlement or merchant; it is written as a pair and that is all
+        writeTransfer(current);
+        if (mode === 'add') useToast.getState().show(`Transfer of ${formatRupees(current.amountMinor)} added`);
+        useSplitDraft.getState().reset();
+        draft.reset();
+        close();
+        return;
+      }
       let savedTransactionId: string | undefined;
       if (mode === 'edit') {
         writeEditedTransaction(current);
         savedTransactionId = current.sourceId;
       } else {
         // §30.6/§30.7 — Add/Confirm's save toast; Edit's own spec (§30.8) doesn't have one.
-        const { transactionId } = writeConfirmedTransaction(current, smsRefRef.current);
+        const { transactionId, linkedPeerId } = writeConfirmedTransaction(current, smsRefRef.current);
         savedTransactionId = transactionId;
-        const signedMinor = current.direction === 'credit' ? current.amountMinor : -current.amountMinor;
-        useToast.getState().show(`Added ${formatMoney(signedMinor)}`, {
-          label: 'View',
-          onPress: () => router.push(`/transaction/${transactionId}`),
-        });
+        if (linkedPeerId) {
+          // UI-106 — it matched a row on another of your accounts: it is a transfer now, not spending / income
+          useToast.getState().show('Linked as a transfer', { label: 'Undo', onPress: () => unlinkTransfer(transactionId) }, 4000);
+        } else {
+          const signedMinor = current.direction === 'credit' ? current.amountMinor : -current.amountMinor;
+          useToast.getState().show(`Added ${formatMoney(signedMinor)}`, {
+            label: 'View',
+            onPress: () => router.push(`/transaction/${transactionId}`),
+          });
+        }
       }
       // V2: the transaction is saved; now write its split (if any). A split failure must never lose the transaction.
       if (savedTransactionId) {
@@ -498,25 +568,66 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
         </Pressable>
 
         <SegmentedControl
-          options={[
-            { value: 'debit', label: 'Expense' },
-            { value: 'credit', label: 'Income' },
-          ]}
-          value={draft.direction}
-          onChange={(direction) => {
+          options={
+            canTransfer
+              ? [
+                  { value: 'debit', label: 'Expense' },
+                  { value: 'credit', label: 'Income' },
+                  { value: 'transfer', label: 'Transfer' },
+                ]
+              : [
+                  { value: 'debit', label: 'Expense' },
+                  { value: 'credit', label: 'Income' },
+                ]
+          }
+          value={isTransfer ? 'transfer' : draft.direction}
+          onChange={(segment) => {
             pointKeypad(null);
+            if (segment === 'transfer') {
+              draft.patch({ type: 'transfer', direction: 'debit', categoryId: null });
+              return;
+            }
+            const direction = segment;
             // CR-28: an expense category is wrong for income (and vice versa) — drop a pick that no longer fits.
             const kind = direction === 'credit' ? 'income' : 'expense';
-            const picked = (categories ?? []).find((c) => c.id === useAddSheetDraft.getState().categoryId);
+            const now = useAddSheetDraft.getState();
+            const picked = (categories ?? []).find((c) => c.id === now.categoryId);
             draft.patch({
               direction,
               type: kind,
               ...(picked && picked.appliesTo !== kind ? { categoryId: null } : {}),
+              // leaving Transfer: the From account stays only if it fits the payment method
+              ...(now.type === 'transfer'
+                ? { accountId: accountForMethod(now.paymentMethod, now.accountId), toAccountId: null }
+                : {}),
             });
           }}
         />
 
-        {settlementSuggestion && !suggestionDismissed ? (
+        {isTransfer ? (
+          <>
+            <AccountChips
+              label="From"
+              accounts={fromAccounts}
+              value={draft.accountId}
+              onChange={(accountId) => {
+                pointKeypad(null);
+                draft.patch({ accountId, ...(accountId === draft.toAccountId ? { toAccountId: null } : {}) });
+              }}
+            />
+            <AccountChips
+              label="To"
+              accounts={toAccounts}
+              value={draft.toAccountId}
+              onChange={(toAccountId) => {
+                pointKeypad(null);
+                draft.patch({ toAccountId });
+              }}
+            />
+          </>
+        ) : null}
+
+        {!isTransfer && settlementSuggestion && !suggestionDismissed ? (
           <SuggestedSettlementBanner
             personName={settlementSuggestion.personName}
             amountMinor={draft.amountMinor}
@@ -526,26 +637,45 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           />
         ) : null}
 
-        <SelectorRow
-          icon="tag"
-          label="Category"
-          value={categoryName}
-          onPress={() => open('categoryPicker', { ...params, returnTo: mode })}
-        />
+        {!isTransfer ? (
+          <>
+            <SelectorRow
+              icon="tag"
+              label="Category"
+              value={categoryName}
+              onPress={() => open('categoryPicker', { ...params, returnTo: mode })}
+            />
 
-        <View style={styles.methodBlock}>
-          <ThemedText type="label" themeColor="text3">
-            Payment method
-          </ThemedText>
-          <SegmentedControl
-            options={PAYMENT_METHOD_OPTIONS}
-            value={draft.paymentMethod ?? 'upi'}
-            onChange={(paymentMethod) => {
-              pointKeypad(null);
-              draft.patch({ paymentMethod });
-            }}
-          />
-        </View>
+            <View style={styles.methodBlock}>
+              <ThemedText type="label" themeColor="text3">
+                Payment method
+              </ThemedText>
+              <SegmentedControl
+                options={PAYMENT_METHOD_OPTIONS}
+                value={draft.paymentMethod ?? 'upi'}
+                onChange={(paymentMethod) => {
+                  pointKeypad(null);
+                  // UI-102: the account follows the method — kept while it fits, else re-picked
+                  draft.patch({ paymentMethod, accountId: accountForMethod(paymentMethod, useAddSheetDraft.getState().accountId) });
+                }}
+              />
+            </View>
+
+            {paidFromAccounts.length > 0 ? (
+              <AccountChips
+                label={draft.direction === 'credit' ? 'Paid into' : 'Paid from'}
+                accounts={paidFromAccounts}
+                value={draft.accountId}
+                onChange={(accountId) => {
+                  pointKeypad(null);
+                  draft.patch({ accountId });
+                }}
+                notSure
+                misfitIds={misfitIds}
+              />
+            ) : null}
+          </>
+        ) : null}
 
         <Pressable
           accessibilityRole="button"
@@ -578,38 +708,44 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           </ThemedText>
         ) : null}
 
-        <View onLayout={(e) => (fieldY.current.account = e.nativeEvent.layout.y)}>
-          <TextField
-            value={draft.account}
-            onChangeText={(account) => draft.patch({ account })}
-            placeholder="Account"
-            onFocus={() => {
-              pointKeypad(null);
-              scrollFieldIntoView('account');
-            }}
-          />
-          {accountSuggestions.length > 0 ? (
-            <View style={styles.suggestionList}>
-              {accountSuggestions.map((rule) => (
-                <Pressable
-                  key={rule.normalizedKey}
-                  accessibilityRole="button"
-                  onPress={() => pickAccountSuggestion(rule)}
-                  style={styles.suggestionRow}
-                >
-                  <ThemedText type="body" themeColor="text">
-                    {rule.displayAccount}
-                  </ThemedText>
-                  <ThemedText type="caption" themeColor="text3">
-                    {ruleCategoryFor(rule, draft.direction)
-                      ? ((categories ?? []).find((c) => c.id === ruleCategoryFor(rule, draft.direction))?.name ?? 'Category')
-                      : 'Uncategorized'}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-        </View>
+        {!isTransfer ? (
+          <View onLayout={(e) => (fieldY.current.account = e.nativeEvent.layout.y)} style={styles.fieldBlock}>
+            {/* UI-101 — the other party; "account" now means one of YOUR accounts */}
+            <ThemedText type="label" themeColor="text3">
+              Paid to / from
+            </ThemedText>
+            <TextField
+              value={draft.account}
+              onChangeText={(account) => draft.patch({ account })}
+              placeholder="Shop or person"
+              onFocus={() => {
+                pointKeypad(null);
+                scrollFieldIntoView('account');
+              }}
+            />
+            {accountSuggestions.length > 0 ? (
+              <View style={styles.suggestionList}>
+                {accountSuggestions.map((rule) => (
+                  <Pressable
+                    key={rule.normalizedKey}
+                    accessibilityRole="button"
+                    onPress={() => pickAccountSuggestion(rule)}
+                    style={styles.suggestionRow}
+                  >
+                    <ThemedText type="body" themeColor="text">
+                      {rule.displayAccount}
+                    </ThemedText>
+                    <ThemedText type="caption" themeColor="text3">
+                      {ruleCategoryFor(rule, draft.direction)
+                        ? ((categories ?? []).find((c) => c.id === ruleCategoryFor(rule, draft.direction))?.name ?? 'Category')
+                        : 'Uncategorized'}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         <View onLayout={(e) => (fieldY.current.note = e.nativeEvent.layout.y)}>
           <TextField
             value={draft.note}
@@ -644,20 +780,22 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
             </View>
           ) : null}
         </View>
-        <View onLayout={(e) => (fieldY.current.description = e.nativeEvent.layout.y)}>
-          <TextField
-            value={draft.description}
-            onChangeText={(description) => draft.patch({ description })}
-            placeholder="Description (optional)"
-            multiline
-            onFocus={() => {
-              pointKeypad(null);
-              scrollFieldIntoView('description');
-            }}
-          />
-        </View>
+        {!isTransfer ? (
+          <View onLayout={(e) => (fieldY.current.description = e.nativeEvent.layout.y)}>
+            <TextField
+              value={draft.description}
+              onChangeText={(description) => draft.patch({ description })}
+              placeholder="Description (optional)"
+              multiline
+              onFocus={() => {
+                pointKeypad(null);
+                scrollFieldIntoView('description');
+              }}
+            />
+          </View>
+        ) : null}
 
-        {mode !== 'add' && draft.direction === 'debit' && draft.amountMinor > 0 ? (
+        {mode !== 'add' && !isTransfer && draft.direction === 'debit' && draft.amountMinor > 0 ? (
           <SplitRow
             committed={committedSplit}
             yourMinor={splitCost}
@@ -759,6 +897,7 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1 },
   scroll: { paddingHorizontal: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.four },
   methodBlock: { gap: Spacing.one },
+  fieldBlock: { gap: Spacing.one },
   staticRow: {
     flexDirection: 'row',
     alignItems: 'center',

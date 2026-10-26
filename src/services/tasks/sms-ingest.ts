@@ -22,6 +22,7 @@
  *   3. Transaction gate  — a non-transaction parse result (ignored SMS) means stop here.
  *   4. Dedupe check      — has an identical transaction already been recorded? (guards against
  *                          the same SMS triggering this task twice, e.g. on a retry.)
+ *      4b. Own account   — find / auto-create which of YOUR accounts the SMS is about (§46.5).
  *   5. Write Suggestion  — save a `suggestions` row via `insertIfNew` (`db/repositories/suggestions.ts`).
  *   6. Account lookup    — check `accountRules` to see if this account is "known" (has a learned
  *                          category) or "new" — this affects what the notification looks like.
@@ -49,10 +50,13 @@ import * as Crypto from 'expo-crypto';
 
 import { isKnownSender } from '@/constants/sms-senders';
 import { getAccountRule } from '@/db/repositories/account-rules';
+import { listCardLast4s, resolveAccountFromSms } from '@/db/repositories/accounts';
 import { getSuggestion, insertIfNew } from '@/db/repositories/suggestions';
 import { hasDedupeKey } from '@/db/repositories/transactions';
+import { recordCardBillHint } from '@/db/repositories/transfers';
+import { looksLikeCardBillPayment } from '@/domain/accounts/card-bill';
 import { ensureMigrated } from '@/db/maintenance';
-import { parseSms } from '@/domain/parser';
+import { parseSms, type ParseResult } from '@/domain/parser';
 import { postForSuggestion } from '@/services/notifications/post';
 import { reconcileNotifications } from '@/services/notifications/reconcile';
 import { handleIncomingRequest } from '@/services/splits/receive-request';
@@ -94,6 +98,32 @@ export type SmsIngestOptions = {
   source?: SmsCatchSource;
 };
 
+/**
+ * §46.5 — resolve (or auto-create) the account the SMS names, and note a card-bill payment (UI-108) while the body is
+ * still at hand. Never throws: an account problem must not cost the user the transaction.
+ */
+function resolveOwnAccount(
+  result: Extract<ParseResult, { kind: 'transaction' }>,
+  body: string,
+  dedupeKey: string,
+): { id: string; kind: 'bank' | 'credit_card' } | null {
+  const ownAccount = result.fields.ownAccount;
+  if (!ownAccount) return null;
+  try {
+    const { id } = resolveAccountFromSms(ownAccount);
+    if (result.fields.direction === 'debit' && ownAccount.kind === 'bank') {
+      const cards = listCardLast4s();
+      const paid = looksLikeCardBillPayment(body, cards.map((c) => c.last4));
+      const card = paid ? cards.find((c) => c.last4 === paid) : undefined;
+      if (card) recordCardBillHint(dedupeKey, card.id);
+    }
+    return { id, kind: ownAccount.kind };
+  } catch (e) {
+    console.warn('[smsIngestTask] account not resolved:', (e as Error)?.name ?? 'unknown');
+    return null;
+  }
+}
+
 export async function smsIngestTask(
   payload: SmsHeadlessPayload | undefined,
   options?: SmsIngestOptions,
@@ -132,6 +162,9 @@ export async function smsIngestTask(
     );
     if (hasDedupeKey(dedupeKey)) return;
 
+    // Step 4b (§46.5, CR-34) — which of the user's own accounts this is; created on first sight.
+    const own = resolveOwnAccount(result, body, dedupeKey);
+
     // Step 5 — write the Suggestion. `body` is never persisted (P-9).
     const { created, id } = insertIfNew({
       amountMinor: result.fields.amountMinor,
@@ -139,10 +172,12 @@ export async function smsIngestTask(
       occurredAt: result.fields.occurredAt,
       account: result.fields.account,
       normalizedKey: result.fields.normalizedKey,
-      paymentMethod: result.fields.paymentMethod,
+      // a credit-card account's spend is a card payment even when the text never says "card" (§46.8)
+      paymentMethod: result.fields.paymentMethod ?? (own?.kind === 'credit_card' ? 'card' : null),
       smsSender: sender,
       smsReceivedAt: receivedAt,
       dedupeKey,
+      accountId: own?.id ?? null,
     });
     if (!created) return; // a retry of an already-recorded suggestion — already notified once
 

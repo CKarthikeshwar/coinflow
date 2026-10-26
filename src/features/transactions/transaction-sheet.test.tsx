@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 
-import type { Category, Suggestion, Transaction } from '@/db/schema';
+import type { Category, MyAccount, Suggestion, Transaction } from '@/db/schema';
 import { useAddSheetDraft, useKeypad, useSheetRegistry } from '@/stores';
 import { useSplitDraft } from '@/stores/split-draft';
 import { useToast } from '@/stores/toast';
@@ -27,6 +27,24 @@ jest.mock('@/db/repositories/account-rules', () => ({
   searchByPrefix: (...args: unknown[]) => mockSearchByPrefix(...args),
 }));
 jest.mock('@/db/repositories/categories', () => ({ useCategories: () => ({ data: mockCategories }) }));
+
+// CR-34 — your accounts
+function account(id: string, kind: MyAccount['kind'], nickname: string, extra: Partial<MyAccount> = {}): MyAccount {
+  return {
+    id, kind, nickname, bankName: null, bankKey: null, last4: null, matchKey: null, autoCreated: false, archivedAt: null,
+    creditLimitMinor: null, dueAt: null, dueAmountMinor: null, createdAt: 0, updatedAt: 0, ...extra,
+  };
+}
+let mockAccounts: MyAccount[] = [];
+const mockLastUsed = jest.fn((..._a: unknown[]) => null as string | null);
+jest.mock('@/db/repositories/accounts', () => ({
+  useAccounts: () => ({ data: mockAccounts }),
+  listAccounts: () => mockAccounts.filter((a) => !a.archivedAt),
+  lastUsedAccountForMethod: (...a: unknown[]) => mockLastUsed(...a),
+}));
+const mockUnlinkTransfer = jest.fn();
+jest.mock('@/db/repositories/transfers', () => ({ unlinkTransfer: (...a: unknown[]) => mockUnlinkTransfer(...a) }));
+const mockWriteTransfer = jest.fn((..._a: unknown[]) => ({ transactionId: 'out-1' }));
 jest.mock('@/db/repositories/suggestions', () => ({ getSuggestion: (...args: unknown[]) => mockGetSuggestion(...args) }));
 const mockSearchNotes = jest.fn((..._args: unknown[]) => [] as string[]);
 jest.mock('@/db/repositories/transactions', () => ({
@@ -36,6 +54,7 @@ jest.mock('@/db/repositories/transactions', () => ({
 jest.mock('./write-confirmed-transaction', () => ({
   writeConfirmedTransaction: (...args: unknown[]) => mockWriteConfirmedTransaction(...args),
   writeEditedTransaction: (...args: unknown[]) => mockWriteEditedTransaction(...args),
+  writeTransfer: (...args: unknown[]) => mockWriteTransfer(...args),
 }));
 let mockOpenShares: unknown[] = [];
 jest.mock('@/db/repositories/splits', () => ({
@@ -67,6 +86,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     status: 'pending',
     confirmedTransactionId: null,
     dismissedAt: null,
+    accountId: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
@@ -94,6 +114,8 @@ function transaction(overrides: Partial<Transaction> = {}): Transaction {
     smsReceivedAt: null,
     dedupeKey: null,
     editedByUser: false,
+    accountId: null,
+    transferPeerId: null,
     ...overrides,
   };
 }
@@ -112,6 +134,154 @@ beforeEach(() => {
   useSheetRegistry.setState({ current: null, params: {}, onRequestClose: null });
   useAddSheetDraft.getState().reset();
   useKeypad.getState().reset();
+  mockAccounts = [];
+  mockLastUsed.mockReset().mockReturnValue(null);
+  mockWriteTransfer.mockReset().mockReturnValue({ transactionId: 'out-1' });
+  mockUnlinkTransfer.mockReset();
+});
+
+describe('CR-34 — Paid from / Paid into (UI-102)', () => {
+  const sbi = account('sbi', 'bank', 'SBI ··1234');
+  const hdfc = account('hdfc', 'bank', 'HDFC ··672');
+  const card = account('card', 'credit_card', 'HDFC card');
+  const cash = account('cash', 'cash', 'Cash');
+
+  it('is hidden for someone with no accounts', async () => {
+    const { queryByText } = await render(<TransactionSheetBody mode="add" />);
+    expect(queryByText('Paid from')).toBeNull();
+    expect(queryByText('Transfer')).toBeNull();
+  });
+
+  it('one fitting account is preselected; only fitting accounts are offered', async () => {
+    mockAccounts = [sbi, cash];
+    const { getByText, queryByText } = await render(<TransactionSheetBody mode="add" />);
+    expect(getByText('Paid from')).toBeTruthy();
+    expect(useAddSheetDraft.getState().accountId).toBe('sbi');
+    expect(queryByText('Cash', { exact: true })).toBeTruthy(); // the payment-method segment
+    expect(getByText('Not sure')).toBeTruthy();
+  });
+
+  it('several fitting accounts: the one last used with the method, else Not sure', async () => {
+    mockAccounts = [sbi, hdfc];
+    mockLastUsed.mockReturnValue('hdfc');
+    await render(<TransactionSheetBody mode="add" />);
+    expect(useAddSheetDraft.getState().accountId).toBe('hdfc');
+  });
+
+  it('changing the method re-picks the account (card → the credit card is offered)', async () => {
+    mockAccounts = [sbi, card];
+    const { getByText } = await render(<TransactionSheetBody mode="add" />);
+    expect(useAddSheetDraft.getState().accountId).toBe('sbi');
+    await fireEvent.press(getByText('Card'));
+    expect(getByText('HDFC card')).toBeTruthy();
+    expect(useAddSheetDraft.getState().accountId).toBe('sbi'); // still fits a card payment (debit card)
+    await fireEvent.press(getByText('Cash'));
+    expect(useAddSheetDraft.getState().accountId).toBeNull();
+  });
+
+  it('reads Paid into for income', async () => {
+    mockAccounts = [sbi];
+    const { getByText } = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent.press(getByText('Income'));
+    expect(getByText('Paid into')).toBeTruthy();
+  });
+
+  it('Confirm starts on the account the SMS named', async () => {
+    mockAccounts = [sbi, hdfc];
+    mockGetSuggestion.mockReturnValue(suggestion({ accountId: 'hdfc' }));
+    useSheetRegistry.setState({ current: 'confirm', params: { suggestionId: 'sug-1' } });
+    await render(<TransactionSheetBody mode="confirm" />);
+    expect(useAddSheetDraft.getState().accountId).toBe('hdfc');
+  });
+
+  it('an account that no longer fits the method is still shown, with a ⚠', async () => {
+    mockAccounts = [sbi, cash];
+    mockGetTransaction.mockReturnValue(transaction({ paymentMethod: 'upi', accountId: 'cash' }));
+    useSheetRegistry.setState({ current: 'edit', params: { transactionId: 'txn-1' } });
+    const { getByText } = await render(<TransactionSheetBody mode="edit" />);
+    expect(getByText('⚠ Cash')).toBeTruthy();
+  });
+
+  it('labels the merchant field Paid to / from (UI-101)', async () => {
+    const { getByText, getByPlaceholderText } = await render(<TransactionSheetBody mode="add" />);
+    expect(getByText('Paid to / from')).toBeTruthy();
+    expect(getByPlaceholderText('Shop or person')).toBeTruthy();
+  });
+
+  it('a save that links as a transfer says so, with Undo', async () => {
+    mockAccounts = [sbi];
+    mockWriteConfirmedTransaction.mockReturnValue({ transactionId: 'new-txn-id', linkedPeerId: 'peer' } as never);
+    mockPersistSplitDraft.mockReturnValue({ kind: 'none' }); // no split requests — their toast would replace this one
+    const { getByText, getByRole } = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent.press(getByText('5'));
+    await fireEvent.press(getByRole('button', { name: 'Add' }));
+    expect(useToast.getState().message).toBe('Linked as a transfer');
+    expect(useToast.getState().action?.label).toBe('Undo');
+    useToast.getState().action?.onPress();
+    expect(mockUnlinkTransfer).toHaveBeenCalledWith('new-txn-id');
+  });
+});
+
+describe('CR-34 — Transfer (UI-105)', () => {
+  const sbi = account('sbi', 'bank', 'SBI ··1234');
+  const hdfc = account('hdfc', 'bank', 'HDFC ··672');
+  const cash = account('cash', 'cash', 'Cash in hand');
+
+  it('needs two accounts', async () => {
+    mockAccounts = [sbi];
+    const { queryByText } = await render(<TransactionSheetBody mode="add" />);
+    expect(queryByText('Transfer')).toBeNull();
+  });
+
+  it('shows amount, From, To, date and note — no category, method, merchant or description', async () => {
+    mockAccounts = [sbi, hdfc, cash];
+    const { getByText, queryByText, queryByPlaceholderText } = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent.press(getByText('Transfer'));
+    expect(getByText('From')).toBeTruthy();
+    expect(getByText('To')).toBeTruthy();
+    expect(queryByText('Category')).toBeNull();
+    expect(queryByText('Payment method')).toBeNull();
+    expect(queryByPlaceholderText('Shop or person')).toBeNull();
+    expect(queryByPlaceholderText('Description (optional)')).toBeNull();
+    expect(queryByPlaceholderText('Note')).toBeTruthy();
+  });
+
+  it('From ≠ To; Add stays disabled until both are picked, then writes the pair', async () => {
+    mockAccounts = [sbi, hdfc, cash];
+    const { getByText, getAllByText, getByRole } = await render(<TransactionSheetBody mode="add" />);
+    await fireEvent.press(getByText('5')); // the keypad is up on a fresh Add; picking a segment puts it away
+    await fireEvent.press(getByText('Transfer'));
+    await fireEvent.press(getAllByText('SBI ··1234')[0]); // From
+    expect(getAllByText('SBI ··1234')).toHaveLength(1); // not offered as To
+    expect(getByRole('button', { name: 'Add' }).props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+    await fireEvent.press(getAllByText('Cash in hand')[1]); // To (the first one is in From)
+    await fireEvent.press(getByRole('button', { name: 'Add' }));
+    expect(mockWriteTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'transfer', accountId: 'sbi', toAccountId: 'cash', amountMinor: 500 }),
+    );
+    expect(mockWriteConfirmedTransaction).not.toHaveBeenCalled();
+  });
+
+  it('editing a transfer opens on the Transfer segment with From / To from the pair', async () => {
+    mockAccounts = [sbi, hdfc];
+    mockGetTransaction.mockImplementation((id: unknown) =>
+      id === 'txn-1'
+        ? transaction({ id: 'txn-1', type: 'transfer', direction: 'credit', accountId: 'hdfc', transferPeerId: 'out-1' })
+        : transaction({ id: 'out-1', type: 'transfer', direction: 'debit', accountId: 'sbi', transferPeerId: 'txn-1' }),
+    );
+    useSheetRegistry.setState({ current: 'edit', params: { transactionId: 'txn-1' } });
+    const { getByText } = await render(<TransactionSheetBody mode="edit" />);
+    expect(getByText('From')).toBeTruthy();
+    expect(useAddSheetDraft.getState()).toMatchObject({ accountId: 'sbi', toAccountId: 'hdfc', type: 'transfer' });
+  });
+
+  it('Confirm never offers Transfer', async () => {
+    mockAccounts = [sbi, hdfc];
+    mockGetSuggestion.mockReturnValue(suggestion());
+    useSheetRegistry.setState({ current: 'confirm', params: { suggestionId: 'sug-1' } });
+    const { queryByText } = await render(<TransactionSheetBody mode="confirm" />);
+    expect(queryByText('Transfer')).toBeNull();
+  });
 });
 
 // A successful Add starts the toast's 3s auto-hide timer — clear it so it doesn't leak past the

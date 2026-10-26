@@ -67,9 +67,10 @@ import { BackHandler } from 'react-native';
 import { Easing } from 'react-native-reanimated';
 
 import { Colors, Radius } from '@/constants/theme';
-import { useAccountRuleDraft, useAddSheetDraft, useCategoryDraft, useSheetRegistry } from '@/stores';
+import { useAccountDraft, useAccountRuleDraft, useAddSheetDraft, useCategoryDraft, useSheetRegistry } from '@/stores';
 import { useSplitDraft } from '@/stores/split-draft';
 
+import { AccountSheet } from '@/features/accounts/account-sheet';
 import { CategoryEditorSheet } from '@/features/categories/category-editor-sheet';
 import { CategoryPickerSheet } from '@/features/categories/category-picker-sheet';
 import { AccountRuleEditorSheet } from '@/features/settings/account-rule-editor-sheet';
@@ -103,6 +104,8 @@ export function SheetHost() {
   const addSheetDirty = useAddSheetDraft((s) => s.dirty) || splitDirty;
   const categoryDirty = useCategoryDraft((s) => s.dirty);
   const accountRuleDirty = useAccountRuleDraft((s) => s.dirty);
+  const accountDirty = useAccountDraft((s) => s.dirty);
+  const isAccountSheet = current === 'createAccount' || current === 'editAccount';
   const isCategoryEditor = current === 'createCategory' || current === 'editCategory';
   // `filter` shares neither draft store — falling through to `addSheetDirty` here used to mean
   // the Filter sheet's swipe/scrim-tap-to-close could be disabled by a stale `dirty:true` left
@@ -111,11 +114,13 @@ export function SheetHost() {
   // close is re-picking the same filters), so it's never dirty.
   const dirty = isCategoryEditor
     ? categoryDirty
-    : current === 'filter' || current === 'merge'
-      ? false
-      : current === 'editAccountRule'
-        ? accountRuleDirty
-        : addSheetDirty;
+    : isAccountSheet
+      ? accountDirty
+      : current === 'filter' || current === 'merge'
+        ? false
+        : current === 'editAccountRule'
+          ? accountRuleDirty
+          : addSheetDirty;
   const hasPresented = useRef(false);
   const dismissing = useRef(false);
 
@@ -236,6 +241,7 @@ export function SheetHost() {
       {current === 'editAccountRule' ? <AccountRuleEditorSheet /> : null}
       {current === 'split' ? <SplitSheet /> : null}
       {current === 'merge' ? <MergeSheet /> : null}
+      {isAccountSheet ? <AccountSheet /> : null}
     </BottomSheetModal>
   );
 }

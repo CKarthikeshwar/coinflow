@@ -291,6 +291,33 @@ export function extractPaymentMethod(body: string, hasVpa: boolean): PaymentMeth
   return null;
 }
 
+/**
+ * §46.4 — the masked last digits of the user's OWN account or card ("A/c XX672", "a/c no. XXXX1234",
+ * "card ending 4321", "A/c *1234", "your account XXX672"). The first one in the message wins — banks name the
+ * user's side first ("debited from A/c XX1234 to …", "credited to A/c XX1234 from …"). A full, unmasked account
+ * number is ignored; a long mask keeps only its last four digits (D48). A bare mask ("credited to XXX672") counts
+ * too. `isCreditCard` when the matched mention is a "Credit Card", or a card in a message that reports a credit limit.
+ */
+const OWN_ACCOUNT =
+  /\b(a\/c|acct|account|ac|card)\b(?:\s+(?:no\.?|number))?\s*(?:ending(?:\s+(?:with|in))?\s*[x*]*\s?(\d{3,8})|[x*]+\s?(\d{3,8}))\b|(?:^|[\s(])[x*]{2,}(\d{3,8})\b/i;
+
+/** A card that reports a credit limit is a credit card even when the message only says "Card". */
+const CREDIT_LIMIT_WORDING = /\b(?:avl|available|avail\.?)\s*(?:credit\s*)?limit\b|\bcredit\s*limit\b/i;
+
+export function extractOwnAccount(body: string): { last4: string; isCreditCard: boolean } | null {
+  const m = OWN_ACCOUNT.exec(body);
+  const digits = m?.[2] ?? m?.[3] ?? m?.[4];
+  if (!m || !digits) return null;
+  // Only the matched mention decides the kind: "debited from A/c XX5678 towards … Credit Card XX4321" is a bank account.
+  const isCard = m[1]?.toLowerCase() === 'card';
+  const saysCredit = /\bcredit\s*$/i.test(body.slice(0, m.index));
+  return {
+    // D48 — never more than the last four digits ("A/c No.XXXXX012345" → 2345); a 3-digit mask stays as printed
+    last4: digits.slice(-4),
+    isCreditCard: isCard && (saysCredit || CREDIT_LIMIT_WORDING.test(body)),
+  };
+}
+
 export function hasVpa(body: string): boolean {
   return new RegExp(VPA_SOURCE, 'i').test(body);
 }

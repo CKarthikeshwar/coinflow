@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
+import { useAccounts } from '@/db/repositories/accounts';
 import { useCategories } from '@/db/repositories/categories';
 import type { PaymentMethod, TransactionType } from '@/db/schema';
 import { useFilterDraft, useSheetRegistry } from '@/stores';
@@ -60,12 +61,14 @@ export function FilterSheet() {
     uncategorized?: boolean;
     type?: TransactionType;
     methods?: PaymentMethod[];
+    accountIds?: string[];
     from?: number;
     to?: number;
   };
   const close = useSheetRegistry((s) => s.close);
   const draft = useFilterDraft();
   const { data: categories } = useCategories();
+  const { data: accounts } = useAccounts();
 
   const [showCustom, setShowCustom] = useState(params.from != null || params.to != null);
   const [startText, setStartText] = useState(params.from ? format(params.from, DATE_FMT) : '');
@@ -81,6 +84,7 @@ export function FilterSheet() {
       uncategorized: params.uncategorized ?? false,
       type: params.type ?? null,
       methods: params.methods ?? [],
+      accountIds: params.accountIds ?? [],
       from: params.from ?? null,
       to: params.to ?? null,
     });
@@ -92,6 +96,7 @@ export function FilterSheet() {
     draft.uncategorized ||
     draft.type !== null ||
     draft.methods.length > 0 ||
+    draft.accountIds.length > 0 ||
     draft.from != null ||
     draft.to != null;
 
@@ -107,6 +112,11 @@ export function FilterSheet() {
   const toggleMethod = (m: PaymentMethod) => {
     const next = draft.methods.includes(m) ? draft.methods.filter((x) => x !== m) : [...draft.methods, m];
     draft.set({ methods: next });
+  };
+
+  const toggleAccount = (id: string) => {
+    const next = draft.accountIds.includes(id) ? draft.accountIds.filter((x) => x !== id) : [...draft.accountIds, id];
+    draft.set({ accountIds: next });
   };
 
   const pickPreset = (preset: 'month' | '30d' | '3m') => {
@@ -147,6 +157,7 @@ export function FilterSheet() {
       uncategorized: draft.uncategorized ? '1' : '',
       type: draft.type ?? '',
       methods: draft.methods.join(','),
+      accountIds: draft.accountIds.join(','),
       from: from != null ? String(from) : '',
       to: to != null ? String(to) : '',
     });
@@ -204,6 +215,26 @@ export function FilterSheet() {
           ))}
         </View>
       </View>
+
+      {(accounts ?? []).length > 0 ? (
+        <View style={styles.section}>
+          <ThemedText type="label" themeColor="text3">
+            Accounts
+          </ThemedText>
+          <View style={styles.chipRow}>
+            {(accounts ?? [])
+              .filter((a) => !a.archivedAt || draft.accountIds.includes(a.id))
+              .map((a) => (
+                <Chip
+                  key={a.id}
+                  label={a.nickname}
+                  selected={draft.accountIds.includes(a.id)}
+                  onPress={() => toggleAccount(a.id)}
+                />
+              ))}
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <ThemedText type="label" themeColor="text3">

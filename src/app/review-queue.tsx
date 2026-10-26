@@ -27,10 +27,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
 import { getAccountRule } from '@/db/repositories/account-rules';
+import { useAccounts } from '@/db/repositories/accounts';
 import { resolveDefaultCategory, useCategories } from '@/db/repositories/categories';
 import { setSetting, useSetting } from '@/db/repositories/settings';
 import { dismissAllPending, usePendingSuggestions } from '@/db/repositories/suggestions';
-import type { Suggestion } from '@/db/schema';
+import type { MyAccount, Suggestion } from '@/db/schema';
 import { isKnownAccountRule } from '@/domain/categorize';
 import { usePermissionStatus } from '@/hooks/use-permission-status';
 import { cancelAllSuggestionNotifications } from '@/services/notifications/post';
@@ -38,6 +39,8 @@ import { handleDiscard, handleSave, handleSaveAll } from '@/services/notificatio
 import { requestSmsPermissions } from '@/services/sms';
 import { useSheetRegistry, useToast } from '@/stores';
 
+import { accountName } from '@/features/accounts/account-label';
+import { AccountReviewCards, useAccountReviewCount } from '@/features/accounts/review-cards';
 import { SuggestionCard } from '@/features/detection/suggestion-card';
 import { Button } from '@/ui/button';
 import { ConfirmDialog } from '@/ui/confirm-dialog';
@@ -46,7 +49,7 @@ import { PermissionBanner } from '@/ui/permission-banner';
 import { Skeleton } from '@/ui/skeleton';
 import { TopBar } from '@/ui/top-bar';
 
-function QueueRow({ suggestion }: { suggestion: Suggestion }) {
+function QueueRow({ suggestion, account }: { suggestion: Suggestion; account: MyAccount | undefined }) {
   const rule = suggestion.normalizedKey ? getAccountRule(suggestion.normalizedKey) : null;
   const known = isKnownAccountRule(rule, suggestion.direction ?? 'debit');
   const openSheet = useSheetRegistry((s) => s.open);
@@ -55,6 +58,7 @@ function QueueRow({ suggestion }: { suggestion: Suggestion }) {
     <SuggestionCard
       suggestion={suggestion}
       known={known}
+      accountName={suggestion.accountId ? accountName(account) : undefined}
       onOpen={() => openSheet('confirm', { suggestionId: suggestion.id })}
       onSave={known ? () => handleSave(suggestion.id) : undefined}
       onDismiss={() => handleDiscard(suggestion.id)}
@@ -66,6 +70,10 @@ export default function ReviewQueueScreen() {
   const { data, updatedAt } = usePendingSuggestions();
   const rows = data ?? [];
   const loading = updatedAt === undefined;
+  // CR-34 — new accounts, "Looks like a transfer?" and card-bill cards sit above the detected transactions
+  const accountCards = useAccountReviewCount();
+  const { data: accountRows } = useAccounts();
+  const accountsById = new Map((accountRows ?? []).map((a) => [a.id, a]));
 
   const permission = usePermissionStatus();
   const smsBanner = useSetting<number | null>('smsBannerDismissedAt');
@@ -125,23 +133,28 @@ export default function ReviewQueueScreen() {
 
       {loading ? (
         <Skeleton layout="suggestion-list" />
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && accountCards === 0 ? (
         <EmptyState glyph="check" line="You're all caught up. New transactions show up here." />
       ) : (
         <FlatList
           data={rows}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => <QueueRow suggestion={item} />}
+          renderItem={({ item }) => (
+            <QueueRow suggestion={item} account={item.accountId ? accountsById.get(item.accountId) : undefined} />
+          )}
+          ListHeaderComponent={accountCards > 0 ? <AccountReviewCards /> : null}
           ListFooterComponent={
-            <View style={styles.footer}>
-              <Button onPress={handleSaveAllPress}>
-                {defaultCategory ? `Save all as ${defaultCategory.name}` : 'Save all with default category'}
-              </Button>
-              <Button variant="ghost" onPress={() => setConfirmingDismissAll(true)}>
-                Dismiss all
-              </Button>
-            </View>
+            rows.length === 0 ? null : (
+              <View style={styles.footer}>
+                <Button onPress={handleSaveAllPress}>
+                  {defaultCategory ? `Save all as ${defaultCategory.name}` : 'Save all with default category'}
+                </Button>
+                <Button variant="ghost" onPress={() => setConfirmingDismissAll(true)}>
+                  Dismiss all
+                </Button>
+              </View>
+            )
           }
         />
       )}

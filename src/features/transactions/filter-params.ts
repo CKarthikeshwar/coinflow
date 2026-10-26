@@ -23,6 +23,8 @@ export type RawFilterParams = {
   uncategorized?: string | string[];
   type?: string | string[];
   methods?: string | string[];
+  /** CR-34 — comma-separated `my_account.id`s. */
+  accountIds?: string | string[];
   from?: string | string[];
   to?: string | string[];
 };
@@ -32,6 +34,7 @@ export type ParsedFilter = {
   uncategorized: boolean;
   type: TransactionType | undefined;
   methods: PaymentMethod[];
+  accountIds: string[];
   from: number | undefined;
   to: number | undefined;
 };
@@ -44,6 +47,7 @@ export function parseFilterParams(p: RawFilterParams): ParsedFilter {
   const categoryIdsRaw = one(p.categoryIds);
   const uncategorizedRaw = one(p.uncategorized);
   const methodsRaw = one(p.methods);
+  const accountIdsRaw = one(p.accountIds);
   const typeRaw = one(p.type);
   const fromRaw = one(p.from);
   const toRaw = one(p.to);
@@ -52,6 +56,7 @@ export function parseFilterParams(p: RawFilterParams): ParsedFilter {
     uncategorized: uncategorizedRaw === '1',
     type: typeRaw ? (typeRaw as TransactionType) : undefined,
     methods: methodsRaw ? (methodsRaw.split(',').filter(Boolean) as PaymentMethod[]) : [],
+    accountIds: accountIdsRaw ? accountIdsRaw.split(',').filter(Boolean) : [],
     from: fromRaw ? Number(fromRaw) : undefined,
     to: toRaw ? Number(toRaw) : undefined,
   };

@@ -22,24 +22,42 @@ export type TransactionCardProps = {
   showTime?: boolean;
   /** V2 (UI-075): set when this transaction is shared — adds the "Split · 1 of 3 paid" line and "Your share". */
   split?: SplitBadge;
+  /** CR-34 (UI-109) — which of your accounts ("HDFC ··672"), added to the meta line. */
+  accountLabel?: string;
+  /** CR-34 (UI-106) — a transfer's "SBI ··1234 → HDFC ··672"; the row then reads neutral (no +/−). */
+  transferLabel?: string;
   onPress: () => void;
 };
 
-export function TransactionCard({ txn, category, showTime = false, split, onPress }: TransactionCardProps) {
+export function TransactionCard({
+  txn,
+  category,
+  showTime = false,
+  split,
+  accountLabel,
+  transferLabel,
+  onPress,
+}: TransactionCardProps) {
   const isIncome = txn.type === 'income';
+  const isTransfer = txn.type === 'transfer';
   // CR-28: income can be categorized too. The tile stays inverted for income; it shows the category's icon, or the
   // plain income arrow while uncategorized (expenses show "?" instead).
   const isUncategorized = category === null;
-  const iconName: IconName = category
-    ? (category.icon as IconName)
-    : isIncome
-      ? 'arrow-down-to-line'
-      : 'help-circle';
+  const iconName: IconName = isTransfer
+    ? 'arrow-left-right'
+    : category
+      ? (category.icon as IconName)
+      : isIncome
+        ? 'arrow-down-to-line'
+        : 'help-circle';
 
-  const label = txn.note?.trim() || txn.account?.trim() || 'No note';
-  const categoryLabel = category?.name ?? 'Uncategorized';
+  const note = txn.note?.trim();
+  const label = isTransfer ? (transferLabel ?? 'Transfer') : note || txn.account?.trim() || 'No note';
+  const categoryLabel = isTransfer ? (note ? `Transfer · ${note}` : 'Transfer') : (category?.name ?? 'Uncategorized');
+  const metaAccount = !isTransfer && accountLabel ? ` · ${accountLabel}` : '';
 
   const signedMinor = txn.direction === 'credit' ? txn.amountMinor : -txn.amountMinor;
+  const amountText = isTransfer ? formatMoney(txn.amountMinor, { sign: 'none' }) : formatMoney(signedMinor);
 
   return (
     <Pressable accessibilityRole="button" onPress={onPress}>
@@ -54,9 +72,11 @@ export function TransactionCard({ txn, category, showTime = false, split, onPres
           <ThemedText
             type="label"
             themeColor="text3"
-            style={isUncategorized ? styles.uncategorized : undefined}
+            style={isUncategorized && !isTransfer ? styles.uncategorized : undefined}
+            numberOfLines={1}
           >
             {categoryLabel}
+            {metaAccount}
             {showTime ? ` · ${formatWhen(txn.occurredAt)}` : ''}
           </ThemedText>
           {split ? (
@@ -69,8 +89,8 @@ export function TransactionCard({ txn, category, showTime = false, split, onPres
           ) : null}
         </View>
         <View style={styles.amountCol}>
-          <ThemedText type="body" themeColor="text">
-            {formatMoney(signedMinor)}
+          <ThemedText type="body" themeColor={isTransfer ? 'text2' : 'text'}>
+            {amountText}
           </ThemedText>
           {split ? (
             <ThemedText type="caption" themeColor="text3">

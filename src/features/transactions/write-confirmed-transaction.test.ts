@@ -4,7 +4,7 @@ import { upsertFromTransaction } from '@/db/repositories/account-rules';
 import { updateTransaction } from '@/db/repositories/transactions';
 import type { AddSheetDraft } from '@/stores/add-sheet-draft';
 
-import { writeConfirmedTransaction, writeEditedTransaction } from './write-confirmed-transaction';
+import { writeConfirmedTransaction, writeEditedTransaction, writeTransfer } from './write-confirmed-transaction';
 
 const mockInsertedRows: Record<string, unknown>[] = [];
 const mockUpdates: { table: string; values: Record<string, unknown> }[] = [];
@@ -40,7 +40,13 @@ jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'new-txn-id') }));
 jest.mock('@/db/client', () => ({
   db: { transaction: jest.fn((cb: (tx: unknown) => void) => cb(mockMakeTx())) },
 }));
-jest.mock('@/db/repositories/transactions', () => ({ updateTransaction: jest.fn() }));
+jest.mock('@/db/repositories/transactions', () => ({ updateTransaction: jest.fn(), getTransaction: jest.fn(() => null) }));
+jest.mock('@/db/repositories/transfers', () => ({
+  linkTransferIfAny: jest.fn(() => ({ kind: 'none' })),
+  createTransfer: jest.fn(() => ({ outId: 'out-1', inId: 'in-1' })),
+  updateTransfer: jest.fn(),
+  unlinkTransfer: jest.fn(),
+}));
 jest.mock('@/db/repositories/account-rules', () => ({ upsertFromTransaction: jest.fn() }));
 
 const mockUpdateTransaction = updateTransaction as jest.Mock;
@@ -59,6 +65,8 @@ function draft(overrides: Partial<AddSheetDraft> = {}): AddSheetDraft {
     note: 'Lunch',
     description: '',
     occurredAt: 1_700_000_000_000,
+    accountId: null,
+    toAccountId: null,
     dirty: true,
     submitting: false,
     error: null,
@@ -236,5 +244,50 @@ describe('writeEditedTransaction', () => {
       'txn-42',
       expect.objectContaining({ account: null, note: null, description: null }),
     );
+  });
+});
+
+describe('§46 — accounts and transfers', () => {
+  const transfers = jest.requireMock('@/db/repositories/transfers') as Record<string, jest.Mock>;
+  const txns = jest.requireMock('@/db/repositories/transactions') as Record<string, jest.Mock>;
+
+  it('stores the chosen account and tries to link it as a transfer', () => {
+    transfers.linkTransferIfAny.mockReturnValueOnce({ kind: 'link', peer: { id: 'peer-1' } });
+    const result = writeConfirmedTransaction(draft({ accountId: 'acc-sbi' }), null);
+    expect(mockInsertedRows.find((r) => r.__table === 'transaction')).toMatchObject({ accountId: 'acc-sbi', transferPeerId: null });
+    expect(transfers.linkTransferIfAny).toHaveBeenCalledWith('new-txn-id');
+    expect(result).toEqual({ transactionId: 'new-txn-id', linkedPeerId: 'peer-1' });
+  });
+
+  it('no account ⇒ no link attempt', () => {
+    transfers.linkTransferIfAny.mockClear();
+    expect(writeConfirmedTransaction(draft(), null).linkedPeerId).toBeNull();
+    expect(transfers.linkTransferIfAny).not.toHaveBeenCalled();
+  });
+
+  it('a link failure never loses the save', () => {
+    transfers.linkTransferIfAny.mockImplementationOnce(() => {
+      throw new Error('x');
+    });
+    expect(writeConfirmedTransaction(draft({ accountId: 'a' }), null)).toEqual({ transactionId: 'new-txn-id', linkedPeerId: null });
+  });
+
+  it('writeTransfer creates a pair on Add, updates it on Edit', () => {
+    const add = draft({ mode: 'add', type: 'transfer', accountId: 'a', toAccountId: 'b', amountMinor: 500, note: 'ATM' });
+    expect(writeTransfer(add)).toEqual({ transactionId: 'out-1' });
+    expect(transfers.createTransfer).toHaveBeenCalledWith({ fromId: 'a', toId: 'b', amountMinor: 500, occurredAt: add.occurredAt, note: 'ATM' });
+    writeTransfer({ ...add, mode: 'edit', sourceId: 't-9' });
+    expect(transfers.updateTransfer).toHaveBeenCalledWith('t-9', expect.objectContaining({ fromId: 'a', toId: 'b', amountMinor: 500 }));
+  });
+
+  it('writeTransfer needs both accounts', () => {
+    expect(() => writeTransfer(draft({ type: 'transfer', accountId: 'a' }))).toThrow();
+  });
+
+  it('editing a transfer as an expense unlinks it first', () => {
+    txns.getTransaction.mockReturnValueOnce({ id: 't-1', type: 'transfer' });
+    writeEditedTransaction(draft({ mode: 'edit', sourceId: 't-1', type: 'expense', accountId: 'a' }));
+    expect(transfers.unlinkTransfer).toHaveBeenCalledWith('t-1');
+    expect(mockUpdateTransaction).toHaveBeenCalledWith('t-1', expect.objectContaining({ accountId: 'a' }));
   });
 });

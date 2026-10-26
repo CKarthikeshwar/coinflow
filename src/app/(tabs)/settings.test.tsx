@@ -32,7 +32,8 @@ it('renders all six rows and the version footer', async () => {
   expect(getByText('Categories')).toBeTruthy();
   expect(getByText('Payment methods')).toBeTruthy();
   expect(getByText('SMS & notifications')).toBeTruthy();
-  expect(getByText('Account rules')).toBeTruthy();
+  expect(getByText('Merchant rules')).toBeTruthy();
+  expect(getByText('My accounts')).toBeTruthy();
   expect(getByText('Data')).toBeTruthy();
   expect(getByText('About')).toBeTruthy();
   expect(getByText('Version 4.5.6')).toBeTruthy();
@@ -67,7 +68,7 @@ it('SMS denied shows "Off" (UI-064)', async () => {
 
 it('tapping a row pushes its route', async () => {
   const { getByText } = await render(<SettingsScreen />);
-  await fireEvent.press(getByText('Account rules'));
+  await fireEvent.press(getByText('Merchant rules'));
   expect(mockRouterPush).toHaveBeenCalledWith('/account-rules');
   await fireEvent.press(getByText('Data'));
   expect(mockRouterPush).toHaveBeenCalledWith('/data');

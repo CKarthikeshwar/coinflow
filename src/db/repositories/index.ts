@@ -17,3 +17,5 @@ export * from './persons';
 export * from './splits';
 export * from './settlements';
 export * from './split-requests';
+export * from './accounts';
+export * from './transfers';

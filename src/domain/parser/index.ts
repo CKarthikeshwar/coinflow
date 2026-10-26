@@ -2,4 +2,4 @@
 // callers outside `domain/parser/` import from `@/domain/parser`, not the internal files
 // directly (`extract.ts`, `ignore-rules.ts` are implementation details of `parse-sms.ts`).
 export { parseSms } from './parse-sms';
-export type { Direction, IgnoreReason, ParsedFields, ParseResult, ParseWarning, RawSms } from './types';
+export type { Direction, IgnoreReason, OwnAccountRef, ParsedFields, ParseResult, ParseWarning, RawSms } from './types';

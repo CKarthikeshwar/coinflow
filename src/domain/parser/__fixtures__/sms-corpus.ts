@@ -7,7 +7,7 @@
  * hand-reviewing the result (not hand-derived from the regexes) — see IMPLEMENTATION-PROGRESS.md.
  */
 
-import type { Direction, ParsedFields, ParseResult, ParseWarning } from '../types';
+import type { Direction, OwnAccountRef, ParsedFields, ParseResult, ParseWarning } from '../types';
 
 export type SmsFixture = {
   id: string;
@@ -43,8 +43,25 @@ function fields(
   account: string | null,
   normalizedKey: string | null,
   paymentMethod: ParsedFields['paymentMethod'],
+  ownAccount: OwnAccountRef | null = null,
 ): ParsedFields {
-  return { amountMinor, direction, account, normalizedKey, paymentMethod, occurredAt: T };
+  return { amountMinor, direction, account, normalizedKey, paymentMethod, occurredAt: T, ownAccount };
+}
+
+const BANK_NAMES: Record<string, string> = {
+  hdfc: 'HDFC Bank',
+  sbi: 'State Bank of India',
+  icici: 'ICICI Bank',
+  axis: 'Axis Bank',
+  kotak: 'Kotak Mahindra Bank',
+  pnb: 'Punjab National Bank',
+  bob: 'Bank of Baroda',
+  canara: 'Canara Bank',
+};
+
+/** §46.4 — the user's own account the SMS is about. */
+function own(bankKey: string, last4: string, kind: OwnAccountRef['kind'] = 'bank'): OwnAccountRef {
+  return { bankKey, bankName: BANK_NAMES[bankKey] ?? null, last4, kind };
 }
 
 export const smsCorpus: SmsFixture[] = [
@@ -54,98 +71,98 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AD-HDFCBK-S',
     body: 'Rs.450.00 debited from A/c XX1234 to VPA merchant@okhdfcbank on 05-09-26. UPI Ref 402812345678. Not you? Call 18002586161',
     receivedAt: T,
-    expected: tx(fields(45000, 'debit', 'merchant@okhdfcbank', 'merchant@okhdfcbank', 'upi')),
+    expected: tx(fields(45000, 'debit', 'merchant@okhdfcbank', 'merchant@okhdfcbank', 'upi', own('hdfc', '1234'))),
   },
   {
     id: 'hdfc-credit-upi',
     sender: 'VM-HDFCBK-T',
     body: 'Rs.1,200.00 credited to A/c XX1234 from friend@okhdfcbank UPI Ref 402899998888.',
     receivedAt: T,
-    expected: tx(fields(120000, 'credit', 'friend@okhdfcbank', 'friend@okhdfcbank', 'upi')),
+    expected: tx(fields(120000, 'credit', 'friend@okhdfcbank', 'friend@okhdfcbank', 'upi', own('hdfc', '1234'))),
   },
   {
     id: 'sbi-debit-upi',
     sender: 'AD-SBIINB-S',
     body: 'Rs.320.50 debited from A/c XX5678 to VPA vendor@oksbi on 04-09-26. UPI Ref 501234567890.',
     receivedAt: T,
-    expected: tx(fields(32050, 'debit', 'vendor@oksbi', 'vendor@oksbi', 'upi')),
+    expected: tx(fields(32050, 'debit', 'vendor@oksbi', 'vendor@oksbi', 'upi', own('sbi', '5678'))),
   },
   {
     id: 'sbi-credit-imps',
     sender: 'VM-SBIINB-T',
     body: 'Rs.5,000.00 credited to A/c XX5678 via IMPS on 03-09-26. Ref 601122334455.',
     receivedAt: T,
-    expected: tx(fields(500000, 'credit', null, null, 'bank_transfer')),
+    expected: tx(fields(500000, 'credit', null, null, 'bank_transfer', own('sbi', '5678'))),
   },
   {
     id: 'icici-debit-card',
     sender: 'JD-ICICIB-S',
     body: 'INR 1,299.00 spent on ICICI Bank Card XX4433 at Store One on 04-09-26 Ref 998877.',
     receivedAt: T,
-    expected: tx(fields(129900, 'debit', 'Store One', 'store one', 'card')),
+    expected: tx(fields(129900, 'debit', 'Store One', 'store one', 'card', own('icici', '4433'))),
   },
   {
     id: 'icici-credit-card',
     sender: 'JD-ICICIB-T',
     body: 'INR 250.00 refund of order 778899 credited on your ICICI Bank Card XX4433 at Store Two.',
     receivedAt: T,
-    expected: tx(fields(25000, 'credit', 'Store Two', 'store two', 'card')),
+    expected: tx(fields(25000, 'credit', 'Store Two', 'store two', 'card', own('icici', '4433'))),
   },
   {
     id: 'axis-debit-upi',
     sender: 'AD-AXISBK-S',
     body: 'Rs.899.00 debited from A/c XX9911 to VPA store@axisbank UPI Ref 701234567890.',
     receivedAt: T,
-    expected: tx(fields(89900, 'debit', 'store@axisbank', 'store@axisbank', 'upi')),
+    expected: tx(fields(89900, 'debit', 'store@axisbank', 'store@axisbank', 'upi', own('axis', '9911'))),
   },
   {
     id: 'axis-credit-neft',
     sender: 'VM-AXISBK-T',
     body: 'Rs.15,000.00 credited to A/c XX9911 via NEFT on 02-09-26. Ref 801122334455.',
     receivedAt: T,
-    expected: tx(fields(1500000, 'credit', null, null, 'bank_transfer')),
+    expected: tx(fields(1500000, 'credit', null, null, 'bank_transfer', own('axis', '9911'))),
   },
   {
     id: 'kotak-debit-upi',
     sender: 'AD-KOTAKB-S',
     body: 'Rs.180.00 debited from A/c XX2211 to VPA canteen@okaxis UPI Ref 901234567890.',
     receivedAt: T,
-    expected: tx(fields(18000, 'debit', 'canteen@okaxis', 'canteen@okaxis', 'upi')),
+    expected: tx(fields(18000, 'debit', 'canteen@okaxis', 'canteen@okaxis', 'upi', own('kotak', '2211'))),
   },
   {
     id: 'kotak-credit-upi',
     sender: 'VM-KOTAKB-T',
     body: 'Rs.750.00 credited to A/c XX2211 from roommate@okaxis UPI Ref 911234567890.',
     receivedAt: T,
-    expected: tx(fields(75000, 'credit', 'roommate@okaxis', 'roommate@okaxis', 'upi')),
+    expected: tx(fields(75000, 'credit', 'roommate@okaxis', 'roommate@okaxis', 'upi', own('kotak', '2211'))),
   },
   {
     id: 'pnb-debit-imps',
     sender: 'AD-PNBSMS-S',
     body: 'Rs.2,500.00 debited from A/c XX3344 via IMPS on 01-09-26. Ref 121122334455.',
     receivedAt: T,
-    expected: tx(fields(250000, 'debit', null, null, 'bank_transfer')),
+    expected: tx(fields(250000, 'debit', null, null, 'bank_transfer', own('pnb', '3344'))),
   },
   {
     id: 'pnb-credit-upi',
     sender: 'VM-PNBSMS-T',
     body: 'Rs.600.00 credited to A/c XX3344 from client@okpnb UPI Ref 131234567890.',
     receivedAt: T,
-    expected: tx(fields(60000, 'credit', 'client@okpnb', 'client@okpnb', 'upi')),
+    expected: tx(fields(60000, 'credit', 'client@okpnb', 'client@okpnb', 'upi', own('pnb', '3344'))),
   },
   {
     id: 'bob-debit-upi',
     sender: 'AD-BOBTXN-S',
     body: 'Rs.99.00 debited from A/c XX7788 to VPA chai@okbob UPI Ref 141234567890.',
     receivedAt: T,
-    expected: tx(fields(9900, 'debit', 'chai@okbob', 'chai@okbob', 'upi')),
+    expected: tx(fields(9900, 'debit', 'chai@okbob', 'chai@okbob', 'upi', own('bob', '7788'))),
   },
   {
     id: 'bob-credit-upi',
     sender: 'VM-BOBTXN-T',
     body: 'Rs.2,000.00 credited to A/c XX7788 from parent@okbob UPI Ref 151234567890.',
     receivedAt: T,
-    expected: tx(fields(200000, 'credit', 'parent@okbob', 'parent@okbob', 'upi')),
+    expected: tx(fields(200000, 'credit', 'parent@okbob', 'parent@okbob', 'upi', own('bob', '7788'))),
   },
 
   // --- UPI apps ----------------------------------------------------------------------------
@@ -305,7 +322,7 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AD-AXISBK-S',
     body: 'Rs.325.00 debited from A/c XX9911 on 05-09-26. UPI Ref 261234567890.',
     receivedAt: T,
-    expected: tx(fields(32500, 'debit', null, null, 'upi')),
+    expected: tx(fields(32500, 'debit', null, null, 'upi', own('axis', '9911'))),
   },
 
   // --- Hard shapes -------------------------------------------------------------------------
@@ -314,35 +331,35 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AD-ICICIB-S',
     body: 'INR 1,500.00 spent on ICICI Bank Card XX4433 at Store Three. Available limit INR 48,500.00.',
     receivedAt: T,
-    expected: tx(fields(150000, 'debit', 'Store Three', 'store three', 'card')),
+    expected: tx(fields(150000, 'debit', 'Store Three', 'store three', 'card', own('icici', '4433', 'credit_card'))),
   },
   {
     id: 'hard-rs-vs-inr-vs-symbol',
     sender: 'AD-KOTAKB-S',
     body: '₹540.00 debited from A/c XX2211 to VPA shop@okaxis UPI Ref 271234567890.',
     receivedAt: T,
-    expected: tx(fields(54000, 'debit', 'shop@okaxis', 'shop@okaxis', 'upi')),
+    expected: tx(fields(54000, 'debit', 'shop@okaxis', 'shop@okaxis', 'upi', own('kotak', '2211'))),
   },
   {
     id: 'hard-paise-present',
     sender: 'AD-PNBSMS-S',
     body: 'Rs.99.99 debited from A/c XX3344 to VPA snacks@okpnb UPI Ref 281234567890.',
     receivedAt: T,
-    expected: tx(fields(9999, 'debit', 'snacks@okpnb', 'snacks@okpnb', 'upi')),
+    expected: tx(fields(9999, 'debit', 'snacks@okpnb', 'snacks@okpnb', 'upi', own('pnb', '3344'))),
   },
   {
     id: 'hard-lakh-grouping',
     sender: 'VM-AXISBK-T',
     body: 'Rs.1,25,000.00 credited to A/c XX9911 via NEFT on 05-09-26. Ref 291234567890.',
     receivedAt: T,
-    expected: tx(fields(12500000, 'credit', null, null, 'bank_transfer')),
+    expected: tx(fields(12500000, 'credit', null, null, 'bank_transfer', own('axis', '9911'))),
   },
   {
     id: 'hard-multiline',
     sender: 'AD-HDFCBK-S',
     body: 'Rs.450.00 debited\nfrom A/c XX1234\nto VPA merchant@okhdfcbank\nUPI Ref 402812345678.',
     receivedAt: T,
-    expected: tx(fields(45000, 'debit', 'merchant@okhdfcbank', 'merchant@okhdfcbank', 'upi')),
+    expected: tx(fields(45000, 'debit', 'merchant@okhdfcbank', 'merchant@okhdfcbank', 'upi', own('hdfc', '1234'))),
   },
   {
     // Regression: a semicolon separator right after the name (no space before it) used to be
@@ -352,14 +369,14 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AD-SBIINB-S',
     body: 'Rs.220.00 debited from A/c XX7788 to John Doe; UPI Ref 301234567891.',
     receivedAt: T,
-    expected: tx(fields(22000, 'debit', 'John Doe', 'john doe', 'upi')),
+    expected: tx(fields(22000, 'debit', 'John Doe', 'john doe', 'upi', own('sbi', '7788'))),
   },
   {
     id: 'hard-trailing-marketing',
     sender: 'AD-SBIINB-S',
     body: 'Rs.310.00 debited from A/c XX5678 to VPA store@oksbi UPI Ref 301234567890. Download YONO SBI for more offers!',
     receivedAt: T,
-    expected: tx(fields(31000, 'debit', 'store@oksbi', 'store@oksbi', 'upi')),
+    expected: tx(fields(31000, 'debit', 'store@oksbi', 'store@oksbi', 'upi', own('sbi', '5678'))),
   },
 
   // --- Warnings (not in the §23.6 required list, but part of the ParseResult contract) -----
@@ -369,7 +386,7 @@ export const smsCorpus: SmsFixture[] = [
     body: 'Rs.2,00,00,000.00 debited from A/c XX1234 to VPA merchant@okhdfcbank UPI Ref 321234567890.',
     receivedAt: T,
     expected: tx(
-      fields(2000000000, 'debit', 'merchant@okhdfcbank', 'merchant@okhdfcbank', 'upi'),
+      fields(2000000000, 'debit', 'merchant@okhdfcbank', 'merchant@okhdfcbank', 'upi', own('hdfc', '1234')),
       ['amountOutOfRange'],
     ),
   },
@@ -380,7 +397,7 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AD-HDFCBK-S',
     body: 'dr ₹1 cr on A/c XX1234 Ref 351234567890.',
     receivedAt: T,
-    expected: tx(fields(100, null, null, null, 'card'), ['ambiguousDirection']),
+    expected: tx(fields(100, null, null, null, 'card', own('hdfc', '1234')), ['ambiguousDirection']),
   },
 
   // --- CR-29: the user's own account is not a counterparty (real Canara Bank / SBI shapes, anonymised) ----------
@@ -389,34 +406,70 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AX-CANBNK-S',
     body: 'An amount of INR 380.00 has been DEBITED to your account XXX123 on 21/06/26. Total Avail.bal INR 3,534.65.Dial 1930 to report cyber fraud - Canara Bank',
     receivedAt: T,
-    expected: tx(fields(38000, 'debit', null, null, null)),
+    expected: tx(fields(38000, 'debit', null, null, null, own('canara', '123'))),
   },
   {
     id: 'own-account-credited-towards-description',
     sender: 'AX-CANBNK-S',
     body: 'An amount of INR 3.60 has been CREDITED to your account XXX123 on 22/09/2026 towards Reversal of GST on Commission. Total Avail.bal INR 1,825.41 - Canara Bank',
     receivedAt: T,
-    expected: tx(fields(360, 'credit', 'Reversal of GST', 'reversal of gst', null)),
+    expected: tx(fields(360, 'credit', 'Reversal of GST', 'reversal of gst', null, own('canara', '123'))),
   },
   {
     id: 'own-account-neft-by-sender',
     sender: 'AX-CANBNK-S',
     body: 'An amount of INR 5,000.00 has been credited to XXX123 on 24/07/2026 towards NEFT by Sender EXAMPLE INSTITUTE OF SCI, IFSC SBIN0000001, Sender A/c XXXX0001, STATE BANK OF INDIA, UTR SBIN000000000001, Total Avail. Bal INR 6271.42- Canara Bank',
     receivedAt: T,
-    expected: tx(fields(500000, 'credit', 'EXAMPLE INSTITUTE OF SCI', 'example institute of sci', 'bank_transfer')),
+    expected: tx(fields(500000, 'credit', 'EXAMPLE INSTITUTE OF SCI', 'example institute of sci', 'bank_transfer', own('canara', '123'))),
   },
   {
     id: 'own-account-your-a-c-no',
     sender: 'AD-SBIINB-S',
     body: 'Dear Customer, LPG Subsidy of Rs.15.38 has been credited to your A/c No.XXXXX012345 on 22/08/25.-SBI',
     receivedAt: T,
-    expected: tx(fields(1538, 'credit', null, null, null)),
+    expected: tx(fields(1538, 'credit', null, null, null, own('sbi', '2345'))),
   },
   {
     id: 'footer-to-is-not-a-payee',
     sender: 'VM-CANBNK-S',
     body: 'Dear Customer, Acct XXX123 Dr. INR 140.00 on 23/09/26 to Sample Person; UPI: 393400000000; Bal INR 1,620.41.Not you?SMS BLOCKUPI to 9900000000-CanaraBank',
     receivedAt: T,
-    expected: tx(fields(14000, 'debit', 'Sample Person', 'sample person', 'upi')),
+    expected: tx(fields(14000, 'debit', 'Sample Person', 'sample person', 'upi', own('canara', '123'))),
+  },
+  // --- §46.4 own account (CR-34) ----------------------------------------------------------------
+  {
+    id: 'own-credit-card-spend',
+    sender: 'AD-HDFCBK-S',
+    body: 'Rs.2,340.00 spent on HDFC Bank Credit Card XX4321 at BIGBASKET on 2026-10-20:18:12:05. Avl Limit: Rs.1,17,660.00. Not you? Call 18002586161',
+    receivedAt: T,
+    expected: tx(fields(234000, 'debit', 'BIGBASKET', 'bigbasket', 'card', own('hdfc', '4321', 'credit_card'))),
+  },
+  {
+    id: 'own-card-ending',
+    sender: 'VM-AXISBK-T',
+    body: 'INR 649.00 spent using Axis Bank card ending 5566 at STREAMCO on 21-10-26.',
+    receivedAt: T,
+    expected: tx(fields(64900, 'debit', 'STREAMCO', 'streamco', 'card', own('axis', '5566'))),
+  },
+  {
+    id: 'own-a-c-star',
+    sender: 'AD-SBIINB-S',
+    body: 'Rs.1,000.00 withdrawn from A/c *4455 at ATM on 21-10-26.',
+    receivedAt: T,
+    expected: tx(fields(100000, 'debit', 'ATM', 'atm', null, own('sbi', '4455'))),
+  },
+  {
+    id: 'own-app-sender-names-bank',
+    sender: 'GPAY',
+    body: 'Rs.150.00 paid to tea@okicici from your HDFC Bank A/c XX1234 via Google Pay UPI Ref 401234567891.',
+    receivedAt: T,
+    expected: tx(fields(15000, 'debit', 'tea@okicici', 'tea@okicici', 'upi', own('hdfc', '1234'))),
+  },
+  {
+    id: 'own-card-bill-payment',
+    sender: 'AD-SBIINB-S',
+    body: 'Rs.14,200.00 debited from A/c XX5678 towards HDFC Bank Credit Card XX4321 payment on 25-10-26. Ref 411234567890.',
+    receivedAt: T,
+    expected: tx(fields(1420000, 'debit', 'HDFC Bank Credit Card XX4321 payment', 'hdfc bank credit card xx4321 payment', 'card', own('sbi', '5678'))),
   },
 ];

@@ -78,6 +78,8 @@ export type InsertTransactionInput = {
   smsSender?: string | null;
   smsReceivedAt?: number | null;
   dedupeKey?: string | null;
+  /** §46 — which of your accounts; null = "No account". */
+  accountId?: string | null;
 };
 
 export type TransactionListQuery = {
@@ -89,6 +91,8 @@ export type TransactionListQuery = {
   uncategorized?: boolean;
   type?: TransactionType;
   methods?: PaymentMethod[];
+  /** §46.7 / UI-109 — rows on any of these accounts. */
+  accountIds?: string[];
   from?: number;
   to?: number;
   limit?: number;
@@ -129,6 +133,8 @@ export function insertTransaction(input: InsertTransactionInput): Transaction {
     smsReceivedAt: input.smsReceivedAt ?? null,
     dedupeKey: input.dedupeKey ?? null,
     editedByUser: false,
+    accountId: input.accountId ?? null,
+    transferPeerId: null,
   };
   db.insert(transactions).values(row).run();
   return row;
@@ -137,7 +143,16 @@ export function insertTransaction(input: InsertTransactionInput): Transaction {
 export type TransactionPatch = Partial<
   Pick<
     InsertTransactionInput,
-    'amountMinor' | 'direction' | 'type' | 'categoryId' | 'paymentMethod' | 'account' | 'note' | 'description' | 'occurredAt'
+    | 'amountMinor'
+    | 'direction'
+    | 'type'
+    | 'categoryId'
+    | 'paymentMethod'
+    | 'account'
+    | 'note'
+    | 'description'
+    | 'occurredAt'
+    | 'accountId'
   >
 >;
 
@@ -151,20 +166,43 @@ export function updateTransaction(id: string, patch: TransactionPatch): void {
   const note = patch.note !== undefined ? patch.note?.trim() || null : current.note;
   const description =
     patch.description !== undefined ? patch.description?.trim() || null : current.description;
+  const accountId = patch.accountId !== undefined ? patch.accountId : current.accountId;
+
+  // §46.6 — editing the amount, direction or account of one side of a transfer pair breaks the pair: both sides go
+  // back to a plain expense / income (this row then takes whatever type the patch / its direction gives it).
+  const breaksPair =
+    current.transferPeerId !== null &&
+    ((patch.amountMinor !== undefined && patch.amountMinor !== current.amountMinor) ||
+      direction !== current.direction ||
+      accountId !== current.accountId);
+  if (breaksPair && current.transferPeerId) {
+    const peer = db.select().from(transactions).where(eq(transactions.id, current.transferPeerId)).get();
+    if (peer) {
+      db.update(transactions)
+        .set({ type: typeFromDirection(peer.direction), transferPeerId: null, categoryId: null, updatedAt: Date.now() })
+        .where(eq(transactions.id, peer.id))
+        .run();
+    }
+  }
+  const unlinkedType = breaksPair && type === 'transfer' ? typeFromDirection(direction) : type;
 
   db.update(transactions)
     .set({
       amountMinor: patch.amountMinor ?? current.amountMinor,
       direction,
-      type,
+      type: unlinkedType,
       // CR-28: a category of the wrong kind is dropped when the direction flips (expense ⇄ income),
-      // unless the caller passes an explicit category in the same patch.
+      // unless the caller passes an explicit category in the same patch. A transfer never has one (§46.2).
       categoryId:
-        patch.categoryId !== undefined
-          ? patch.categoryId
-          : type !== current.type
-            ? null
-            : current.categoryId,
+        unlinkedType === 'transfer'
+          ? null
+          : patch.categoryId !== undefined
+            ? patch.categoryId
+            : unlinkedType !== current.type
+              ? null
+              : current.categoryId,
+      accountId,
+      transferPeerId: breaksPair ? null : current.transferPeerId,
       paymentMethod: patch.paymentMethod !== undefined ? patch.paymentMethod : current.paymentMethod,
       account,
       normalizedAccountKey: account ? normalizeAccount(account) : null,
@@ -184,8 +222,29 @@ export function softDeleteTransaction(id: string): void {
   db.update(transactions).set({ deletedAt: now, updatedAt: now }).where(eq(transactions.id, id)).run();
 }
 
+/** Undo. A transfer deleted as a pair (`softDeleteTransfer`, same `deletedAt`) comes back as a pair. */
 export function restoreTransaction(id: string): void {
-  db.update(transactions).set({ deletedAt: null, updatedAt: Date.now() }).where(eq(transactions.id, id)).run();
+  const row = db.select().from(transactions).where(eq(transactions.id, id)).get();
+  const ids = [id];
+  if (row?.transferPeerId && row.deletedAt !== null) {
+    const peer = db.select().from(transactions).where(eq(transactions.id, row.transferPeerId)).get();
+    if (peer && peer.deletedAt === row.deletedAt) ids.push(peer.id);
+  }
+  db.update(transactions).set({ deletedAt: null, updatedAt: Date.now() }).where(inArray(transactions.id, ids)).run();
+}
+
+/**
+ * UI-106 — a linked transfer shows as ONE row ("SBI ··1234 → HDFC ··672"): the credit half is hidden while its
+ * debit half is itself listed (not deleted and, under an account filter, on one of the filtered accounts).
+ */
+function hideCreditHalf(accountIds?: string[]) {
+  const peerVisible = accountIds?.length
+    ? sql`exists (select 1 from "transaction" p where p.id = ${transactions.transferPeerId} and p.deletedAt is null and p.accountId in (${sql.join(
+        accountIds.map((a) => sql`${a}`),
+        sql`, `,
+      )}))`
+    : sql`exists (select 1 from "transaction" p where p.id = ${transactions.transferPeerId} and p.deletedAt is null)`;
+  return sql`not (${transactions.type} = 'transfer' and ${transactions.direction} = 'credit' and ${transactions.transferPeerId} is not null and ${peerVisible})`;
 }
 
 export function purgeDeleted(before: number): void {
@@ -207,7 +266,7 @@ export function useRecentTransactions(limit = 8) {
     db
       .select()
       .from(transactions)
-      .where(isNull(transactions.deletedAt))
+      .where(and(isNull(transactions.deletedAt), hideCreditHalf()))
       .orderBy(desc(transactions.occurredAt))
       .limit(limit),
   );
@@ -220,9 +279,10 @@ export type DaySubtotal = { dayStartMs: number; spentMinor: number };
  * `searchText LIKE` fallback (D27). `daySubtotals` is spend-only, bucketed by device-zone
  * day (the §27.3 helper refines the boundary in step 5).
  */
-export function useTransactionList(query: TransactionListQuery) {
-  const { search, categoryIds, uncategorized, type, methods, from, to, limit = 200 } = query;
-  const conds = [isNull(transactions.deletedAt)];
+/** The ledger query itself (exported so tests run the real SQL). */
+export function transactionListQuery(query: TransactionListQuery) {
+  const { search, categoryIds, uncategorized, type, methods, accountIds, from, to, limit = 200 } = query;
+  const conds = [isNull(transactions.deletedAt), hideCreditHalf(accountIds)];
   if (type) conds.push(eq(transactions.type, type));
   if (from != null) conds.push(sql`${transactions.occurredAt} >= ${from}`);
   if (to != null) conds.push(sql`${transactions.occurredAt} <= ${to}`);
@@ -230,18 +290,21 @@ export function useTransactionList(query: TransactionListQuery) {
   // The category filter chip row lets the user select specific categories AND a special
   // "Uncategorized" chip at the same time — this builds the matching SQL condition for
   // whichever combination is active. "Uncategorized" isn't a real category row; it means
-  // "transactions with no categoryId" (expense or income, CR-28).
+  // "transactions with no categoryId" (expense or income, CR-28 — a transfer never has one, §46.2, so it is not
+  // "uncategorized").
+  const uncategorizedCond = and(isNull(transactions.categoryId), inArray(transactions.type, ['expense', 'income']));
   const categoryCond =
     categoryIds?.length && uncategorized
-      ? or(inArray(transactions.categoryId, categoryIds), isNull(transactions.categoryId))
+      ? or(inArray(transactions.categoryId, categoryIds), uncategorizedCond)
       : categoryIds?.length
         ? inArray(transactions.categoryId, categoryIds)
         : uncategorized
-          ? isNull(transactions.categoryId)
+          ? uncategorizedCond
           : undefined;
   if (categoryCond) conds.push(categoryCond);
 
   if (methods?.length) conds.push(inArray(transactions.paymentMethod, methods));
+  if (accountIds?.length) conds.push(inArray(transactions.accountId, accountIds));
 
   if (search?.trim()) {
     const term = search.trim().toLowerCase();
@@ -258,15 +321,16 @@ export function useTransactionList(query: TransactionListQuery) {
     }
   }
 
-  const q = useLiveQuery(
-    db
-      .select()
-      .from(transactions)
-      .where(and(...conds))
-      .orderBy(desc(transactions.occurredAt))
-      .limit(limit),
-    [JSON.stringify(query)],
-  );
+  return db
+    .select()
+    .from(transactions)
+    .where(and(...conds))
+    .orderBy(desc(transactions.occurredAt))
+    .limit(limit);
+}
+
+export function useTransactionList(query: TransactionListQuery) {
+  const q = useLiveQuery(transactionListQuery(query), [JSON.stringify(query)]);
 
   const byDay = new Map<number, number>();
   for (const row of q.data) {

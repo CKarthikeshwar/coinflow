@@ -39,6 +39,7 @@ import { usePermissionStatus } from '@/hooks/use-permission-status';
 import { requestSmsPermissions } from '@/services/sms';
 import { useSheetRegistry } from '@/stores';
 
+import { useAccountLabels } from '@/features/accounts/use-account-labels';
 import { ActionStripRow } from '@/features/home/action-strip';
 import { BalanceHero } from '@/features/home/balance-hero';
 import { OwedToYouRow } from '@/features/home/owed-row';
@@ -72,6 +73,7 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
   const uncategorized = useUncategorizedCount();
   const pending = usePendingCount();
   const recent = useRecentTransactions(8);
+  const accountLabels = useAccountLabels(recent.data); // CR-34 (UI-109)
   const splitBadges = useSplitBadges(); // V2 (UI-075): "Split · 1 of 3 paid" on shared transactions
   const owed = useSplitsOverview(); // V2 (UI-081): the "Owed to you ₹N" row, only while N > 0
   const categoryMap = getCategoryMap();
@@ -118,7 +120,10 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
         />
       ) : null}
 
-      <BalanceHero balanceMinor={balance.balanceMinor} />
+      {/* UI-103 — the balance card opens My accounts */}
+      <Pressable accessibilityRole="button" accessibilityLabel="My accounts" onPress={() => router.push('/my-accounts' as never)}>
+        <BalanceHero balanceMinor={balance.balanceMinor} />
+      </Pressable>
 
       <View style={styles.tileRow}>
         <StatTile
@@ -174,6 +179,8 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
               showTime
               category={txn.categoryId ? (categoryMap.get(txn.categoryId) ?? null) : null}
               split={splitBadges.get(txn.id)}
+              accountLabel={accountLabels.account(txn)}
+              transferLabel={accountLabels.transfer(txn)}
               onPress={() => router.push(`/transaction/${txn.id}`)}
             />
           ))}

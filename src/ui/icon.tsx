@@ -22,6 +22,7 @@
 import {
   ArrowDownToLine,
   ArrowLeft,
+  ArrowLeftRight,
   BadgeIndianRupee,
   BanknoteArrowDown,
   Banknote,
@@ -142,6 +143,8 @@ const ICONS = {
   // added when the component needed it, same as every other entry here.
   'trending-up': TrendingUp,
   'trending-down': TrendingDown,
+  // CR-34 — transfers between your own accounts, Merge into…
+  'arrow-left-right': ArrowLeftRight,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

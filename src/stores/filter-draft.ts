@@ -29,6 +29,8 @@ export type FilterDraft = {
   uncategorized: boolean;
   type: TransactionType | null;
   methods: PaymentMethod[];
+  /** CR-34 (UI-109) — your accounts, multi-select. */
+  accountIds: string[];
   from: number | null;
   to: number | null;
 };
@@ -38,6 +40,7 @@ const EMPTY: FilterDraft = {
   uncategorized: false,
   type: null,
   methods: [],
+  accountIds: [],
   from: null,
   to: null,
 };

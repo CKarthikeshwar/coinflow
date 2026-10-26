@@ -8,7 +8,7 @@ function txn(over: Partial<Transaction> = {}): Transaction {
   return {
     id: 't1', amountMinor: 120_000, direction: 'debit', type: 'expense', categoryId: null, paymentMethod: 'upi', account: 'Barbeque Nation',
     normalizedAccountKey: null, note: 'Dinner', description: null, searchText: '', occurredAt: 1_700_000_000_000, createdAt: 1, updatedAt: 1,
-    deletedAt: null, source: 'manual', smsSender: null, smsReceivedAt: null, dedupeKey: null, editedByUser: false, ...over,
+    deletedAt: null, source: 'manual', smsSender: null, smsReceivedAt: null, dedupeKey: null, editedByUser: false, accountId: null, transferPeerId: null, ...over,
   };
 }
 
@@ -55,5 +55,30 @@ describe('income categories (CR-28)', () => {
   it('an income without a category reads Uncategorized', async () => {
     const { getByText } = await render(<TransactionCard txn={income()} category={null} onPress={() => undefined} />);
     expect(getByText('Uncategorized')).toBeTruthy();
+  });
+});
+
+describe('TransactionCard — accounts and transfers (CR-34)', () => {
+  it('adds the account to the meta line', async () => {
+    const { getByText } = await render(
+      <TransactionCard txn={txn()} category={null} accountLabel="HDFC ··672" onPress={() => undefined} />,
+    );
+    expect(getByText('Uncategorized · HDFC ··672')).toBeTruthy();
+  });
+
+  it('a transfer reads From → To, neutral, never Uncategorized', async () => {
+    const { getByText, queryByText } = await render(
+      <TransactionCard
+        txn={txn({ type: 'transfer', amountMinor: 1_000_000, note: null })}
+        category={null}
+        transferLabel="SBI ··1234 → HDFC ··672"
+        onPress={() => undefined}
+      />,
+    );
+    expect(getByText('SBI ··1234 → HDFC ··672')).toBeTruthy();
+    expect(getByText('Transfer')).toBeTruthy();
+    expect(getByText('₹10,000')).toBeTruthy();
+    expect(queryByText(/Uncategorized/)).toBeNull();
+    expect(queryByText(/−/)).toBeNull();
   });
 });

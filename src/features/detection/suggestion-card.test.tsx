@@ -19,6 +19,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     status: 'pending',
     confirmedTransactionId: null,
     dismissedAt: null,
+    accountId: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };

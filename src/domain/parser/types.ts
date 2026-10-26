@@ -32,6 +32,14 @@ export type IgnoreReason =
   | 'not-yet-settled'
   | 'not-a-txn';
 
+/** §46.4 — which of the user's own accounts the SMS is about (bank from the sender, digits from the body). */
+export type OwnAccountRef = {
+  bankKey: string;
+  bankName: string | null;
+  last4: string;
+  kind: 'bank' | 'credit_card';
+};
+
 export type ParsedFields = {
   amountMinor: number | null;
   direction: Direction | null;
@@ -39,6 +47,7 @@ export type ParsedFields = {
   normalizedKey: string | null;
   paymentMethod: PaymentMethod | null;
   occurredAt: number;
+  ownAccount: OwnAccountRef | null;
 };
 
 export type ParseResult =

@@ -1,7 +1,7 @@
 /**
  * FILE PURPOSE
  * ------------
- * The Settings tab — a static, grouped list of links (Categories, Account rules, Payment
+ * The Settings tab — a static, grouped list of links (My accounts, Categories, Merchant rules, Payment
  * methods, SMS & notifications, Data, About), each pushing its own subpage route under
  * `src/app/`. This screen itself has almost no logic beyond the row list and the one live
  * permission-status subtitle described below.
@@ -16,7 +16,7 @@
 
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors, Spacing } from '@/constants/theme';
@@ -69,8 +69,10 @@ export default function SettingsScreen() {
       <View style={styles.header}>
         <ThemedText type="title">Settings</ThemedText>
       </View>
-      <View style={styles.body}>
+      {/* CR-34: twelve rows no longer fit every phone — the list scrolls */}
+      <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.section}>
+          <Row label="My accounts" icon="landmark" href="/my-accounts" />
           <Row label="Categories" icon="tag" href="/categories" />
           <Row label="Default expense category" icon="bookmark" href="/default-category" subtitle={defaultName ?? 'Not set'} />
           <Row
@@ -87,7 +89,8 @@ export default function SettingsScreen() {
             subtitle={smsOn ? 'On' : 'Off'}
             warn={!smsOn}
           />
-          <Row label="Account rules" icon="history" href="/account-rules" />
+          {/* UI-101: "Account" now means one of YOUR accounts — these rules are about the other party */}
+          <Row label="Merchant rules" icon="history" href="/account-rules" />
           <Row label="Splits & people" icon="users" href="/splits-people" />
           <Row label="Widgets" icon="layout-grid" href="/widgets" />
           <Row label="Data" icon="download" href="/data" />
@@ -96,7 +99,7 @@ export default function SettingsScreen() {
         <ThemedText type="caption" themeColor="text3" style={styles.version}>
           Version {version}
         </ThemedText>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -104,7 +107,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   header: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
-  body: { flex: 1, paddingHorizontal: Spacing.three, paddingTop: Spacing.five },
+  body: { paddingHorizontal: Spacing.three, paddingTop: Spacing.five },
   section: {
     borderRadius: 14,
     backgroundColor: Colors.dark.surface2,

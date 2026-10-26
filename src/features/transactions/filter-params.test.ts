@@ -7,6 +7,7 @@ describe('parseFilterParams', () => {
       uncategorized: false,
       type: undefined,
       methods: [],
+      accountIds: [],
       from: undefined,
       to: undefined,
     });
@@ -38,6 +39,7 @@ describe('parseFilterParams', () => {
       uncategorized: false,
       type: undefined,
       methods: [],
+      accountIds: [],
       from: undefined,
       to: undefined,
     });

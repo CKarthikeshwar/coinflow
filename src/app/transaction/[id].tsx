@@ -28,11 +28,13 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors, Spacing } from '@/constants/theme';
+import { useAccounts } from '@/db/repositories/accounts';
 import { getCategoryMap } from '@/db/repositories/categories';
 import { useSettlementsForTransaction, useSplitForTransaction, useSplitsOverview } from '@/db/repositories/split-hooks';
 import { unsettle } from '@/db/repositories/settlements';
 import { removeSplit, unwaiveShare, waiveShare } from '@/db/repositories/splits';
 import { softDeleteTransaction, useTransaction } from '@/db/repositories/transactions';
+import { softDeleteTransfer, unlinkTransfer } from '@/db/repositories/transfers';
 import type { PaymentMethod } from '@/db/schema';
 import { formatMoney, formatRupees } from '@/domain/format/money';
 import { isSmsCaptureSupported } from '@/services/sms';
@@ -41,6 +43,7 @@ import { useSheetRegistry } from '@/stores';
 import { useToast } from '@/stores/toast';
 import { useUndo } from '@/stores/undo';
 
+import { accountName } from '@/features/accounts/account-label';
 import { settleAndAnnounce } from '@/features/splits/settle-and-announce';
 import { SettlementsSection } from '@/features/splits/settlements-section';
 import { SplitCard } from '@/features/splits/split-card';
@@ -65,6 +68,10 @@ export default function TransactionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data } = useTransaction(id);
   const txn = data?.[0] ?? null;
+  // CR-34 — the other half of a transfer, and your accounts (both read before the early return below)
+  const { data: peerData } = useTransaction(txn?.transferPeerId ?? '');
+  const peer = peerData?.[0] ?? null;
+  const { data: accountRows } = useAccounts();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveSplit, setShowRemoveSplit] = useState(false);
   // V2 (CR-4): the split on this transaction, live — must be read before the early return below.
@@ -94,9 +101,29 @@ export default function TransactionDetailsScreen() {
   const category = txn.categoryId ? (getCategoryMap().get(txn.categoryId) ?? null) : null;
   const signedMinor = txn.direction === 'credit' ? txn.amountMinor : -txn.amountMinor;
 
+  // CR-34 (UI-106) — a transfer reads "SBI ··1234 → HDFC ··672", neutral (no +/−), with Unlink
+  const isTransfer = txn.type === 'transfer';
+  const nameOf = (accountId: string | null) =>
+    accountName(accountId ? (accountRows ?? []).find((a) => a.id === accountId) : null);
+  const livePeer = peer && peer.deletedAt === null ? peer : null;
+  const peerMissing = isTransfer && txn.transferPeerId !== null && !livePeer;
+  const fromId = txn.direction === 'debit' ? txn.accountId : (livePeer?.accountId ?? null);
+  const toId = txn.direction === 'credit' ? txn.accountId : (livePeer?.accountId ?? null);
+  const transferLine = livePeer
+    ? `${nameOf(fromId)} → ${nameOf(toId)}`
+    : txn.direction === 'debit'
+      ? `From ${nameOf(txn.accountId)}`
+      : `Into ${nameOf(txn.accountId)}`;
+  const handleUnlink = () => {
+    unlinkTransfer(txn.id);
+    useToast.getState().show('Unlinked — now an expense and an income');
+  };
+
   const handleDelete = () => {
     setShowDeleteConfirm(false);
-    softDeleteTransaction(txn.id);
+    // a linked transfer is one thing to the user: both halves go, and Undo brings back both
+    if (isTransfer) softDeleteTransfer(txn.id);
+    else softDeleteTransaction(txn.id);
     router.back();
     useUndo.getState().show(txn.id);
   };
@@ -108,7 +135,9 @@ export default function TransactionDetailsScreen() {
   // V2 — only a debit can be split (CR-8). The Split sheet opens "direct": it saves straight to the database.
   const openSplit = () => useSheetRegistry.getState().open('split', { direct: true, transactionId: txn.id });
   const canMerge =
-    availableMinor > 0 && (txn.direction === 'credit' ? overview.owed.length > 0 : overview.youOwe.length > 0);
+    !isTransfer &&
+    availableMinor > 0 &&
+    (txn.direction === 'credit' ? overview.owed.length > 0 : overview.youOwe.length > 0);
   const openMerge = () => useSheetRegistry.getState().open('merge', { transactionId: txn.id });
   const settleSuggestion = () => {
     if (!suggestion) return;
@@ -170,7 +199,7 @@ export default function TransactionDetailsScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <ThemedText type="amountHero" style={styles.amount}>
-          {formatMoney(signedMinor)}
+          {isTransfer ? formatMoney(txn.amountMinor, { sign: 'none' }) : formatMoney(signedMinor)}
         </ThemedText>
         {split ? (
           <ThemedText type="label" themeColor="text3" style={styles.shareLine}>
@@ -179,35 +208,44 @@ export default function TransactionDetailsScreen() {
           </ThemedText>
         ) : null}
 
-        <View style={styles.metaRow}>
-          <ThemedText type="label" themeColor="text3">
-            {txn.direction === 'credit' ? 'Income' : 'Expense'}
-          </ThemedText>
-          <ThemedText type="label" themeColor="text3">
-            ·
-          </ThemedText>
-          {isUncategorized ? (
-            <Pressable accessibilityRole="button" onPress={openEdit} style={styles.setCategoryTap}>
-              <ThemedText type="label" themeColor="text" style={styles.setCategoryLabel}>
-                Set category
-              </ThemedText>
-            </Pressable>
-          ) : (
+        {isTransfer ? (
+          <View style={styles.metaRow}>
+            <Icon name="arrow-left-right" size={14} color="text3" />
             <ThemedText type="label" themeColor="text3">
-              {category?.name ?? 'Uncategorized'}
+              Transfer · {transferLine}
             </ThemedText>
-          )}
-          {txn.paymentMethod ? (
-            <>
+          </View>
+        ) : (
+          <View style={styles.metaRow}>
+            <ThemedText type="label" themeColor="text3">
+              {txn.direction === 'credit' ? 'Income' : 'Expense'}
+            </ThemedText>
+            <ThemedText type="label" themeColor="text3">
+              ·
+            </ThemedText>
+            {isUncategorized ? (
+              <Pressable accessibilityRole="button" onPress={openEdit} style={styles.setCategoryTap}>
+                <ThemedText type="label" themeColor="text" style={styles.setCategoryLabel}>
+                  Set category
+                </ThemedText>
+              </Pressable>
+            ) : (
               <ThemedText type="label" themeColor="text3">
-                ·
+                {category?.name ?? 'Uncategorized'}
               </ThemedText>
-              <ThemedText type="label" themeColor="text3">
-                {PAYMENT_METHOD_LABEL[txn.paymentMethod]}
-              </ThemedText>
-            </>
-          ) : null}
-        </View>
+            )}
+            {txn.paymentMethod ? (
+              <>
+                <ThemedText type="label" themeColor="text3">
+                  ·
+                </ThemedText>
+                <ThemedText type="label" themeColor="text3">
+                  {PAYMENT_METHOD_LABEL[txn.paymentMethod]}
+                </ThemedText>
+              </>
+            ) : null}
+          </View>
+        )}
 
         {/* CR-31: the heading is the note, else the account — never an "Add a note" placeholder; with neither,
             there is no heading at all (Edit is the way to add one). */}
@@ -217,7 +255,10 @@ export default function TransactionDetailsScreen() {
           </ThemedText>
         ) : null}
 
-        {txn.account && headline !== txn.account.trim() ? <DetailRow label="Account" value={txn.account} /> : null}
+        {txn.account && headline !== txn.account.trim() ? <DetailRow label="Paid to / from" value={txn.account} /> : null}
+        {!isTransfer && txn.accountId ? (
+          <DetailRow label={txn.direction === 'credit' ? 'Paid into' : 'Paid from'} value={nameOf(txn.accountId)} />
+        ) : null}
         <DetailRow label="Date & time" value={format(new Date(txn.occurredAt), 'd MMM yyyy · h:mm a')} />
         {txn.description ? <DetailRow label="Description" value={txn.description} /> : null}
 
@@ -230,7 +271,20 @@ export default function TransactionDetailsScreen() {
           </View>
         ) : null}
 
-        {suggestion && !suggestionDismissed ? (
+        {isTransfer ? (
+          <>
+            {peerMissing ? (
+              <ThemedText type="caption" themeColor="text3">
+                Its other half was deleted — Unlink to make this an {txn.direction === 'credit' ? 'income' : 'expense'} again.
+              </ThemedText>
+            ) : null}
+            <View style={styles.splitRow}>
+              <SelectorRow icon="arrow-left-right" label="Unlink" onPress={handleUnlink} />
+            </View>
+          </>
+        ) : null}
+
+        {!isTransfer && suggestion && !suggestionDismissed ? (
           <View style={styles.banner}>
             <SuggestedSettlementBanner
               personName={suggestion.personName}
@@ -247,7 +301,7 @@ export default function TransactionDetailsScreen() {
           </View>
         ) : null}
 
-        {txn.direction === 'debit' && !split ? (
+        {txn.direction === 'debit' && !isTransfer && !split ? (
           <View style={styles.splitRow}>
             <SelectorRow icon="users" label="Split…" onPress={openSplit} />
           </View>
@@ -290,8 +344,8 @@ export default function TransactionDetailsScreen() {
       <ConfirmDialog
         visible={showDeleteConfirm}
         glyph="trash-2"
-        title="Delete transaction?"
-        body="You can undo this for a few seconds after."
+        title={isTransfer ? 'Delete transfer?' : 'Delete transaction?'}
+        body={isTransfer && livePeer ? 'Both sides are removed. You can undo this for a few seconds after.' : 'You can undo this for a few seconds after.'}
         confirmLabel="Delete"
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}

@@ -60,6 +60,8 @@ const nowMs = () => Date.now();
 
 const PAYMENT_METHODS = ['upi', 'card', 'cash', 'bank_transfer', 'wallet'] as const;
 
+const ACCOUNT_KINDS = ['bank', 'credit_card', 'wallet', 'cash'] as const;
+
 export type CategoryAppliesTo = 'expense' | 'income';
 
 export const categories = sqliteTable('category', {
@@ -76,6 +78,47 @@ export const categories = sqliteTable('category', {
   createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
   updatedAt: integer('updatedAt').notNull().$defaultFn(nowMs),
 });
+
+// ---------------------------------------------------------------------------------------------------
+// My accounts (SPEC-implementation.md §46, CR-34). One of *your* accounts — a bank account, a credit card,
+// a wallet, cash in hand — not the other party of a transaction (that is `transaction.account`, labelled
+// "Paid to / from"). D46: an SMS-detected account is identified by `matchKey` = `bankKey:last4`.
+// D48: only the last digits are ever kept, never the full number.
+// ---------------------------------------------------------------------------------------------------
+
+export const myAccounts = sqliteTable('my_account', {
+  id: text('id').primaryKey(),
+  kind: text('kind', { enum: ACCOUNT_KINDS }).notNull(),
+  nickname: text('nickname').notNull(),
+  bankName: text('bankName'),
+  bankKey: text('bankKey'),
+  last4: text('last4'),
+  matchKey: text('matchKey').unique(), // null for manual / cash accounts (SQLite allows many NULLs under UNIQUE)
+  autoCreated: integer('autoCreated', { mode: 'boolean' }).notNull().default(false),
+  archivedAt: integer('archivedAt'),
+  creditLimitMinor: integer('creditLimitMinor'),
+  dueAt: integer('dueAt'),
+  dueAmountMinor: integer('dueAmountMinor'),
+  createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
+  updatedAt: integer('updatedAt').notNull().$defaultFn(nowMs),
+});
+
+/** D44 — a bank-reported (or typed) balance at a point in time; the only balance store. Written from phase D on. */
+export const accountBalances = sqliteTable(
+  'account_balance',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('accountId')
+      .notNull()
+      .references(() => myAccounts.id, { onDelete: 'cascade' }),
+    balanceMinor: integer('balanceMinor').notNull(), // paise; for a card, the available limit (D49)
+    asOf: integer('asOf').notNull(),
+    source: text('source', { enum: ['sms', 'manual'] }).notNull(),
+    dedupeKey: text('dedupeKey').notNull().unique(), // `accountId:asOf:balanceMinor`
+    acknowledgedAt: integer('acknowledgedAt'),
+  },
+  (t) => [index('idx_balance_account_asof').on(t.accountId, t.asOf)],
+);
 
 export const transactions = sqliteTable(
   'transaction',
@@ -106,9 +149,14 @@ export const transactions = sqliteTable(
     smsReceivedAt: integer('smsReceivedAt'),
     dedupeKey: text('dedupeKey'), // copied from the originating suggestion (§17.3)
     editedByUser: integer('editedByUser', { mode: 'boolean' }).notNull().default(false),
+    // §46.2 — which of YOUR accounts this row is on; null = "No account" (every pre-0005 row, no backfill).
+    accountId: text('accountId').references(() => myAccounts.id, { onDelete: 'set null' }),
+    // D43 — the other row of a transfer pair (both `type: 'transfer'`). No FK: kept consistent by `transfers.ts`.
+    transferPeerId: text('transferPeerId'),
   },
   (t) => [
     index('idx_txn_occurred').on(t.deletedAt, t.occurredAt),
+    index('idx_txn_account').on(t.accountId),
     index('idx_txn_type_occurred').on(t.deletedAt, t.type, t.occurredAt),
     index('idx_txn_category').on(t.deletedAt, t.categoryId, t.occurredAt),
     index('idx_txn_dedupe').on(t.dedupeKey),
@@ -158,6 +206,9 @@ export const suggestions = sqliteTable(
     createdAt: integer('createdAt').notNull().$defaultFn(nowMs),
     // CR-30 — when `status` became `'dismissed'`; drives the tombstone's purge TTL (`maintenance.ts`).
     dismissedAt: integer('dismissedAt'),
+    // §46.5 — the account resolved (or auto-created) at ingest; copied to the transaction on Confirm. No FK on
+    // purpose: a merge re-points it, and a deleted account must not block a pending suggestion.
+    accountId: text('accountId'),
   },
   (t) => [
     index('idx_sugg_status').on(t.status, t.createdAt),
@@ -299,6 +350,8 @@ export const schema = {
   splitShares,
   splitRequestsIn,
   settlements,
+  myAccounts,
+  accountBalances,
 };
 
 export type Category = typeof categories.$inferSelect;
@@ -320,6 +373,10 @@ export type SplitRequestIn = typeof splitRequestsIn.$inferSelect;
 export type NewSplitRequestIn = typeof splitRequestsIn.$inferInsert;
 export type Settlement = typeof settlements.$inferSelect;
 export type NewSettlement = typeof settlements.$inferInsert;
+export type MyAccount = typeof myAccounts.$inferSelect;
+export type NewMyAccount = typeof myAccounts.$inferInsert;
+export type AccountBalance = typeof accountBalances.$inferSelect;
+export type AccountKind = (typeof ACCOUNT_KINDS)[number];
 export type ShareRequestState = SplitShare['requestState'];
 export type RequestInStatus = SplitRequestIn['status'];
 

@@ -31,6 +31,9 @@ jest.mock('@/db/repositories/split-hooks', () => ({
   useSplitBadges: () => new Map(),
   useSplitsOverview: () => ({ owedTotalMinor: mockOwedTotalMinor, unattended: mockUnattended }),
 }));
+jest.mock('@/features/accounts/use-account-labels', () => ({
+  useAccountLabels: () => ({ account: () => undefined, transfer: () => undefined }),
+}));
 jest.mock('@/db/repositories/categories', () => ({ getCategoryMap: () => new Map(mockCategories.map((c) => [c.id, c])) }));
 
 jest.mock('@/db/repositories/settings', () => ({
@@ -78,6 +81,8 @@ function transaction(overrides: Partial<Transaction> = {}): Transaction {
     smsReceivedAt: null,
     dedupeKey: null,
     editedByUser: false,
+    accountId: null,
+    transferPeerId: null,
     ...overrides,
   };
 }

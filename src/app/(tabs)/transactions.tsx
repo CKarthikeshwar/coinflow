@@ -27,11 +27,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 
 import { Spacing } from '@/constants/theme';
+import { useAccounts } from '@/db/repositories/accounts';
 import { getCategoryMap, useCategories } from '@/db/repositories/categories';
 import { useSplitBadges } from '@/db/repositories/split-hooks';
 import { useTransactionList } from '@/db/repositories/transactions';
 import type { PaymentMethod, Transaction } from '@/db/schema';
 import { startOfLocalDay } from '@/domain/period';
+import { useAccountLabels } from '@/features/accounts/use-account-labels';
 import { parseFilterParams, type RawFilterParams } from '@/features/transactions/filter-params';
 import { useSheetRegistry } from '@/stores';
 
@@ -69,6 +71,7 @@ export default function TransactionsScreen() {
   const rawParams = useLocalSearchParams<RawFilterParams>();
   const filter = useMemo(() => parseFilterParams(rawParams), [rawParams]);
   const { data: categories } = useCategories();
+  const { data: accounts } = useAccounts();
 
   const { rows, daySubtotals, updatedAt } = useTransactionList({
     search: search.trim() || undefined,
@@ -76,9 +79,11 @@ export default function TransactionsScreen() {
     uncategorized: filter.uncategorized || undefined,
     type: filter.type,
     methods: filter.methods.length ? filter.methods : undefined,
+    accountIds: filter.accountIds.length ? filter.accountIds : undefined,
     from: filter.from,
     to: filter.to,
   });
+  const accountLabels = useAccountLabels(rows); // CR-34 (UI-109)
   const openSheet = useSheetRegistry((s) => s.open);
 
   // Sync + cheap — just re-read every render rather than fighting exhaustive-deps over an
@@ -113,6 +118,13 @@ export default function TransactionsScreen() {
         clear: () => router.setParams({ methods: filter.methods.filter((x) => x !== m).join(',') }),
       });
     }
+    for (const id of filter.accountIds) {
+      chips.push({
+        key: `acc-${id}`,
+        label: (accounts ?? []).find((a) => a.id === id)?.nickname ?? 'Account',
+        clear: () => router.setParams({ accountIds: filter.accountIds.filter((x) => x !== id).join(',') }),
+      });
+    }
     if (filter.from != null || filter.to != null) {
       const label =
         filter.from != null && filter.to != null
@@ -123,10 +135,10 @@ export default function TransactionsScreen() {
       chips.push({ key: 'range', label, clear: () => router.setParams({ from: '', to: '' }) });
     }
     return chips;
-  }, [filter, categories]);
+  }, [filter, categories, accounts]);
 
   const clearAllFilters = () =>
-    router.setParams({ categoryIds: '', uncategorized: '', type: '', methods: '', from: '', to: '' });
+    router.setParams({ categoryIds: '', uncategorized: '', type: '', methods: '', accountIds: '', from: '', to: '' });
 
   const items = useMemo<ListItem[]>(() => {
     const subtotalByDay = new Map(daySubtotals.map((d) => [d.dayStartMs, d.spentMinor]));
@@ -162,6 +174,7 @@ export default function TransactionsScreen() {
                 uncategorized: filter.uncategorized,
                 type: filter.type,
                 methods: filter.methods,
+                accountIds: filter.accountIds,
                 from: filter.from,
                 to: filter.to,
               })
@@ -220,6 +233,8 @@ export default function TransactionsScreen() {
                   txn={item.txn}
                   category={item.txn.categoryId ? (categoryMap.get(item.txn.categoryId) ?? null) : null}
                   split={splitBadges.get(item.txn.id)}
+                  accountLabel={accountLabels.account(item.txn)}
+                  transferLabel={accountLabels.transfer(item.txn)}
                   onPress={() => router.push(`/transaction/${item.txn.id}`)}
                 />
               </View>

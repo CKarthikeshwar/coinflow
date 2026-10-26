@@ -54,6 +54,29 @@ jest.mock('@/services/notifications/respond', () => ({
   handleSave: (...args: unknown[]) => mockHandleSave(...args),
   handleSaveAll: (...args: unknown[]) => mockHandleSaveAll(...args),
 }));
+// CR-34 — the account cards above the queue
+let mockNewAccounts: unknown[] = [];
+let mockTransferHints: unknown[] = [];
+let mockCardBillHints: unknown[] = [];
+const mockLinkPair = jest.fn();
+const mockDismissTransferHint = jest.fn();
+const mockAcceptCardBillHint = jest.fn();
+jest.mock('@/db/repositories/accounts', () => ({
+  useAccounts: () => ({ data: [
+    { id: 'sbi', kind: 'bank', nickname: 'SBI ··1234' },
+    { id: 'hdfc', kind: 'bank', nickname: 'HDFC ··672' },
+    { id: 'card', kind: 'credit_card', nickname: 'HDFC card' },
+  ] }),
+  useNewAccounts: () => ({ data: mockNewAccounts }),
+}));
+jest.mock('@/db/repositories/transfers', () => ({
+  useTransferHints: () => mockTransferHints,
+  useCardBillHints: () => mockCardBillHints,
+  linkPair: (...a: unknown[]) => mockLinkPair(...a),
+  dismissTransferHint: (...a: unknown[]) => mockDismissTransferHint(...a),
+  acceptCardBillHint: (...a: unknown[]) => mockAcceptCardBillHint(...a),
+  clearCardBillHint: jest.fn(),
+}));
 jest.mock('@/services/sms', () => ({
   requestSmsPermissions: (...args: unknown[]) => mockRequestSmsPermissions(...args),
 }));
@@ -73,6 +96,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     status: 'pending',
     confirmedTransactionId: null,
     dismissedAt: null,
+    accountId: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };
@@ -199,5 +223,46 @@ describe('permission banner', () => {
     await fireEvent.press(getByText('Enable'));
     expect(mockRequestSmsPermissions).toHaveBeenCalled();
     expect(mockRefreshPermission).toHaveBeenCalled();
+  });
+});
+
+
+describe('CR-34 — account cards', () => {
+  beforeEach(() => {
+    mockPendingData = { data: [], updatedAt: 1 };
+    mockNewAccounts = [];
+    mockTransferHints = [];
+    mockCardBillHints = [];
+  });
+
+  it('a new account card opens the account sheet (UI-104), even with nothing else to review', async () => {
+    mockNewAccounts = [{ id: 'hdfc', kind: 'bank', nickname: 'HDFC ··672', autoCreated: true }];
+    const { getByText, queryByText } = await render(<ReviewQueueScreen />);
+    expect(getByText('New account found: HDFC ··672')).toBeTruthy();
+    expect(queryByText(/all caught up/)).toBeNull();
+    expect(queryByText('Dismiss all')).toBeNull();
+    await fireEvent.press(getByText('Name it'));
+    const { useSheetRegistry } = jest.requireActual('@/stores') as typeof import('@/stores');
+    expect(useSheetRegistry.getState()).toMatchObject({ current: 'editAccount', params: { accountId: 'hdfc' } });
+  });
+
+  it('"Looks like a transfer?" links on Yes and remembers No (UI-106)', async () => {
+    mockTransferHints = [
+      { outRow: { id: 'o', amountMinor: 1_000_000, accountId: 'sbi' }, inRow: { id: 'i', amountMinor: 1_000_000, accountId: 'hdfc' } },
+    ];
+    const { getByText } = await render(<ReviewQueueScreen />);
+    expect(getByText('₹10,000 out of SBI ··1234, ₹10,000 into HDFC ··672')).toBeTruthy();
+    await fireEvent.press(getByText('Yes, transfer'));
+    expect(mockLinkPair).toHaveBeenCalledWith('o', 'i');
+    await fireEvent.press(getByText('No'));
+    expect(mockDismissTransferHint).toHaveBeenCalledWith('o', 'i');
+  });
+
+  it('a card-bill card turns the debit into a bill payment (UI-108)', async () => {
+    const hint = { row: { id: 't', amountMinor: 1_420_000, accountId: 'sbi' }, cardAccountId: 'card', dedupeKey: 'k' };
+    mockCardBillHints = [hint];
+    const { getByText } = await render(<ReviewQueueScreen />);
+    await fireEvent.press(getByText('Yes, bill payment'));
+    expect(mockAcceptCardBillHint).toHaveBeenCalledWith(hint);
   });
 });

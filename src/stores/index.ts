@@ -21,6 +21,7 @@
  * one screen that uses it (`src/app/(tabs)/analytics.tsx`).
  */
 
+export * from './account-draft';
 export * from './account-rule-draft';
 export * from './add-sheet-draft';
 export * from './category-draft';

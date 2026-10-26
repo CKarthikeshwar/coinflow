@@ -2294,24 +2294,51 @@ the note; *Add a person* is under the search box. The calendar's ⅐-width fix s
 |---|---|---|---|
 | Save toast fades + rises in (340 ms), fades out (280 ms), stays 1 s | `ui/toast.tsx`, `stores/toast.ts` | typecheck / lint only (no component test — animation is native-driven) | Built — **not yet checked on a device** |
 
-### My accounts, balances & transfers — SPEC ONLY (2026-10-25) — CR-34 / UI-UX CR-22
+### My accounts, balances & transfers (2026-10-25) — CR-34 / UI-UX CR-22 — phases A–C built 2026-10-26 (CR-35 / UI-UX CR-23)
 
 | ID | Requirement | Spec | Phase | Status |
 |---|---|---|---|---|
-| UI-101 | "Paid to / from" and "Merchant rules" relabels | UI-UX §6.25 | A | Specified |
-| UI-102 | Accounts under payment methods; **Paid from** chips | §6.25, impl §46.8 | B | Specified |
-| UI-103 | My accounts page + Add/Edit account sheet, total balance | §6.25, impl §46.9 | A | Specified |
-| UI-104 | Accounts created automatically from SMS (+ Review card) | §6.25, impl §46.5 | A | Specified |
-| UI-105 | Manual Transfer in the Add sheet | §6.25, impl §46.6 | B | Specified |
-| UI-106 | Auto-linked transfers, "Looks like a transfer?", Unlink | §6.25, impl §46.3/§46.6 | C | Specified |
+| UI-101 | "Paid to / from" and "Merchant rules" relabels | UI-UX §6.25 | A | Built (unit) |
+| UI-102 | Accounts under payment methods; **Paid from** chips | §6.25, impl §46.8 | B | Built (unit) |
+| UI-103 | My accounts page + Add/Edit account sheet, total balance | §6.25, impl §46.9 | A | Built (unit) — page + sheet; Total balance and row balances are phase D |
+| UI-104 | Accounts created automatically from SMS (+ Review card) | §6.25, impl §46.5 | A | Built (unit) |
+| UI-105 | Manual Transfer in the Add sheet | §6.25, impl §46.6 | B | Built (unit) |
+| UI-106 | Auto-linked transfers, "Looks like a transfer?", Unlink | §6.25, impl §46.3/§46.6 | C | Built (unit) |
 | UI-107 | "Needs a look" (unrecorded money) | §6.25, impl §46.3 `reconcile` | D | Specified |
-| UI-108 | Credit cards: bill = transfer, due-date reminder | §6.25, impl §46.4/§46.10 | C/E | Specified |
-| UI-109 | Home total, list meta, filter, notification line, Balances widget | §6.25, impl §46.10 | B/D/E | Specified (widget needs a prototype first) |
-| IMP-105 | Migration `0005_my_accounts` (`my_account`, `account_balance`, `transaction.accountId/transferPeerId`, `suggestion.accountId`) | impl §46.2 | A | Specified |
-| IMP-106 | Domain: account-key, balance, reconcile, transfers, card-bill | §46.3 | A–D | Specified |
-| IMP-107 | Parser: own account, balance, due date, `balance` result variant | §46.4 | A/D | Specified |
-| IMP-108 | Ingest: resolve / auto-create account, snapshots, idempotent sweep | §46.5 | A/D | Specified |
-| IMP-109 | Repositories + invariants + CSV columns | §46.6/§46.7 | A–C | Specified |
+| UI-108 | Credit cards: bill = transfer, due-date reminder | §6.25, impl §46.4/§46.10 | C/E | Partly built (unit) — bill-payment card (C); due date + reminder are phase E |
+| UI-109 | Home total, list meta, filter, notification line, Balances widget | §6.25, impl §46.10 | B/D/E | Partly built (unit) — list meta, filter, notification line, Home card opens My accounts; Home total (D) and widget (E, prototype first) not built |
+| IMP-105 | Migration `0005_my_accounts` (`my_account`, `account_balance`, `transaction.accountId/transferPeerId`, `suggestion.accountId`) | impl §46.2 | A | Built (unit) — `migration-v5.test.ts` |
+| IMP-106 | Domain: account-key, balance, reconcile, transfers, card-bill | §46.3 | A–D | Partly built (unit) — account-key, transfers, card-bill; balance + reconcile are phase D |
+| IMP-107 | Parser: own account, balance, due date, `balance` result variant | §46.4 | A/D | Partly built (unit) — own account (corpus); balance, due date, `balance` variant are D / E |
+| IMP-108 | Ingest: resolve / auto-create account, snapshots, idempotent sweep | §46.5 | A/D | Partly built (unit) — resolve / auto-create at ingest; snapshots are phase D |
+| IMP-109 | Repositories + invariants + CSV columns | §46.6/§46.7 | A–C | Built (unit) — accounts, transfers, `accountIds` filter, CSV columns (`myAccount`, `transferPeerId`) |
 | IMP-110 | Card-bill reminder + widget schema v2 | §46.10 | E | Specified |
 
-**Nothing in this section is built.** Open questions for the owner are listed in impl §46.12.
+Open questions for the owner are listed in impl §46.12.
+
+#### As built — phases A–C (2026-10-26, CR-35 / UI-UX CR-23)
+
+| Requirement | Where | Tests | Status |
+|---|---|---|---|
+| Migration 0005: `my_account`, `account_balance`, `transaction.accountId` (FK set null) / `transferPeerId`, `suggestion.accountId`; additive | `schema.ts`, `migrations/0005_my_accounts.sql` | `migration-v5.test.ts` (real SQLite: rows intact, set-null + cascade, unique matchKey) | Pass (unit) |
+| Bank key from sender (DLT headers → one key); apps read the bank from the body; `bankKey:last4`; "HDFC ··672" | `domain/accounts/account-key.ts` | `account-key.test.ts` | Pass (unit) |
+| Parser: own account (masked digits, bare mask, last 4 of a long mask, credit-card kind from the matched mention) | `parser/extract.ts` `extractOwnAccount`, `parse-sms.ts` | corpus (every fixture now asserts `ownAccount`; 5 new `own-*` fixtures) | Pass (unit) |
+| Ingest: resolve / auto-create the account, store it on the suggestion; never on an ignored or duplicate SMS; a failure never drops the SMS; card-bill hint | `services/tasks/sms-ingest.ts` | `sms-ingest.test.ts` (8 new) | Pass (unit) |
+| Accounts repo: create / edit / archive / merge / resolve; duplicates refused; manual account matched by later SMS | `db/repositories/accounts.ts` | `accounts.test.ts` (real SQLite) | Pass (unit) |
+| My accounts page (sections, New pill, Add per section, Show archived, empty state) + Add / Edit account sheet (Kind, Nickname, Bank, Last 4, Archive, Merge into…) | `app/my-accounts.tsx`, `features/accounts/account-sheet.tsx` | typecheck / lint only (no component test yet) | Built |
+| Relabels: "Paid to / from" (sheet, Details), "Merchant rules" (Settings, screen title) | `transaction-sheet.tsx`, `transaction/[id].tsx`, `settings.tsx`, `account-rules.tsx` | `transaction-sheet.test.tsx`, `settings.test.tsx` | Pass (unit) |
+| Paid from / Paid into chips: fitting accounts only, preselection, follows the method, ⚠ for a misfit | `transaction-sheet.tsx`, `domain/accounts/method-kinds.ts`, `features/accounts/account-chips.tsx` | `transaction-sheet.test.tsx`, `method-kinds.test.ts` | Pass (unit) |
+| Account carried by Confirm, notification Save and Save all; notification + Review card show it | `write-confirmed-transaction.ts`, `respond.ts`, `content.ts`, `suggestion-card.tsx` | `write-confirmed-transaction.test.ts`, `content.test.ts` | Pass (unit) |
+| Manual Transfer (Add, ≥ 2 accounts; edit both sides) | `transaction-sheet.tsx`, `transfers.ts` `createTransfer` / `updateTransfer` | `transaction-sheet.test.tsx`, `transfers.test.ts` | Pass (unit) |
+| Auto-link (one SMS twin within 15 min) + "Linked as a transfer · Undo"; ambiguous → Review card; "No" remembered | `domain/accounts/transfers.ts`, `transfers.ts`, `review-cards.tsx` | `transfers.test.ts` (domain + real SQLite), `review-queue.test.tsx` | Pass (unit) |
+| Unlink; one-side edit unlinks; delete removes both, Undo restores both; merge unlinks pairs inside one account | `transfers.ts`, `transactions.ts`, `accounts.ts`, `transaction/[id].tsx` | `transfers.test.ts`, `accounts.test.ts`, `[id].test.tsx` | Pass (unit) |
+| A pair is one list row ("SBI ··1234 → HDFC ··672", neutral); account in the meta line; Accounts filter | `transactions.ts` `hideCreditHalf`, `transaction-card.tsx`, `use-account-labels.ts`, `filter-sheet.tsx` | `transfers.test.ts` (list query), `transaction-card.test.tsx`, `filter-sheet.test.tsx`, `transactions.test.tsx` | Pass (unit) |
+| Card-bill hint → Review card → single-sided transfer | `card-bill.ts`, `transfers.ts` | `card-bill.test.ts`, `transfers.test.ts`, `review-queue.test.tsx` | Pass (unit) |
+| End-to-end without a phone: real-shaped HDFC / SBI / Canara / credit-card texts → real `smsIngestTask` → Save all → real SQLite (accounts, links, unlink, delete + Undo, card bill, merge, two-way ambiguity) | `services/tasks/accounts-pipeline.test.ts` | itself | Pass (unit) — found the two-way ambiguity bug (CR-35 14a) and that `HDFCBN` texts never pass the sender gate (`constants/sms-senders.ts` seeds only `HDFCBK`; not changed) |
+| **Analytics regression:** a transfer pair moves no figure (summary, balance, categories, income breakdown, largest, daily — the widget uses the same summary) | `analytics.ts` (unchanged) | `transfers.test.ts` | Pass (unit) |
+
+**Not yet checked on a device** — needs a release build (migration 0005 runs on the real database at first launch). To check:
+real SMS from ≥ 2 banks create two accounts with a **New** pill and a *New account found* card; renaming one from the card clears the pill; a new SMS
+lands on the renamed account; Add with UPI preselects the only bank account; Transfer SBI → Cash saves one row that Home / Analytics ignore; a real
+SBI → HDFC move links on its own with "Linked as a transfer · Undo"; Unlink; delete + Undo of a transfer; the Accounts filter; the notification line.
+Phases D (balances) and E (card due dates, Balances widget — prototype first) are not built.

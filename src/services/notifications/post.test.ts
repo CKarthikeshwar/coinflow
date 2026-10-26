@@ -5,6 +5,7 @@ import { countPending } from '@/db/repositories/suggestions';
 import { cancelForSuggestion, postForSuggestion, refreshGroupSummary, TXN_GROUP_IDENTIFIER } from './post';
 
 jest.mock('@/db/repositories/suggestions', () => ({ countPending: jest.fn() }));
+jest.mock('@/db/repositories/accounts', () => ({ getAccount: jest.fn(() => null) }));
 jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(),
   scheduleNotificationAsync: jest.fn().mockResolvedValue('id'),
@@ -31,6 +32,7 @@ function suggestion(overrides: Partial<Suggestion> = {}): Suggestion {
     status: 'pending',
     confirmedTransactionId: null,
     dismissedAt: null,
+    accountId: null,
     createdAt: 1_700_000_000_000,
     ...overrides,
   };

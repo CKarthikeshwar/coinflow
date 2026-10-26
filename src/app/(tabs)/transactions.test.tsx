@@ -32,6 +32,11 @@ const mockCategories: Category[] = [
 let mockListResult: { rows: Transaction[]; daySubtotals: { dayStartMs: number; spentMinor: number }[]; updatedAt: number | undefined };
 
 jest.mock('@/db/repositories/split-hooks', () => ({ useSplitBadges: () => new Map() }));
+jest.mock('@/features/accounts/use-account-labels', () => ({
+  useAccountLabels: () => ({ account: () => undefined, transfer: () => undefined }),
+}));
+let mockAccounts: { id: string; nickname: string }[] = [];
+jest.mock('@/db/repositories/accounts', () => ({ useAccounts: () => ({ data: mockAccounts }) }));
 jest.mock('@/db/repositories/categories', () => ({
   getCategoryMap: () => new Map(mockCategories.map((c) => [c.id, c])),
   useCategories: () => ({ data: mockCategories }),
@@ -60,6 +65,8 @@ function transaction(overrides: Partial<Transaction> = {}): Transaction {
     smsReceivedAt: null,
     dedupeKey: null,
     editedByUser: false,
+    accountId: null,
+    transferPeerId: null,
     ...overrides,
   };
 }
@@ -125,4 +132,13 @@ it('the Filter button opens the filter sheet seeded with the currently-applied f
   expect(useSheetRegistry.getState()).toEqual(
     expect.objectContaining({ current: 'filter', params: expect.objectContaining({ type: 'income' }) }),
   );
+});
+
+it('CR-34 — an account filter is queried and shown as a removable chip', async () => {
+  mockAccounts = [{ id: 'hdfc', nickname: 'HDFC ··672' }];
+  mockSearchParams = { accountIds: 'hdfc' };
+  mockListResult = { rows: [], daySubtotals: [], updatedAt: Date.now() };
+  const { getByLabelText } = await render(<TransactionsScreen />);
+  await fireEvent.press(getByLabelText('Remove HDFC ··672'));
+  expect(mockRouterSetParams).toHaveBeenCalledWith({ accountIds: '' });
 });

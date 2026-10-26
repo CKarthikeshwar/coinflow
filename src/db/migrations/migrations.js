@@ -6,6 +6,7 @@ import m0001 from './0001_fts_search.sql';
 import m0002 from './0002_v2_splits.sql';
 import m0003 from './0003_income_categories.sql';
 import m0004 from './0004_dismissed_suggestion_tombstone.sql';
+import m0005 from './0005_my_accounts.sql';
 
   export default {
     journal,
@@ -14,7 +15,8 @@ import m0004 from './0004_dismissed_suggestion_tombstone.sql';
 m0001,
 m0002,
 m0003,
-m0004
+m0004,
+m0005
     }
   }
   

@@ -44,10 +44,23 @@ import { randomUUID } from 'expo-crypto';
 import { db } from '@/db/client';
 import { getAccountRule } from '@/db/repositories/account-rules';
 import { dismissSuggestion, getSuggestion, listPending } from '@/db/repositories/suggestions';
+import { linkTransferIfAny } from '@/db/repositories/transfers';
 import { accountRules, suggestions, transactions } from '@/db/schema';
 import { isKnownAccountRule, ruleCategoryFor } from '@/domain/categorize';
 
 import { cancelForSuggestion } from './post';
+
+/**
+ * §46.6 auto-link after a save: an unambiguous twin on another of your accounts becomes a transfer. Runs right after
+ * the write (same synchronous driver). A failure only means no link — the save itself already happened.
+ */
+function linkQuietly(transactionId: string): void {
+  try {
+    linkTransferIfAny(transactionId);
+  } catch (e) {
+    console.warn('[respond] transfer link skipped:', (e as Error)?.name ?? 'unknown');
+  }
+}
 
 export type SaveOutcome =
   | { outcome: 'saved'; transactionId: string }
@@ -107,6 +120,8 @@ export async function handleSave(suggestionId: string): Promise<SaveOutcome> {
         smsReceivedAt: suggestion.smsReceivedAt,
         dedupeKey: suggestion.dedupeKey,
         editedByUser: false,
+        accountId: suggestion.accountId, // §46.5 — the account resolved at ingest
+        transferPeerId: null,
       })
       .run();
 
@@ -121,6 +136,7 @@ export async function handleSave(suggestionId: string): Promise<SaveOutcome> {
       .run();
   });
 
+  if (suggestion.accountId) linkQuietly(transactionId);
   await cancelForSuggestion(suggestionId);
   return { outcome: 'saved', transactionId };
 }
@@ -140,6 +156,7 @@ export type SaveAllDefaults = { expense: string | null; income: string | null };
 export async function handleSaveAll(defaults: SaveAllDefaults): Promise<SaveAllOutcome> {
   const pending = listPending();
   const savedIds: string[] = [];
+  const savedTransactionIds: string[] = [];
   const now = Date.now();
 
   db.transaction((tx) => {
@@ -177,6 +194,8 @@ export async function handleSaveAll(defaults: SaveAllDefaults): Promise<SaveAllO
           smsReceivedAt: suggestion.smsReceivedAt,
           dedupeKey: suggestion.dedupeKey,
           editedByUser: false,
+          accountId: suggestion.accountId,
+          transferPeerId: null,
         })
         .run();
       tx.update(suggestions)
@@ -184,8 +203,10 @@ export async function handleSaveAll(defaults: SaveAllDefaults): Promise<SaveAllO
         .where(eq(suggestions.id, suggestion.id))
         .run();
       savedIds.push(suggestion.id);
+      if (suggestion.accountId) savedTransactionIds.push(transactionId);
     }
   });
+  savedTransactionIds.forEach(linkQuietly);
 
   await Promise.all(savedIds.map((id) => cancelForSuggestion(id)));
   return { saved: savedIds.length, skipped: pending.length - savedIds.length };

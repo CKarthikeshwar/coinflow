@@ -22,6 +22,8 @@
  * `src/features/app-shell/notification-router.tsx` (a tap that opens the app).
  */
 
+import { getAccount } from '@/db/repositories/accounts';
+import { defaultNickname } from '@/domain/accounts/account-key';
 import { isKnownAccountRule } from '@/domain/categorize';
 import { formatMoney } from '@/domain/format/money';
 import type { AccountRule, PaymentMethod, Suggestion } from '@/db/schema';
@@ -47,10 +49,12 @@ function buildTitle(suggestion: Suggestion): string {
   return `${amountLabel} ${directionWord}`;
 }
 
-function buildBody(suggestion: Suggestion): string {
-  if (!suggestion.account) return 'Unknown account';
+function buildBody(suggestion: Suggestion, accountLabel?: string | null): string {
+  // UI-109 (CR-34) — which of YOUR accounts, when the SMS named one ("Swiggy · UPI · HDFC ··672")
+  const yours = accountLabel ? ` · ${accountLabel}` : '';
+  if (!suggestion.account) return `Unknown account${yours}`;
   const methodLabel = suggestion.paymentMethod ? PAYMENT_METHOD_LABEL[suggestion.paymentMethod] : null;
-  return methodLabel ? `${suggestion.account} · ${methodLabel}` : suggestion.account;
+  return `${methodLabel ? `${suggestion.account} · ${methodLabel}` : suggestion.account}${yours}`;
 }
 
 export type TxnNotificationData = {
@@ -70,15 +74,27 @@ export type TxnNotificationContent = {
   data: TxnNotificationData;
 };
 
+/** The nickname of the account the suggestion was matched to at ingest, if any (never throws — it is only a label). */
+export function suggestionAccountLabel(suggestion: Pick<Suggestion, 'accountId'>): string | null {
+  if (!suggestion.accountId) return null;
+  try {
+    const account = getAccount(suggestion.accountId);
+    return account ? account.nickname || defaultNickname(account.bankKey, account.last4) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildTxnNotification(
   suggestion: Suggestion,
   rule: AccountRule | null,
+  accountLabel?: string | null,
 ): TxnNotificationContent {
   return {
     identifier: `sug:${suggestion.id}`,
     categoryIdentifier: isKnownAccountRule(rule, suggestion.direction ?? 'debit') ? TXN_KNOWN_CATEGORY : TXN_NEW_CATEGORY,
     title: buildTitle(suggestion),
-    body: buildBody(suggestion),
+    body: buildBody(suggestion, accountLabel),
     threadId: TXN_REVIEW_THREAD_ID,
     data: {
       kind: 'suggestion',

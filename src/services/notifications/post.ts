@@ -36,7 +36,7 @@ import * as Notifications from 'expo-notifications';
 import { countPending } from '@/db/repositories/suggestions';
 import type { AccountRule, Suggestion } from '@/db/schema';
 
-import { buildTxnNotification } from './content';
+import { buildTxnNotification, suggestionAccountLabel } from './content';
 
 export const TXN_GROUP_IDENTIFIER = 'txn-group';
 
@@ -76,7 +76,7 @@ export async function postForSuggestion(
 ): Promise<void> {
   if (!(await notificationsGranted())) return; // §31.7 — silent, no throw, no log noise
 
-  const content = buildTxnNotification(suggestion, rule);
+  const content = buildTxnNotification(suggestion, rule, suggestionAccountLabel(suggestion));
   await Notifications.scheduleNotificationAsync({
     identifier: content.identifier,
     content: {

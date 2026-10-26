@@ -54,12 +54,14 @@ function descriptorFor(suggestion: Suggestion): string {
 export type SuggestionCardProps = {
   suggestion: Suggestion;
   known: boolean;
+  /** UI-109 — which of your accounts the SMS named ("HDFC ··672"); omitted when it named none. */
+  accountName?: string;
   onOpen: () => void;
   onSave?: () => void;
   onDismiss: () => void;
 };
 
-export function SuggestionCard({ suggestion, known, onOpen, onSave, onDismiss }: SuggestionCardProps) {
+export function SuggestionCard({ suggestion, known, accountName, onOpen, onSave, onDismiss }: SuggestionCardProps) {
   const iconName: IconName = suggestion.paymentMethod ? METHOD_ICON[suggestion.paymentMethod] : 'credit-card';
 
   return (
@@ -73,7 +75,8 @@ export function SuggestionCard({ suggestion, known, onOpen, onSave, onDismiss }:
             {amountLabel(suggestion)}
           </ThemedText>
           <ThemedText type="label" themeColor="text3">
-            {descriptorFor(suggestion)} · {formatWhen(suggestion.smsReceivedAt)}
+            {descriptorFor(suggestion)}
+            {accountName ? ` · ${accountName}` : ''} · {formatWhen(suggestion.smsReceivedAt)}
           </ThemedText>
         </View>
       </Pressable>
