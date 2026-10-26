@@ -17,8 +17,8 @@ import java.util.Locale
 /**
  * FILE PURPOSE
  * ------------
- * The three home-screen widgets (SPEC-implementation.md §44.4, SPEC-UI-UX.md §6.22–§6.24): Money summary, Queue
- * ("To review") and Quick add. Each is a plain `AppWidgetProvider` drawing `RemoteViews` from the snapshot JS
+ * The four home-screen widgets (SPEC-implementation.md §44.4 / §46.10, SPEC-UI-UX.md §6.22–§6.25): Money summary,
+ * Queue ("To review"), Quick add and (CR-34) Balances. Each is a plain `AppWidgetProvider` drawing `RemoteViews` from the snapshot JS
  * published (`WidgetStore`) — providers never compute anything (IMP-091) and need no permission (IMP-097).
  *
  * BEHAVIOUR NOTES
@@ -176,6 +176,85 @@ class QuickAddWidgetProvider : BaseWidgetProvider() {
     v.setOnClickPendingIntent(R.id.cf_root, linkIntent(ctx, appWidgetId * 10 + 5, "coinflow://add"))
     val wide = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 40) >= 110
     v.setViewVisibility(R.id.cf_label, if (wide) View.VISIBLE else View.GONE)
+    return v
+  }
+}
+
+private const val DAY_MS = 86_400_000L
+private const val STALE_MS = 3 * DAY_MS
+
+/** "just now" / "12m ago" / "3h ago" / "4d ago" — the widget's own short form of `formatWhen`. */
+internal fun agoText(ts: Long, now: Long): String {
+  val diff = (now - ts).coerceAtLeast(0)
+  return when {
+    diff < 60_000L -> "just now"
+    diff < 3_600_000L -> "${diff / 60_000L}m ago"
+    diff < DAY_MS -> "${diff / 3_600_000L}h ago"
+    else -> "${diff / DAY_MS}d ago"
+  }
+}
+
+/**
+ * Balances (CR-34, §46.10 / UI-109; approved prototype `design-prototype/01-midnight/balances-widget.html`) — the total
+ * of your bank / wallet / cash accounts (cards are not your money, D49) and, at 4×2, the three largest. The footer
+ * is the oldest figure in the total; past 3 days it adds "may be out of date" and each old row "· 4d old" (wording,
+ * not colour — widgets are black and white). Tap anywhere → My accounts.
+ */
+class BalancesWidgetProvider : BaseWidgetProvider() {
+  private val rows = arrayOf(
+    Triple(R.id.cf_bal_row1, R.id.cf_bal_row1_name, R.id.cf_bal_row1_amount),
+    Triple(R.id.cf_bal_row2, R.id.cf_bal_row2_name, R.id.cf_bal_row2_amount),
+    Triple(R.id.cf_bal_row3, R.id.cf_bal_row3_name, R.id.cf_bal_row3_amount),
+  )
+
+  override fun render(ctx: Context, appWidgetId: Int, options: Bundle): RemoteViews {
+    val v = RemoteViews(ctx.packageName, R.layout.cf_widget_balances)
+    v.setOnClickPendingIntent(R.id.cf_root, linkIntent(ctx, appWidgetId * 10 + 7, "coinflow://my-accounts"))
+    val narrow = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250) < 200
+
+    val s = WidgetStore.read(ctx)
+    val a = s?.accounts
+    if (s == null || a == null || a.knownCount == 0) {
+      v.setViewVisibility(R.id.cf_content, View.GONE)
+      v.setViewVisibility(R.id.cf_footer, View.GONE)
+      v.setViewVisibility(R.id.cf_message, View.VISIBLE)
+      val setUp = s == null
+      v.setTextViewText(
+        R.id.cf_message_text,
+        when {
+          setUp -> "Open CoinFlow to set up"
+          narrow -> "No balances yet"
+          else -> "No balances yet. They appear as your bank texts arrive."
+        },
+      )
+      v.setViewVisibility(R.id.cf_message_pill, if (setUp) View.GONE else View.VISIBLE)
+      return v
+    }
+
+    val now = System.currentTimeMillis()
+    v.setViewVisibility(R.id.cf_message, View.GONE)
+    v.setViewVisibility(R.id.cf_content, View.VISIBLE)
+    v.setViewVisibility(R.id.cf_footer, View.VISIBLE)
+    v.setTextViewText(R.id.cf_total, money(a.totalMinor, s.hideAmounts))
+    v.setTextViewText(R.id.cf_across, "across ${a.knownCount} account${if (a.knownCount == 1) "" else "s"}")
+    val old = a.updatedAt > 0 && now - a.updatedAt > STALE_MS
+    v.setTextViewText(
+      R.id.cf_footer,
+      if (a.updatedAt <= 0) "" else "updated ${agoText(a.updatedAt, now)}" + if (old) " · may be out of date" else "",
+    )
+
+    v.setViewVisibility(R.id.cf_rows, if (narrow) View.GONE else View.VISIBLE)
+    for ((i, r) in rows.withIndex()) {
+      val item = a.items.getOrNull(i)
+      if (narrow || item == null) {
+        v.setViewVisibility(r.first, View.GONE)
+        continue
+      }
+      val stale = item.asOf > 0 && now - item.asOf > STALE_MS
+      v.setViewVisibility(r.first, View.VISIBLE)
+      v.setTextViewText(r.second, if (stale) "${item.nickname} · ${(now - item.asOf) / DAY_MS}d old" else item.nickname)
+      v.setTextViewText(r.third, money(item.balanceMinor, s.hideAmounts))
+    }
     return v
   }
 }

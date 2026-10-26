@@ -289,3 +289,19 @@ export function countAccountTransactions(id: string): number {
     .get();
   return row?.n ?? 0;
 }
+
+/**
+ * §46.5 — a card statement's due date and amount. Only a statement for the same or a later due date replaces what is
+ * stored, so an old statement re-read by the reconcile sweep never rolls the bill back. Returns whether it changed.
+ */
+export function updateCardDue(accountId: string, due: { amountMinor: number; dueAt: number }): boolean {
+  const current = getAccount(accountId);
+  if (!current) return false;
+  if (current.dueAt !== null && due.dueAt < current.dueAt) return false;
+  if (current.dueAt === due.dueAt && current.dueAmountMinor === due.amountMinor) return false;
+  db.update(myAccounts)
+    .set({ dueAt: due.dueAt, dueAmountMinor: due.amountMinor, updatedAt: Date.now() })
+    .where(eq(myAccounts.id, accountId))
+    .run();
+  return true;
+}

@@ -26,7 +26,10 @@ jest.mock('@/db/repositories/account-rules', () => ({
 jest.mock('@/db/repositories/accounts', () => ({
   resolveAccountFromSms: jest.fn().mockReturnValue({ id: 'acc-hdfc', created: true }),
   listCardLast4s: jest.fn().mockReturnValue([]),
+  updateCardDue: jest.fn().mockReturnValue(true),
 }));
+jest.mock('@/db/repositories/balances', () => ({ recordSnapshot: jest.fn() }));
+jest.mock('@/services/notifications/card-bill-reminder', () => ({ scheduleCardBillReminders: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@/db/repositories/transfers', () => ({ recordCardBillHint: jest.fn() }));
 jest.mock('@/db/repositories/transactions', () => ({
   hasDedupeKey: jest.fn().mockReturnValue(false),
@@ -97,7 +100,7 @@ describe('smsIngestTask — own account (§46.5, CR-34)', () => {
   });
 
   it('an ignored SMS never creates an account', async () => {
-    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Your A/c XX1234 Avl Bal is Rs.12,340.00.' });
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Dear Customer, your Avl Bal is Rs.12,340.00.' }); // names no account
     expect(resolveAccountFromSms).not.toHaveBeenCalled();
   });
 
@@ -283,5 +286,49 @@ describe('smsIngestTask — V2 request branch (§42.2, IMP-079)', () => {
   it('never throws if the request branch throws', async () => {
     handleIncomingRequestMock.mockRejectedValueOnce(new TypeError('boom'));
     await expect(smsIngestTask(QUALIFYING_SMS)).resolves.toBeUndefined();
+  });
+});
+
+
+describe('smsIngestTask — balances and card bills (§46.5, phase D / E)', () => {
+  const balances = jest.requireMock('@/db/repositories/balances') as { recordSnapshot: jest.Mock };
+  const accounts = jest.requireMock('@/db/repositories/accounts') as { updateCardDue: jest.Mock };
+  const reminders = jest.requireMock('@/services/notifications/card-bill-reminder') as { scheduleCardBillReminders: jest.Mock };
+
+  it('a transaction with "Avl Bal" writes a snapshot at ingest, as of when the text arrived', async () => {
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Rs.450.00 debited from A/c XX1234 to VPA m@okhdfcbank. Avl Bal Rs.9,550.00' });
+    expect(balances.recordSnapshot).toHaveBeenCalledWith({ accountId: 'acc-hdfc', balanceMinor: 955000, asOf: 1_700_000_000_000, source: 'sms' });
+    expect(insertIfNewMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a balance-only text about your account: a snapshot, no suggestion, no notification', async () => {
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Your A/c XX1234 Avl Bal is Rs.12,340.00 as of 20-10-26.' });
+    expect(balances.recordSnapshot).toHaveBeenCalledWith(expect.objectContaining({ balanceMinor: 1234000 }));
+    expect(insertIfNewMock).not.toHaveBeenCalled();
+    expect(postForSuggestionMock).not.toHaveBeenCalled();
+  });
+
+  it('a card statement updates the due date and re-plans the reminders', async () => {
+    await smsIngestTask({
+      ...QUALIFYING_SMS,
+      body: 'Your HDFC Bank Credit Card XX4321 statement: Total due Rs.14,200.00, due date 05-Nov-26.',
+    });
+    expect(accounts.updateCardDue).toHaveBeenCalledWith('acc-hdfc', { amountMinor: 1420000, dueAt: new Date(2026, 10, 5).getTime() });
+    expect(reminders.scheduleCardBillReminders).toHaveBeenCalled();
+    expect(insertIfNewMock).not.toHaveBeenCalled();
+  });
+
+  it('an unchanged due date does not re-plan', async () => {
+    accounts.updateCardDue.mockReturnValueOnce(false);
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'HDFC Credit Card XX4321: Total due Rs.14,200.00, due date 05-Nov-26.' });
+    expect(reminders.scheduleCardBillReminders).not.toHaveBeenCalled();
+  });
+
+  it('a snapshot failure never drops the transaction', async () => {
+    balances.recordSnapshot.mockImplementationOnce(() => {
+      throw new Error('db');
+    });
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Rs.450.00 debited from A/c XX1234 to VPA m@okhdfcbank. Avl Bal Rs.9,550.00' });
+    expect(insertIfNewMock).toHaveBeenCalledTimes(1);
   });
 });

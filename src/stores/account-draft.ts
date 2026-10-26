@@ -14,12 +14,16 @@ export type AccountDraft = {
   nickname: string;
   bankName: string;
   last4: string;
+  /** CR-34 (UI-103a) — "Current balance" as typed (rupees); saved as a manual snapshot only when changed */
+  balanceText: string;
   dirty: boolean;
   submitting: boolean;
   error: string | null;
 };
 
-export type AccountDraftSeed = Partial<Pick<AccountDraft, 'accountId' | 'kind' | 'nickname' | 'bankName' | 'last4'>>;
+export type AccountDraftSeed = Partial<
+  Pick<AccountDraft, 'accountId' | 'kind' | 'nickname' | 'bankName' | 'last4' | 'balanceText'>
+>;
 
 const BLANK: AccountDraft = {
   accountId: null,
@@ -27,17 +31,18 @@ const BLANK: AccountDraft = {
   nickname: '',
   bankName: '',
   last4: '',
+  balanceText: '',
   dirty: false,
   submitting: false,
   error: null,
 };
 
-const DIRTY_KEYS = ['kind', 'nickname', 'bankName', 'last4'] as const satisfies readonly (keyof AccountDraft)[];
+const DIRTY_KEYS = ['kind', 'nickname', 'bankName', 'last4', 'balanceText'] as const satisfies readonly (keyof AccountDraft)[];
 
 type AccountDraftStore = AccountDraft & {
   _initial: AccountDraft;
   open: (seed: AccountDraftSeed) => void;
-  patch: (fields: Partial<Pick<AccountDraft, 'kind' | 'nickname' | 'bankName' | 'last4'>>) => void;
+  patch: (fields: Partial<Pick<AccountDraft, 'kind' | 'nickname' | 'bankName' | 'last4' | 'balanceText'>>) => void;
   setSubmitting: (submitting: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;

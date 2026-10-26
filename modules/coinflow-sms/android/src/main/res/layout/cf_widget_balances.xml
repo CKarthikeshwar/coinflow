@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CR-34 (§46.10, UI-109) — Balances: your accounts' total + up to 3 accounts. Approved prototype:
+     design-prototype/01-midnight/balances-widget.html (2026-10-26). 2×2 hides the rows column. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/cf_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:orientation="vertical"
+  android:padding="14dp"
+  android:background="@drawable/cf_widget_bg">
+
+  <TextView
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="Balances"
+    android:textColor="@color/cf_widget_text2"
+    android:textSize="13sp"
+    android:fontFamily="sans-serif-medium"
+    android:maxLines="1" />
+
+  <LinearLayout
+    android:id="@+id/cf_content"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:orientation="horizontal"
+    android:gravity="center_vertical">
+
+    <LinearLayout
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:orientation="vertical">
+      <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Total"
+        android:textColor="@color/cf_widget_text3"
+        android:textSize="11sp" />
+      <TextView
+        android:id="@+id/cf_total"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/cf_widget_text"
+        android:textSize="26sp"
+        android:fontFamily="sans-serif-medium"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+      <TextView
+        android:id="@+id/cf_across"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/cf_widget_text3"
+        android:textSize="11sp"
+        android:maxLines="1" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:id="@+id/cf_rows"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1.25"
+      android:layout_marginStart="14dp"
+      android:orientation="vertical">
+      <LinearLayout
+        android:id="@+id/cf_bal_row1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="0dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+        <TextView
+          android:id="@+id/cf_bal_row1_name"
+          android:layout_width="0dp"
+          android:layout_height="wrap_content"
+          android:layout_weight="1"
+          android:ellipsize="end"
+          android:maxLines="1"
+          android:textColor="@color/cf_widget_text2"
+          android:textSize="13sp" />
+        <TextView
+          android:id="@+id/cf_bal_row1_amount"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginStart="8dp"
+          android:maxLines="1"
+          android:textColor="@color/cf_widget_text"
+          android:textSize="13sp" />
+      </LinearLayout>
+      <LinearLayout
+        android:id="@+id/cf_bal_row2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+        <TextView
+          android:id="@+id/cf_bal_row2_name"
+          android:layout_width="0dp"
+          android:layout_height="wrap_content"
+          android:layout_weight="1"
+          android:ellipsize="end"
+          android:maxLines="1"
+          android:textColor="@color/cf_widget_text2"
+          android:textSize="13sp" />
+        <TextView
+          android:id="@+id/cf_bal_row2_amount"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginStart="8dp"
+          android:maxLines="1"
+          android:textColor="@color/cf_widget_text"
+          android:textSize="13sp" />
+      </LinearLayout>
+      <LinearLayout
+        android:id="@+id/cf_bal_row3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+        <TextView
+          android:id="@+id/cf_bal_row3_name"
+          android:layout_width="0dp"
+          android:layout_height="wrap_content"
+          android:layout_weight="1"
+          android:ellipsize="end"
+          android:maxLines="1"
+          android:textColor="@color/cf_widget_text2"
+          android:textSize="13sp" />
+        <TextView
+          android:id="@+id/cf_bal_row3_amount"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginStart="8dp"
+          android:maxLines="1"
+          android:textColor="@color/cf_widget_text"
+          android:textSize="13sp" />
+      </LinearLayout>
+    </LinearLayout>
+  </LinearLayout>
+
+  <TextView
+    android:id="@+id/cf_footer"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textColor="@color/cf_widget_text3"
+    android:textSize="11sp"
+    android:maxLines="1"
+    android:ellipsize="end" />
+
+  <LinearLayout
+    android:id="@+id/cf_message"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:visibility="gone">
+    <TextView
+      android:id="@+id/cf_message_text"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:textColor="@color/cf_widget_text2"
+      android:textSize="14sp" />
+    <TextView
+      android:id="@+id/cf_message_pill"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="6dp"
+      android:background="@drawable/cf_widget_pill"
+      android:paddingHorizontal="10dp"
+      android:paddingVertical="4dp"
+      android:text="Open My accounts"
+      android:textColor="@color/cf_widget_text"
+      android:textSize="12sp"
+      android:fontFamily="sans-serif-medium" />
+  </LinearLayout>
+</LinearLayout>

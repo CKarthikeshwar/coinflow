@@ -32,6 +32,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
+import { scheduleCardBillReminders } from '@/services/notifications/card-bill-reminder';
 import { ensureDailyReminder } from '@/services/notifications/daily-reminder';
 import { resolveNotificationTarget, type NotificationData } from '@/services/notifications/deep-link';
 import { useSheetRegistry } from '@/stores';
@@ -43,7 +44,11 @@ export function NotificationRouter() {
   // Re-arm the daily reminder whenever the app comes to the foreground — picks up a notification
   // permission granted after the launch-time attempt in `tasks/index.ts`. Idempotent (fixed id).
   useEffect(() => {
-    const arm = () => ensureDailyReminder().catch(() => {});
+    const arm = () => {
+      ensureDailyReminder().catch(() => {});
+      // CR-34 — re-plan card bill reminders (mounted under MigrationGate, so the database is ready)
+      scheduleCardBillReminders().catch(() => {});
+    };
     arm();
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'active') arm();
@@ -79,6 +84,9 @@ export function NotificationRouter() {
         break;
       case 'splits':
         router.push(`/splits?tab=${target.tab}`);
+        break;
+      case 'myAccounts':
+        router.push('/my-accounts' as never);
         break;
       case 'home':
         break; // already there, or nothing left to route to

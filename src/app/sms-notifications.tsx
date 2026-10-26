@@ -13,10 +13,12 @@
 
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
+import { setSetting, useSetting } from '@/db/repositories/settings';
+import { scheduleCardBillReminders } from '@/services/notifications/card-bill-reminder';
 import { requestSmsPermissions } from '@/services/sms';
 import { usePermissionStatus } from '@/hooks/use-permission-status';
 
@@ -45,6 +47,8 @@ export default function SmsNotificationsScreen() {
     }
   };
 
+  const cardBills = useSetting<boolean>('cardBillRemindersEnabled');
+
   return (
     <SafeAreaView style={styles.screen}>
       <TopBar title="SMS & notifications" onBack={() => router.back()} />
@@ -62,6 +66,27 @@ export default function SmsNotificationsScreen() {
           canAskAgain={permission.notificationsCanAskAgain}
           onRequest={handleNotifRequest}
         />
+        {/* CR-34 (UI-108) — on by default; off ⇒ nothing is scheduled */}
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <ThemedText type="body" themeColor="text">
+              Card bill reminders
+            </ThemedText>
+            <ThemedText type="caption" themeColor="text3">
+              10:00, two days before a credit card bill is due.
+            </ThemedText>
+          </View>
+          <Switch
+            accessibilityLabel="Card bill reminders"
+            value={cardBills.value !== false}
+            onValueChange={(next) => {
+              setSetting('cardBillRemindersEnabled', next);
+              scheduleCardBillReminders().catch(() => {});
+            }}
+            trackColor={{ false: Colors.dark.surface3, true: Colors.dark.text }}
+            thumbColor={Colors.dark.bg}
+          />
+        </View>
         <ThemedText type="caption" themeColor="text3" style={styles.explainer}>
           CoinFlow reads bank &amp; UPI transaction messages on this device to detect payments.
           Personal messages are ignored, and nothing is ever uploaded.
@@ -75,4 +100,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   body: { flex: 1, paddingHorizontal: Spacing.three, gap: Spacing.two },
   explainer: { paddingTop: Spacing.two },
+  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 56 },
+  rowText: { flex: 1 },
 });

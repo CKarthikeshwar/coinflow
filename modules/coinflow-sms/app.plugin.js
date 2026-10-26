@@ -5,7 +5,7 @@
  *   - `RECEIVE_SMS` + `READ_SMS` (+ `SEND_SMS` for split requests, V2) <uses-permission>
  *   - the <receiver> for `SMS_RECEIVED` (exported, guarded by `BROADCAST_SMS`)
  *   - the <service> for the headless-JS task host
- *   - V2: the three home-screen widget <receiver>s (Summary / Queue / Quick add — §44.4); no new permission
+ *   - V2: the four home-screen widget <receiver>s (Summary / Queue / Quick add — §44.4; Balances — §46.10); no new permission
  *
  * `allowBackup="false"` (D21) is handled by `expo-build-properties`, not here.
  * Plain CommonJS so it needs no build step; referenced from app.json as
@@ -25,6 +25,8 @@ const WIDGETS = [
   { cls: 'expo.modules.coinflowsms.SummaryWidgetProvider', xml: '@xml/cf_widget_summary_info', label: '@string/cf_widget_summary_label' },
   { cls: 'expo.modules.coinflowsms.QueueWidgetProvider', xml: '@xml/cf_widget_queue_info', label: '@string/cf_widget_queue_label' },
   { cls: 'expo.modules.coinflowsms.QuickAddWidgetProvider', xml: '@xml/cf_widget_quickadd_info', label: '@string/cf_widget_quickadd_label' },
+  // CR-34 (§46.10) — the fourth widget
+  { cls: 'expo.modules.coinflowsms.BalancesWidgetProvider', xml: '@xml/cf_widget_balances_info', label: '@string/cf_widget_balances_label' },
 ];
 
 /** @param {import('@expo/config-plugins').ExportedConfig} config */

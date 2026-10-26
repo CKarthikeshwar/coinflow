@@ -1,4 +1,4 @@
-import { buildWidgetSnapshot, WIDGET_SNAPSHOT_MAX_ITEMS } from './widget-snapshot';
+import { buildWidgetAccounts, buildWidgetSnapshot, WIDGET_SNAPSHOT_MAX_ITEMS } from './widget-snapshot';
 
 const PERIOD = { startMs: 1_000, endMsExclusive: 2_000, label: 'September' };
 
@@ -24,6 +24,7 @@ describe('buildWidgetSnapshot (§44.2 schema v1)', () => {
       balanceMinor: -50_000,
       pending: { count: 0, items: [] },
       hideAmounts: true,
+      accounts: { totalMinor: 0, knownCount: 0, updatedAt: 0, items: [] },
     });
   });
 
@@ -66,5 +67,41 @@ describe('buildWidgetSnapshot (§44.2 schema v1)', () => {
     ];
     const s = buildWidgetSnapshot({ period: PERIOD, incomeMinor: 0, spentMinor: 0, balanceMinor: 0, pendingSuggestions: rows, hideAmounts: false });
     expect(s.pending.items.map((i) => i.id)).toEqual(['s1', 's3', 's4']);
+  });
+});
+
+
+describe('buildWidgetAccounts (CR-34, §46.10)', () => {
+  const a = (id: string, kind: 'bank' | 'credit_card' | 'wallet' | 'cash', balanceMinor: number | null, asOf = 10, archived = false) => ({
+    id, nickname: id, kind, archived, balance: balanceMinor === null ? null : { balanceMinor, asOf },
+  });
+
+  it('total of bank / wallet / cash with a known balance; ≤ 3 rows, largest first; cards and archived left out', () => {
+    expect(
+      buildWidgetAccounts([
+        a('sbi', 'bank', 50_000, 30),
+        a('hdfc', 'bank', 120_000, 20),
+        a('paytm', 'wallet', 2_000, 40),
+        a('cash', 'cash', 9_000, 50),
+        a('card', 'credit_card', 1_000_000),
+        a('old', 'bank', 7, 1, true),
+        a('none', 'bank', null),
+      ]),
+    ).toEqual({
+      totalMinor: 181_000,
+      knownCount: 4,
+      updatedAt: 20,
+      items: [
+        { id: 'hdfc', nickname: 'hdfc', balanceMinor: 120_000, asOf: 20 },
+        { id: 'sbi', nickname: 'sbi', balanceMinor: 50_000, asOf: 30 },
+        { id: 'cash', nickname: 'cash', balanceMinor: 9_000, asOf: 50 },
+      ],
+    });
+  });
+
+  it('keeps v at 1 — the native store rejects any other version', () => {
+    const s = buildWidgetSnapshot({ period: PERIOD, incomeMinor: 0, spentMinor: 0, balanceMinor: 0, pendingSuggestions: [], hideAmounts: false, accounts: [a('x', 'bank', 1)] });
+    expect(s.v).toBe(1);
+    expect(s.accounts.knownCount).toBe(1);
   });
 });

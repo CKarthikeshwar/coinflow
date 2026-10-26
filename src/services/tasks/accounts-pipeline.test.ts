@@ -12,7 +12,8 @@ import { eq } from 'drizzle-orm';
 
 import { monthPeriod } from '@/domain/period';
 
-import { accountsById, createAccount, listAccounts, mergeAccounts } from '@/db/repositories/accounts';
+import { accountsById, createAccount, getAccount, listAccounts, mergeAccounts } from '@/db/repositories/accounts';
+import { acknowledgeDiscrepancy, listAccountViews } from '@/db/repositories/balances';
 import { periodSummaryQuery } from '@/db/repositories/analytics';
 import { listPending } from '@/db/repositories/suggestions';
 import { restoreTransaction, transactionListQuery } from '@/db/repositories/transactions';
@@ -49,6 +50,7 @@ jest.mock('@/services/notifications/post', () => ({
   postForSuggestion: jest.fn().mockResolvedValue(undefined),
   cancelForSuggestion: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('@/services/notifications/card-bill-reminder', () => ({ scheduleCardBillReminders: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@/services/notifications/reconcile', () => ({ reconcileNotifications: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@/services/splits/receive-request', () => ({ handleIncomingRequest: jest.fn().mockResolvedValue(false) }));
 
@@ -102,7 +104,7 @@ describe('accounts appear from bank texts (UI-104)', () => {
   });
 
   it('never creates an account from an ignored text, or an app text that names no bank', async () => {
-    await sms('AD-SBIINB-S', 'Your A/c XX5678 Avl Bal is Rs.12,340.00 as of 20-10-26.', T); // balance-only
+    await sms('AD-SBIINB-S', 'Dear Customer, your Avl Bal is Rs.12,340.00 as of 20-10-26.', T); // balance-only, names no account
     await sms('AD-HDFCBK-S', '453298 is your OTP for A/c XX1234. Do not share.', T); // OTP
     await sms('GPAY', 'Rs.220.00 paid to grocery@okicici via Google Pay UPI Ref 4.', T);
     expect(listAccounts()).toEqual([]);
@@ -206,3 +208,79 @@ describe('merge (UI-103a)', () => {
     // a later text with the merged-away mask creates it again — merge cannot know both keys (expected, §46.12)
   });
 });
+
+
+describe('balances from bank texts (phase D)', () => {
+  const viewOf = (nickname: string, now = T + 10 * HOUR) => listAccountViews({ now }).find((v) => v.account.nickname === nickname)!;
+
+  it('"Avl Bal" anchors the balance; later rows move it; the figure counts while the text is still pending', async () => {
+    await sms('AX-CANBNK-S', 'An amount of INR 380.00 has been DEBITED to your account XXX672 on 21/10/26. Total Avail.bal INR 3,534.65.Dial 1930 to report cyber fraud - Canara Bank', T);
+    expect(viewOf('Canara ··672').balance).toEqual({ balanceMinor: 3_534_65, asOf: T }); // still in the Review Queue
+    await saveAll();
+    await sms('AX-CANBNK-S', 'An amount of INR 100.00 has been DEBITED to your account XXX672 on 21/10/26 - Canara Bank', T + HOUR);
+    expect(viewOf('Canara ··672').balance).toEqual({ balanceMinor: 3_434_65, asOf: T });
+    expect(viewOf('Canara ··672').discrepancies).toEqual([]);
+  });
+
+  it('a balance-only text is a snapshot, not a transaction', async () => {
+    await sms('AD-SBIINB-S', 'Your A/c XX5678 Avl Bal is Rs.12,340.00 as of 20-10-26.', T);
+    expect(listPending()).toEqual([]);
+    expect(viewOf('SBI ··5678').balance?.balanceMinor).toBe(12_340_00);
+  });
+
+  it("money the balance says left but nothing recorded ⇒ Needs a look; adding it clears it; It's fine hides it", async () => {
+    await sms('AD-SBIINB-S', 'Your A/c XX5678 Avl Bal is Rs.10,000.00 as of 20-10-26.', T);
+    await sms('AD-SBIINB-S', 'Rs.500.00 debited from A/c XX5678 to VPA cafe@oksbi. UPI Ref 40. Avl Bal Rs.8,300.00', T + 5 * HOUR);
+    const [gap] = viewOf('SBI ··5678').discrepancies;
+    expect(gap.diffMinor).toBe(-1_200_00); // ₹10,000 − ₹500 − ₹8,300 = ₹1,200 unexplained
+
+    // the missing ATM withdrawal, added by hand on that account
+    insertManual({ accountId: account('SBI ··5678')!.id, amountMinor: 1_200_00, direction: 'debit', occurredAt: T + 2 * HOUR });
+    expect(viewOf('SBI ··5678').discrepancies).toEqual([]);
+
+    await sms('AD-SBIINB-S', 'Rs.50.00 debited from A/c XX5678 to VPA tea@oksbi. UPI Ref 41. Avl Bal Rs.8,000.00', T + 6 * HOUR);
+    const [second] = viewOf('SBI ··5678').discrepancies;
+    expect(second.diffMinor).toBe(-250_00);
+    acknowledgeDiscrepancy(second.snapshotId);
+    expect(viewOf('SBI ··5678').discrepancies).toEqual([]);
+    expect(viewOf('SBI ··5678').balance?.balanceMinor).toBe(8_000_00);
+  });
+
+  it('a transfer keeps both balances right and Needs a look quiet', async () => {
+    await sms('AD-SBIINB-S', 'Your A/c XX5678 Avl Bal is Rs.20,000.00.', T - HOUR);
+    await sms('VM-HDFCBK-T', 'Your A/c XX1234 Avl Bal is Rs.1,000.00.', T - HOUR);
+    await sms('AD-SBIINB-S', 'Rs.10,000.00 debited from A/c XX5678 to VPA me@okhdfcbank. UPI Ref 10. Avl Bal Rs.10,000.00', T);
+    await sms('VM-HDFCBK-T', 'Rs.10,000.00 credited to A/c XX1234 from me@oksbi UPI Ref 11. Avl Bal Rs.11,000.00', T + 60_000);
+    await saveAll();
+    expect(byAmount(1_000_000).every((r) => r.type === 'transfer')).toBe(true);
+    expect(viewOf('SBI ··5678')).toMatchObject({ balance: { balanceMinor: 10_000_00 }, discrepancies: [] });
+    expect(viewOf('HDFC ··1234')).toMatchObject({ balance: { balanceMinor: 11_000_00 }, discrepancies: [] });
+  });
+});
+
+describe('card statements (phase E)', () => {
+  it('a statement sets the card bill; an older statement re-read never rolls it back', async () => {
+    await sms('AD-HDFCBK-S', 'Rs.2,340.00 spent on HDFC Bank Credit Card XX4321 at BIGBASKET. Avl Limit: Rs.1,17,660.00', T);
+    await sms('AD-HDFCBK-S', 'Your HDFC Bank Credit Card XX4321 statement: Total due Rs.14,200.00, minimum due Rs.710.00, due date 05-Nov-26.', T + HOUR);
+    const card = account('HDFC ··4321')!;
+    expect(getAccount(card.id)).toMatchObject({ dueAmountMinor: 14_200_00, dueAt: new Date(2026, 10, 5).getTime() });
+
+    await sms('AD-HDFCBK-S', 'Your HDFC Bank Credit Card XX4321 statement: Total due Rs.9,000.00, due date 05-Oct-26.', T + 2 * HOUR);
+    expect(getAccount(card.id)?.dueAmountMinor).toBe(14_200_00);
+    expect(listPending()).toHaveLength(1); // only the spend — statements are not transactions
+  });
+});
+
+function insertManual(row: { accountId: string; amountMinor: number; direction: 'debit' | 'credit'; occurredAt: number }) {
+  db().insert(transactions).values({
+    id: `manual-${row.occurredAt}`,
+    amountMinor: row.amountMinor,
+    direction: row.direction,
+    type: row.direction === 'credit' ? 'income' : 'expense',
+    occurredAt: row.occurredAt,
+    source: 'manual',
+    createdAt: row.occurredAt,
+    updatedAt: row.occurredAt,
+    accountId: row.accountId,
+  }).run();
+}

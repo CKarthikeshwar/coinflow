@@ -28,6 +28,7 @@
  */
 const SENDER_SEED: readonly string[] = [
   'HDFCBK',
+  'HDFCBN', // CR-36 — HDFC's second header (§46.3); its texts were dropped at this gate
   'SBIINB',
   'ICICI',
   'AXISBK',

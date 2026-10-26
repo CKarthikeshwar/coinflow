@@ -13,9 +13,15 @@ import { formatMoney } from '@/domain/format/money';
 import { Card } from '@/ui/card';
 import { ThemedText } from '@/ui/themed-text';
 
-export type BalanceHeroProps = { balanceMinor: number };
+export type BalanceHeroProps = {
+  balanceMinor: number;
+  /** CR-34 (UI-109) — "Total balance" (your accounts' real total) or "Recorded net" (income − spending, before any balance is known) */
+  label?: string;
+  /** e.g. "across 4 accounts · oldest figure 3h ago" */
+  caption?: string;
+};
 
-export function BalanceHero({ balanceMinor }: BalanceHeroProps) {
+export function BalanceHero({ balanceMinor, label = 'Total balance', caption }: BalanceHeroProps) {
   // Bare digits only — the leading `−` and the `₹` are rendered separately below so each can
   // carry its own style (the `₹` de-emphasised, the figure itself the hero).
   const digits = formatMoney(balanceMinor, { sign: 'none', withCurrency: false });
@@ -24,7 +30,7 @@ export function BalanceHero({ balanceMinor }: BalanceHeroProps) {
   return (
     <Card elevation="card" style={styles.hero}>
       <ThemedText type="label" themeColor="text2">
-        Total balance
+        {label}
       </ThemedText>
       <ThemedText type="balanceHero" style={styles.figure}>
         {/* thin space after the sign, the same as every other amount (`− ₹140`, §27.1; CR-19) */}
@@ -34,6 +40,11 @@ export function BalanceHero({ balanceMinor }: BalanceHeroProps) {
         </ThemedText>
         {digits}
       </ThemedText>
+      {caption ? (
+        <ThemedText type="caption" themeColor="text3">
+          {caption}
+        </ThemedText>
+      ) : null}
     </Card>
   );
 }

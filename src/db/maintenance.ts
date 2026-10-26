@@ -39,6 +39,7 @@ import { isFtsAvailable } from './fts';
 import migrationsBundle from './migrations/migrations';
 import { resetSeededCategories, seedDatabase } from './seed';
 import { purgeRequestTombstones } from './repositories/split-requests';
+import { purgeOldSnapshots } from './repositories/balances';
 import { purgeStaleCardBillHints } from './repositories/transfers';
 import {
   accountRules,
@@ -85,6 +86,7 @@ export function purge(nowMs: number = Date.now()): void {
   // the foreign keys; received-request tombstones (rejected / withdrawn) expire 30 days after their last change.
   purgeRequestTombstones(nowMs);
   purgeStaleCardBillHints(nowMs); // CR-34 — card-bill hints nobody answered within 30 days
+  purgeOldSnapshots(nowMs); // CR-34 (§46.2) — newest 200 per account, nothing past 90 days but the newest
   db.insert(appSettings)
     .values({ key: 'lastPurgeAt', value: JSON.stringify(nowMs), updatedAt: nowMs })
     .onConflictDoUpdate({ target: appSettings.key, set: { value: JSON.stringify(nowMs), updatedAt: nowMs } })

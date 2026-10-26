@@ -21,6 +21,15 @@ jest.mock('expo-router', () => ({ router: { back: (...args: unknown[]) => mockRo
 jest.mock('expo-notifications', () => ({
   requestPermissionsAsync: (...args: unknown[]) => mockRequestNotificationPermissions(...args),
 }));
+// CR-34 — Card bill reminders toggle
+let mockCardBills: boolean | undefined;
+const mockSetSetting = jest.fn();
+const mockSchedule = jest.fn(async () => {});
+jest.mock('@/db/repositories/settings', () => ({
+  useSetting: () => ({ value: mockCardBills }),
+  setSetting: (...a: unknown[]) => mockSetSetting(...a),
+}));
+jest.mock('@/services/notifications/card-bill-reminder', () => ({ scheduleCardBillReminders: () => mockSchedule() }));
 jest.mock('@/services/sms', () => ({ requestSmsPermissions: (...args: unknown[]) => mockRequestSmsPermissions(...args) }));
 jest.mock('@/hooks/use-permission-status', () => ({ usePermissionStatus: () => mockPermission }));
 
@@ -76,4 +85,17 @@ it('back button calls router.back', async () => {
   const { getByLabelText } = await render(<SmsNotificationsScreen />);
   await fireEvent.press(getByLabelText('Back'));
   expect(mockRouterBack).toHaveBeenCalled();
+});
+
+
+describe('Card bill reminders (CR-34, UI-108)', () => {
+  it('is on by default; turning it off saves the setting and re-plans (cancels) the reminders', async () => {
+    mockCardBills = undefined;
+    const { getByLabelText } = await render(<SmsNotificationsScreen />);
+    const toggle = getByLabelText('Card bill reminders');
+    expect(toggle.props.value).toBe(true);
+    await fireEvent(toggle, 'valueChange', false);
+    expect(mockSetSetting).toHaveBeenCalledWith('cardBillRemindersEnabled', false);
+    expect(mockSchedule).toHaveBeenCalled();
+  });
 });

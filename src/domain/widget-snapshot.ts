@@ -20,7 +20,17 @@ export type WidgetPendingItem = {
   label: string;
 };
 
+/** CR-34 (§46.10) — the Balances widget's figures: your accounts' total and the 3 largest known balances. */
+export type WidgetAccounts = {
+  totalMinor: number;
+  knownCount: number;
+  /** the oldest figure in the total ("updated 3h ago" / "· 3d old" on the widget); 0 when none is known */
+  updatedAt: number;
+  items: { id: string; nickname: string; balanceMinor: number; asOf: number }[];
+};
+
 export type WidgetSnapshot = {
+  /** stays 1: the additive `accounts` key is ignored by older native code, which rejects any other `v` */
   v: 1;
   updatedAt: number;
   periodStartMs: number;
@@ -36,9 +46,30 @@ export type WidgetSnapshot = {
     items: WidgetPendingItem[];
   };
   hideAmounts: boolean;
+  accounts: WidgetAccounts;
 };
 
 export const WIDGET_SNAPSHOT_MAX_ITEMS = 3;
+
+export type AccountForWidget = {
+  id: string;
+  nickname: string;
+  kind: 'bank' | 'credit_card' | 'wallet' | 'cash';
+  archived: boolean;
+  balance: { balanceMinor: number; asOf: number } | null;
+};
+
+/** Bank / wallet / cash accounts with a known balance (cards are not in the total, D49), largest first, ≤ 3 rows. */
+export function buildWidgetAccounts(accounts: readonly AccountForWidget[]): WidgetAccounts {
+  const known = accounts.filter((a) => !a.archived && a.kind !== 'credit_card' && a.balance !== null);
+  const totalMinor = known.reduce((sum, a) => sum + a.balance!.balanceMinor, 0);
+  const updatedAt = known.length ? Math.min(...known.map((a) => a.balance!.asOf)) : 0;
+  const items = [...known]
+    .sort((a, b) => b.balance!.balanceMinor - a.balance!.balanceMinor)
+    .slice(0, WIDGET_SNAPSHOT_MAX_ITEMS)
+    .map((a) => ({ id: a.id, nickname: a.nickname, balanceMinor: a.balance!.balanceMinor, asOf: a.balance!.asOf }));
+  return { totalMinor, knownCount: known.length, updatedAt, items };
+}
 
 export type PendingSuggestionLike = {
   id: string;
@@ -60,6 +91,7 @@ export function buildWidgetSnapshot(input: {
   balanceMinor: number;
   pendingSuggestions: readonly PendingSuggestionLike[];
   hideAmounts: boolean;
+  accounts?: readonly AccountForWidget[];
 }): WidgetSnapshot {
   const items: WidgetPendingItem[] = [];
   for (const s of input.pendingSuggestions) {
@@ -78,5 +110,6 @@ export function buildWidgetSnapshot(input: {
     balanceMinor: input.balanceMinor,
     pending: { count: input.pendingSuggestions.length, items },
     hideAmounts: input.hideAmounts,
+    accounts: buildWidgetAccounts(input.accounts ?? []),
   };
 }

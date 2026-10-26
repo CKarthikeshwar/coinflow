@@ -31,6 +31,13 @@ jest.mock('@/db/repositories/split-hooks', () => ({
   useSplitBadges: () => new Map(),
   useSplitsOverview: () => ({ owedTotalMinor: mockOwedTotalMinor, unattended: mockUnattended }),
 }));
+// CR-34 — your accounts' balances (none by default: the hero shows the recorded net)
+let mockAccountViews: unknown[] = [];
+jest.mock('@/db/repositories/accounts', () => ({ useAccounts: () => ({ data: [] }) }));
+jest.mock('@/db/repositories/balances', () => ({
+  useAccountViews: () => mockAccountViews,
+  acknowledgeDiscrepancy: jest.fn(),
+}));
 jest.mock('@/features/accounts/use-account-labels', () => ({
   useAccountLabels: () => ({ account: () => undefined, transfer: () => undefined }),
 }));
@@ -260,5 +267,44 @@ describe('permission banner', () => {
     const { getByLabelText } = await render(<HomeScreen />);
     await fireEvent.press(getByLabelText('Dismiss'));
     expect(mockSetSetting).toHaveBeenCalledWith('smsBannerDismissedAt', expect.any(Number));
+  });
+});
+
+describe('CR-34 — Total balance from your accounts (UI-109) and Needs a look (UI-107)', () => {
+  const view = (over: Record<string, unknown> = {}) => ({
+    account: { id: 'hdfc', kind: 'bank', nickname: 'HDFC ··672', archivedAt: null },
+    balance: { balanceMinor: 12_340_00, asOf: Date.now() - 2 * 3_600_000 },
+    stale: false,
+    discrepancies: [],
+    ...over,
+  });
+  beforeEach(() => {
+    mockBalance = { balanceMinor: 0, error: undefined, updatedAt: loadedAt };
+    mockSummary = { spentMinor: 0, incomeMinor: 0, error: undefined, updatedAt: loadedAt };
+    mockRecent = { data: [], error: undefined, updatedAt: loadedAt };
+  });
+  afterEach(() => {
+    mockAccountViews = [];
+  });
+
+  it('with no known balance, the old figure reads "Recorded net"', async () => {
+    const { getByText } = await render(<HomeScreen />);
+    expect(getByText('Recorded net')).toBeTruthy();
+  });
+
+  it('with a known balance, the hero is the real total across your accounts', async () => {
+    mockAccountViews = [view()];
+    const { getByText } = await render(<HomeScreen />);
+    expect(getByText('Total balance')).toBeTruthy();
+    expect(getByText('across 1 account · oldest figure 2h ago')).toBeTruthy();
+  });
+
+  it('an unexplained gap shows a Needs a look card', async () => {
+    mockAccountViews = [view({ discrepancies: [{ snapshotId: 's2', fromAsOf: 0, toAsOf: 1, diffMinor: -1_200_00 }] })];
+    const { getByText } = await render(<HomeScreen />);
+    expect(getByText("₹1,200 left HDFC ··672 that isn't recorded")).toBeTruthy();
+    await fireEvent.press(getByText("It's fine"));
+    const { acknowledgeDiscrepancy } = jest.requireMock('@/db/repositories/balances') as { acknowledgeDiscrepancy: jest.Mock };
+    expect(acknowledgeDiscrepancy).toHaveBeenCalledWith('s2');
   });
 });

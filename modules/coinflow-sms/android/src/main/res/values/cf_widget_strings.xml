@@ -6,4 +6,7 @@
   <string name="cf_widget_queue_description">Detected transactions waiting for your OK.</string>
   <string name="cf_widget_quickadd_label">Quick add</string>
   <string name="cf_widget_quickadd_description">Add a transaction in one tap.</string>
+  <!-- CR-34 (§46.10) -->
+  <string name="cf_widget_balances_label">Balances</string>
+  <string name="cf_widget_balances_description">The total of your accounts and your three largest balances.</string>
 </resources>

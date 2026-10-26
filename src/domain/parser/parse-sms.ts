@@ -54,12 +54,16 @@ import {
   collapseWhitespace,
   extractAccount,
   extractAmountAndDirection,
+  extractBalance,
+  extractDue,
   extractOwnAccount,
   extractPaymentMethod,
   hasVpa,
 } from './extract';
 import { checkIgnoreGate } from './ignore-rules';
 import type { OwnAccountRef, ParseResult, ParseWarning, RawSms } from './types';
+
+const MONEY_MOVED_RE = /\b(?:debited|credited|spent|paid|received|withdrawn|transferred|deposited)\b/i;
 
 /** §46.4 — both halves are required: a bank we can name and masked digits in the body. */
 function ownAccountOf(sender: string, body: string): OwnAccountRef | null {
@@ -83,14 +87,33 @@ export function parseSms(input: RawSms): ParseResult {
   const body = collapseWhitespace(input.body ?? '');
 
   const ignoreReason = checkIgnoreGate(body);
-  if (ignoreReason) {
+  // §46.4 — a balance-only text about a recognisable account of yours is a balance update, not noise. Every other
+  // gate (OTP, promo, request, foreign currency, not settled) still wins: a promo that mentions a balance never
+  // writes one.
+  if (ignoreReason && ignoreReason !== 'balance-only') {
     return { kind: 'ignored', reason: ignoreReason };
+  }
+  const ownAccount = ownAccountOf(input.sender, body);
+  const balanceMinor = extractBalance(body);
+  const due = extractDue(body);
+  const accountNews = (): ParseResult | null =>
+    ownAccount && (balanceMinor !== null || due !== null)
+      ? { kind: 'balance', ownAccount, balanceMinor, due, receivedAt: input.receivedAt }
+      : null;
+  if (ignoreReason === 'balance-only') {
+    return accountNews() ?? { kind: 'ignored', reason: 'balance-only' };
   }
 
   const { amount, direction } = extractAmountAndDirection(body);
 
+  // a card statement ("Total due Rs 14,200 … due date 05-Nov-26") moves no money — it only updates the card. Its
+  // "Credit Card" reads as a credit to the direction reader, so the test is the absence of a money-moving verb.
+  if (due && !MONEY_MOVED_RE.test(body)) {
+    return accountNews() ?? { kind: 'ignored', reason: 'not-a-txn' };
+  }
+
   if (amount.value === null && direction.value === null) {
-    return { kind: 'ignored', reason: 'not-a-txn' };
+    return accountNews() ?? { kind: 'ignored', reason: 'not-a-txn' };
   }
 
   const account = extractAccount(body, direction.value);
@@ -109,7 +132,9 @@ export function parseSms(input: RawSms): ParseResult {
       normalizedKey: account?.normalizedKey ?? null,
       paymentMethod,
       occurredAt: input.receivedAt,
-      ownAccount: ownAccountOf(input.sender, body),
+      ownAccount,
+      balanceMinor,
+      due,
     },
     parsedFlags: {
       amount: amount.value !== null,

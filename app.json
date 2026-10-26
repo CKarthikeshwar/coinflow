@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "com.ckworkforce.coinflow",
+      "versionCode": 3,
       "userInterfaceStyle": "dark",
       "allowBackup": false,
       "adaptiveIcon": {

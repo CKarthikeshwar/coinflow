@@ -76,6 +76,7 @@ import { recomputeYourShare } from '@/domain/split';
 import { eraseTimeDigit, TIME_FIELD_MAX, typeTimeDigit, type TimeField } from '@/domain/time-entry';
 import { sendRequests, summarizeReport } from '@/services/splits/send-requests';
 import { useAddSheetDraft, useKeypad, useSheetRegistry } from '@/stores';
+import type { AddSheetDraft } from '@/stores/add-sheet-draft';
 import type { KeypadKey } from '@/stores/keypad';
 import { useSplitDraft } from '@/stores/split-draft';
 import { useToast } from '@/stores/toast';
@@ -137,6 +138,8 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
   const params = useSheetRegistry((s) => s.params) as {
     suggestionId?: string;
     transactionId?: string;
+    /** CR-34 (UI-107) — Needs a look › Add transaction opens Add pre-filled */
+    prefill?: Partial<Pick<AddSheetDraft, 'amountMinor' | 'direction' | 'accountId' | 'paymentMethod' | 'occurredAt' | 'note'>>;
   };
   const suggestionId = params.suggestionId;
   const close = useSheetRegistry((s) => s.close);
@@ -236,8 +239,12 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
           occurredAt: Date.now(),
           accountId: accountForMethod('upi', null),
           toAccountId: null,
+          ...(params.prefill
+            ? { ...params.prefill, type: params.prefill.direction === 'credit' ? 'income' : 'expense' }
+            : {}),
         });
         useKeypad.getState().reset();
+        if (params.prefill?.amountMinor) useKeypad.getState().setFromMinor(params.prefill.amountMinor);
       }
       smsRefRef.current = null;
       return;
@@ -342,7 +349,7 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
       receivedAt: suggestion.smsReceivedAt,
       dedupeKey: suggestion.dedupeKey,
     };
-  }, [mode, suggestionId, params.transactionId, close]);
+  }, [mode, suggestionId, params.transactionId, params.prefill, close]);
 
   const handleKey = (key: KeypadKey) => {
     if (keypadTarget === 'amount') {

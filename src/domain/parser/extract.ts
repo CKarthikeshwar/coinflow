@@ -323,3 +323,49 @@ export function hasVpa(body: string): boolean {
 }
 
 export { collapseWhitespace };
+
+/** ₹100 crore in paise — §46.4 ceiling for a reported balance (a bigger "balance" is a misread). */
+const MAX_BALANCE_PAISE = 100_00_00_000_00;
+
+/**
+ * §46.4 — the balance the bank reports after the transaction: the amount right after "Avl Bal", "Available balance",
+ * "Avail. Bal", "Bal:" — or, for a card, "Avl limit" / "Available credit limit". Zero is legal (D44 — an emptied
+ * account is still a known figure). Never used as the transaction amount (that stays `extractAmountAndDirection`).
+ * The filler between the label and the amount may not cross a sentence end, so "Bal" in one sentence never picks
+ * up an amount from the next.
+ */
+const BALANCE_RE =
+  /\b(?:total\s+)?(?:(?:avl|avail(?:able)?)\.?\s*(?:bal(?:ance)?|(?:credit\s*)?limit|cr\.?\s*limit)|a\/c\s+balance|bal(?:ance)?)\b[^.;]{0,30}?(?:rs\.?|inr|₹)\s?(\d+(?:,\d{2,3})*(?:\.\d{1,2})?)/i;
+
+export function extractBalance(body: string): number | null {
+  const m = BALANCE_RE.exec(body);
+  if (!m) return null;
+  const value = toPaise(m[1]);
+  return value <= MAX_BALANCE_PAISE ? value : null;
+}
+
+const MONTHS: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+};
+
+const DUE_AMOUNT_RE = /\btotal\s+(?:amt\.?|amount)?\s*due\b[^.;₹\d]{0,15}?(?:rs\.?|inr|₹)\s?(\d+(?:,\d{2,3})*(?:\.\d{1,2})?)/i;
+const DUE_DATE_RE = /\b(?:due\s*(?:date|by|on)|pay\s*by)\b[^\d]{0,4}(\d{1,2})[-/ ]([a-z]{3}|\d{1,2})[-/ ,]+(\d{2,4})\b/i;
+
+/**
+ * §46.4 — a card statement's "Total due Rs 14,200.00 … due date 05-Nov-26" (also 05/11/2026, 5 NOV 2026, "pay by").
+ * Both halves are required. `dueAt` is local midnight of that day.
+ */
+export function extractDue(body: string): { amountMinor: number; dueAt: number } | null {
+  const amount = DUE_AMOUNT_RE.exec(body);
+  const date = DUE_DATE_RE.exec(body);
+  if (!amount || !date) return null;
+  const day = parseInt(date[1], 10);
+  const monthRaw = date[2].toLowerCase();
+  const month = /^\d+$/.test(monthRaw) ? parseInt(monthRaw, 10) - 1 : MONTHS[monthRaw];
+  const yearRaw = parseInt(date[3], 10);
+  const year = date[3].length === 2 ? 2000 + yearRaw : yearRaw;
+  if (month === undefined || month < 0 || month > 11 || day < 1 || day > 31) return null;
+  const dueAt = new Date(year, month, day).getTime();
+  if (Number.isNaN(dueAt)) return null;
+  return { amountMinor: toPaise(amount[1]), dueAt };
+}

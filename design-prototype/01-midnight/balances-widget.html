@@ -1,0 +1,239 @@
+<title>CoinFlow Balances Widget</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700&family=Roboto:wght@400;500;700&display=swap">
+<style>
+  /* Layout: a review sheet — one mock launcher strip per state, 2×2 and 4×2 side by side, a note under each.
+     Single dark look on purpose: the widgets live on a phone home screen and the existing three are dark. */
+  :root {
+    --page: #0f1016;
+    --wall-a: #1b2238;
+    --wall-b: #0d0e14;
+    --widget: #0b0b0c;
+    --hairline: #2b2d38;
+    --text: #f5f5f2;
+    --text2: #9a9aa1;
+    --text3: #85858c;
+    --note: #c9c9cf;
+    --display: 'Manrope', system-ui, sans-serif;
+    --android: 'Roboto', 'Segoe UI', system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  body {
+    background: var(--page);
+    color: var(--text);
+    font-family: var(--display);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 56px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 28px; }
+  header { display: grid; gap: 8px; }
+  h1 { font-size: 1.6rem; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+  .lede { color: var(--text2); margin: 0; max-width: 65ch; line-height: 1.55; }
+  h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); margin: 0; }
+  section { display: grid; gap: 12px; }
+  .launcher {
+    background: radial-gradient(120% 140% at 15% 0%, var(--wall-a), var(--wall-b) 70%);
+    border-radius: 22px;
+    padding: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: flex-start;
+  }
+  .note { color: var(--note); margin: 0; max-width: 70ch; line-height: 1.55; font-size: 0.92rem; }
+
+  /* the widget itself — same tokens as cf_widget_bg.xml / colors.xml */
+  .w {
+    background: var(--widget);
+    border: 1px solid var(--hairline);
+    border-radius: 24px;
+    padding: 14px;
+    font-family: var(--android);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    font-variant-numeric: tabular-nums;
+  }
+  .w.s22 { width: 168px; height: 168px; }
+  .w.s42 { width: 352px; height: 168px; max-width: 100%; }
+  .w .hd { font-size: 13px; font-weight: 500; color: var(--text2); }
+  .w .lbl { font-size: 11px; color: var(--text3); }
+  .w .big { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1.15; white-space: nowrap; }
+  .w .sub { font-size: 11px; color: var(--text3); }
+  .w .grow { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+  .w .foot { font-size: 11px; color: var(--text3); }
+  .w .cols { flex: 1; display: grid; grid-template-columns: 1fr 1.25fr; gap: 14px; min-height: 0; }
+  .w .rows { display: flex; flex-direction: column; justify-content: center; gap: 7px; min-width: 0; }
+  .w .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+  .w .row .n { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .w .row .v { color: var(--text); white-space: nowrap; }
+  .w .row .old { color: var(--text3); font-size: 11px; }
+  .w .msg { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; font-size: 14px; color: var(--text2); }
+  .w .pill { align-self: flex-start; background: #262832; color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 500; }
+  .tap { font-family: var(--display); font-size: 0.78rem; color: var(--text3); margin-top: 6px; }
+  .frame { display: grid; gap: 6px; }
+  ul.q { margin: 0; padding-left: 1.2em; color: var(--note); line-height: 1.6; max-width: 70ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Balances widget</h1>
+    <p class="lede">The fourth home-screen widget (SPEC-UI-UX §6.25, UI-109). It shows the total of your bank, wallet and cash
+      balances and up to three accounts, largest first. Credit cards are not in the total. Tapping anywhere opens My accounts.
+      Same black tile, type sizes and Hide amounts rule as the three widgets you already have. Example figures below.</p>
+  </header>
+
+  <section>
+    <h2>1 · Normal</h2>
+    <div class="launcher">
+      <div class="frame">
+        <div class="w s22">
+          <div class="hd">Balances</div>
+          <div class="grow">
+            <div class="lbl">Total</div>
+            <div class="big">₹1,81,000</div>
+            <div class="sub">across 4 accounts</div>
+          </div>
+          <div class="foot">updated 3h ago</div>
+        </div>
+        <div class="tap">2×2</div>
+      </div>
+      <div class="frame">
+        <div class="w s42">
+          <div class="hd">Balances</div>
+          <div class="cols">
+            <div class="grow">
+              <div class="lbl">Total</div>
+              <div class="big">₹1,81,000</div>
+              <div class="sub">across 4 accounts</div>
+            </div>
+            <div class="rows">
+              <div class="row"><span class="n">Salary – HDFC</span><span class="v">₹1,20,000</span></div>
+              <div class="row"><span class="n">SBI ··5678</span><span class="v">₹50,000</span></div>
+              <div class="row"><span class="n">Cash</span><span class="v">₹9,000</span></div>
+            </div>
+          </div>
+          <div class="foot">updated 3h ago</div>
+        </div>
+        <div class="tap">4×2</div>
+      </div>
+    </div>
+    <p class="note">"updated 3h ago" is the oldest figure in the total, so the widget never looks fresher than its stalest
+      account. The fourth account (a ₹2,000 wallet) is in the total but not listed: only three rows fit.</p>
+  </section>
+
+  <section>
+    <h2>2 · Hide amounts on</h2>
+    <div class="launcher">
+      <div class="frame">
+        <div class="w s22">
+          <div class="hd">Balances</div>
+          <div class="grow">
+            <div class="lbl">Total</div>
+            <div class="big">••••</div>
+            <div class="sub">across 4 accounts</div>
+          </div>
+          <div class="foot">updated 3h ago</div>
+        </div>
+        <div class="tap">2×2</div>
+      </div>
+      <div class="frame">
+        <div class="w s42">
+          <div class="hd">Balances</div>
+          <div class="cols">
+            <div class="grow">
+              <div class="lbl">Total</div>
+              <div class="big">••••</div>
+              <div class="sub">across 4 accounts</div>
+            </div>
+            <div class="rows">
+              <div class="row"><span class="n">Salary – HDFC</span><span class="v">••••</span></div>
+              <div class="row"><span class="n">SBI ··5678</span><span class="v">••••</span></div>
+              <div class="row"><span class="n">Cash</span><span class="v">••••</span></div>
+            </div>
+          </div>
+          <div class="foot">updated 3h ago</div>
+        </div>
+        <div class="tap">4×2</div>
+      </div>
+    </div>
+    <p class="note">Settings › Widgets › Hide amounts masks every ₹ figure; account names stay, as on the other widgets.</p>
+  </section>
+
+  <section>
+    <h2>3 · An old figure</h2>
+    <div class="launcher">
+      <div class="frame">
+        <div class="w s22">
+          <div class="hd">Balances</div>
+          <div class="grow">
+            <div class="lbl">Total</div>
+            <div class="big">₹1,81,000</div>
+            <div class="sub">across 4 accounts</div>
+          </div>
+          <div class="foot">updated 4d ago · may be out of date</div>
+        </div>
+        <div class="tap">2×2</div>
+      </div>
+      <div class="frame">
+        <div class="w s42">
+          <div class="hd">Balances</div>
+          <div class="cols">
+            <div class="grow">
+              <div class="lbl">Total</div>
+              <div class="big">₹1,81,000</div>
+              <div class="sub">across 4 accounts</div>
+            </div>
+            <div class="rows">
+              <div class="row"><span class="n">Salary – HDFC</span><span class="v">₹1,20,000</span></div>
+              <div class="row"><span class="n">SBI ··5678 <span class="old">· 4d old</span></span><span class="v">₹50,000</span></div>
+              <div class="row"><span class="n">Cash</span><span class="v">₹9,000</span></div>
+            </div>
+          </div>
+          <div class="foot">updated 4d ago · may be out of date</div>
+        </div>
+        <div class="tap">4×2</div>
+      </div>
+    </div>
+    <p class="note">A figure older than 3 days gets "· 4d old" on its row, and the footer says the total may be out of date.
+      Widgets stay black and white, so this is wording, not the amber used inside the app.</p>
+  </section>
+
+  <section>
+    <h2>4 · No balances yet</h2>
+    <div class="launcher">
+      <div class="frame">
+        <div class="w s22">
+          <div class="hd">Balances</div>
+          <div class="msg">
+            <span>No balances yet</span>
+            <span class="pill">Open My accounts</span>
+          </div>
+        </div>
+        <div class="tap">2×2</div>
+      </div>
+      <div class="frame">
+        <div class="w s42">
+          <div class="hd">Balances</div>
+          <div class="msg">
+            <span>No balances yet. They appear as your bank texts arrive.</span>
+            <span class="pill">Open My accounts</span>
+          </div>
+        </div>
+        <div class="tap">4×2</div>
+      </div>
+    </div>
+    <p class="note">Before any bank text with a balance, or when you have no accounts. Before the app has ever opened, it says
+      "Open CoinFlow to set up", like the other widgets.</p>
+  </section>
+
+  <section>
+    <h2>Your decision</h2>
+    <ul class="q">
+      <li>Approve as is, or tell me what to change (wording, which states, sizes).</li>
+      <li>Should credit cards appear as a separate "Credit available" line on the 4×2? The spec leaves them out.</li>
+    </ul>
+  </section>
+</div>

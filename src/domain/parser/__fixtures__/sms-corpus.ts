@@ -7,7 +7,7 @@
  * hand-reviewing the result (not hand-derived from the regexes) — see IMPLEMENTATION-PROGRESS.md.
  */
 
-import type { Direction, OwnAccountRef, ParsedFields, ParseResult, ParseWarning } from '../types';
+import type { Direction, DueRef, OwnAccountRef, ParsedFields, ParseResult, ParseWarning } from '../types';
 
 export type SmsFixture = {
   id: string;
@@ -18,6 +18,11 @@ export type SmsFixture = {
 };
 
 const T = 1757000000000; // fixed sample timestamp — value itself is not under test
+
+/** §46.4 — a balance-only text / card statement about one of your accounts. */
+function balance(ownAccount: OwnAccountRef, balanceMinor: number | null, due: DueRef | null = null): ParseResult {
+  return { kind: 'balance', ownAccount, balanceMinor, due, receivedAt: T };
+}
 
 function ignored(reason: Extract<ParseResult, { kind: 'ignored' }>['reason']): ParseResult {
   return { kind: 'ignored', reason };
@@ -44,8 +49,9 @@ function fields(
   normalizedKey: string | null,
   paymentMethod: ParsedFields['paymentMethod'],
   ownAccount: OwnAccountRef | null = null,
+  balanceMinor: number | null = null,
 ): ParsedFields {
-  return { amountMinor, direction, account, normalizedKey, paymentMethod, occurredAt: T, ownAccount };
+  return { amountMinor, direction, account, normalizedKey, paymentMethod, occurredAt: T, ownAccount, balanceMinor, due: null };
 }
 
 const BANK_NAMES: Record<string, string> = {
@@ -236,14 +242,14 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AD-SBIINB-S',
     body: 'Your A/c XX5678 Avl Bal is Rs.12,340.00 as of 05-09-26.',
     receivedAt: T,
-    expected: ignored('balance-only'),
+    expected: balance(own('sbi', '5678'), 12_340_00),
   },
   {
     id: 'balance-only-2',
     sender: 'VM-KOTAKB-T',
     body: 'Available balance in A/c XX2211 is Rs.7,650.00.',
     receivedAt: T,
-    expected: ignored('balance-only'),
+    expected: balance(own('kotak', '2211'), 7_650_00),
   },
   {
     id: 'request-money-1',
@@ -331,7 +337,7 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AD-ICICIB-S',
     body: 'INR 1,500.00 spent on ICICI Bank Card XX4433 at Store Three. Available limit INR 48,500.00.',
     receivedAt: T,
-    expected: tx(fields(150000, 'debit', 'Store Three', 'store three', 'card', own('icici', '4433', 'credit_card'))),
+    expected: tx(fields(150000, 'debit', 'Store Three', 'store three', 'card', own('icici', '4433', 'credit_card'), 4_850_000)),
   },
   {
     id: 'hard-rs-vs-inr-vs-symbol',
@@ -406,21 +412,21 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AX-CANBNK-S',
     body: 'An amount of INR 380.00 has been DEBITED to your account XXX123 on 21/06/26. Total Avail.bal INR 3,534.65.Dial 1930 to report cyber fraud - Canara Bank',
     receivedAt: T,
-    expected: tx(fields(38000, 'debit', null, null, null, own('canara', '123'))),
+    expected: tx(fields(38000, 'debit', null, null, null, own('canara', '123'), 353_465)),
   },
   {
     id: 'own-account-credited-towards-description',
     sender: 'AX-CANBNK-S',
     body: 'An amount of INR 3.60 has been CREDITED to your account XXX123 on 22/09/2026 towards Reversal of GST on Commission. Total Avail.bal INR 1,825.41 - Canara Bank',
     receivedAt: T,
-    expected: tx(fields(360, 'credit', 'Reversal of GST', 'reversal of gst', null, own('canara', '123'))),
+    expected: tx(fields(360, 'credit', 'Reversal of GST', 'reversal of gst', null, own('canara', '123'), 182_541)),
   },
   {
     id: 'own-account-neft-by-sender',
     sender: 'AX-CANBNK-S',
     body: 'An amount of INR 5,000.00 has been credited to XXX123 on 24/07/2026 towards NEFT by Sender EXAMPLE INSTITUTE OF SCI, IFSC SBIN0000001, Sender A/c XXXX0001, STATE BANK OF INDIA, UTR SBIN000000000001, Total Avail. Bal INR 6271.42- Canara Bank',
     receivedAt: T,
-    expected: tx(fields(500000, 'credit', 'EXAMPLE INSTITUTE OF SCI', 'example institute of sci', 'bank_transfer', own('canara', '123'))),
+    expected: tx(fields(500000, 'credit', 'EXAMPLE INSTITUTE OF SCI', 'example institute of sci', 'bank_transfer', own('canara', '123'), 627_142)),
   },
   {
     id: 'own-account-your-a-c-no',
@@ -434,7 +440,7 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'VM-CANBNK-S',
     body: 'Dear Customer, Acct XXX123 Dr. INR 140.00 on 23/09/26 to Sample Person; UPI: 393400000000; Bal INR 1,620.41.Not you?SMS BLOCKUPI to 9900000000-CanaraBank',
     receivedAt: T,
-    expected: tx(fields(14000, 'debit', 'Sample Person', 'sample person', 'upi', own('canara', '123'))),
+    expected: tx(fields(14000, 'debit', 'Sample Person', 'sample person', 'upi', own('canara', '123'), 162_041)),
   },
   // --- §46.4 own account (CR-34) ----------------------------------------------------------------
   {
@@ -442,7 +448,7 @@ export const smsCorpus: SmsFixture[] = [
     sender: 'AD-HDFCBK-S',
     body: 'Rs.2,340.00 spent on HDFC Bank Credit Card XX4321 at BIGBASKET on 2026-10-20:18:12:05. Avl Limit: Rs.1,17,660.00. Not you? Call 18002586161',
     receivedAt: T,
-    expected: tx(fields(234000, 'debit', 'BIGBASKET', 'bigbasket', 'card', own('hdfc', '4321', 'credit_card'))),
+    expected: tx(fields(234000, 'debit', 'BIGBASKET', 'bigbasket', 'card', own('hdfc', '4321', 'credit_card'), 11_766_000)),
   },
   {
     id: 'own-card-ending',
@@ -471,5 +477,34 @@ export const smsCorpus: SmsFixture[] = [
     body: 'Rs.14,200.00 debited from A/c XX5678 towards HDFC Bank Credit Card XX4321 payment on 25-10-26. Ref 411234567890.',
     receivedAt: T,
     expected: tx(fields(1420000, 'debit', 'HDFC Bank Credit Card XX4321 payment', 'hdfc bank credit card xx4321 payment', 'card', own('sbi', '5678'))),
+  },
+  // --- §46.4 balances and card statements (CR-36) ---------------------------------------------
+  {
+    id: 'balance-only-no-account',
+    sender: 'AD-SBIINB-S',
+    body: 'Dear Customer, your Avl Bal is Rs.12,340.00 as of 05-09-26.',
+    receivedAt: T,
+    expected: ignored('balance-only'),
+  },
+  {
+    id: 'promo-mentioning-balance',
+    sender: 'AD-HDFCBK-S',
+    body: 'Special offer on A/c XX1234! Keep an Avl Bal of Rs.10,000 and get cashback up to Rs.500. Apply now.',
+    receivedAt: T,
+    expected: ignored('promo'),
+  },
+  {
+    id: 'card-statement-due',
+    sender: 'AD-HDFCBK-S',
+    body: 'Your HDFC Bank Credit Card XX4321 statement is ready. Total due Rs.14,200.00, minimum due Rs.710.00, due date 05-Nov-26.',
+    receivedAt: T,
+    expected: balance(own('hdfc', '4321', 'credit_card'), null, { amountMinor: 14_200_00, dueAt: new Date(2026, 10, 5).getTime() }),
+  },
+  {
+    id: 'card-statement-due-numeric-date',
+    sender: 'JD-ICICIB-S',
+    body: 'ICICI Bank Credit Card XX4433: Total Amount Due INR 3,250.50. Pay by 12/11/2026 to avoid charges. Avl Limit INR 96,749.50',
+    receivedAt: T,
+    expected: balance(own('icici', '4433', 'credit_card'), 96_749_50, { amountMinor: 3_250_50, dueAt: new Date(2026, 10, 12).getTime() }),
   },
 ];

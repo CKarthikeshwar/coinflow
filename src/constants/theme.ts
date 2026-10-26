@@ -44,6 +44,7 @@ const dark = {
   text3: '#85858c', // captions, timestamps, placeholder, disabled, quiet icons
   primary: '#ffffff', // the one filled emphasis
   primaryInk: '#0b0b0c', // ink on top of `primary`
+  warn: '#e6c36b', // CR-34 (UI-103) — the one caution colour: a balance figure older than 3 days
 } as const;
 
 export const Colors = { dark, light: dark };

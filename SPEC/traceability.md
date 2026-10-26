@@ -2300,19 +2300,19 @@ the note; *Add a person* is under the search box. The calendar's ⅐-width fix s
 |---|---|---|---|---|
 | UI-101 | "Paid to / from" and "Merchant rules" relabels | UI-UX §6.25 | A | Built (unit) |
 | UI-102 | Accounts under payment methods; **Paid from** chips | §6.25, impl §46.8 | B | Built (unit) |
-| UI-103 | My accounts page + Add/Edit account sheet, total balance | §6.25, impl §46.9 | A | Built (unit) — page + sheet; Total balance and row balances are phase D |
+| UI-103 | My accounts page + Add/Edit account sheet, total balance | §6.25, impl §46.9 | A | Built (unit) — page, sheet, Total balance, row balances (CR-24) |
 | UI-104 | Accounts created automatically from SMS (+ Review card) | §6.25, impl §46.5 | A | Built (unit) |
 | UI-105 | Manual Transfer in the Add sheet | §6.25, impl §46.6 | B | Built (unit) |
 | UI-106 | Auto-linked transfers, "Looks like a transfer?", Unlink | §6.25, impl §46.3/§46.6 | C | Built (unit) |
-| UI-107 | "Needs a look" (unrecorded money) | §6.25, impl §46.3 `reconcile` | D | Specified |
-| UI-108 | Credit cards: bill = transfer, due-date reminder | §6.25, impl §46.4/§46.10 | C/E | Partly built (unit) — bill-payment card (C); due date + reminder are phase E |
-| UI-109 | Home total, list meta, filter, notification line, Balances widget | §6.25, impl §46.10 | B/D/E | Partly built (unit) — list meta, filter, notification line, Home card opens My accounts; Home total (D) and widget (E, prototype first) not built |
+| UI-107 | "Needs a look" (unrecorded money) | §6.25, impl §46.3 `reconcile` | D | Built (unit) — Home + My accounts cards, row pill |
+| UI-108 | Credit cards: bill = transfer, due-date reminder | §6.25, impl §46.4/§46.10 | C/E | Built (unit) — bill-payment card, due date on the card row, reminder + setting |
+| UI-109 | Home total, list meta, filter, notification line, Balances widget | §6.25, impl §46.10 | B/D/E | Built (unit) — Balances widget built after prototype approval; on-device pending |
 | IMP-105 | Migration `0005_my_accounts` (`my_account`, `account_balance`, `transaction.accountId/transferPeerId`, `suggestion.accountId`) | impl §46.2 | A | Built (unit) — `migration-v5.test.ts` |
-| IMP-106 | Domain: account-key, balance, reconcile, transfers, card-bill | §46.3 | A–D | Partly built (unit) — account-key, transfers, card-bill; balance + reconcile are phase D |
-| IMP-107 | Parser: own account, balance, due date, `balance` result variant | §46.4 | A/D | Partly built (unit) — own account (corpus); balance, due date, `balance` variant are D / E |
-| IMP-108 | Ingest: resolve / auto-create account, snapshots, idempotent sweep | §46.5 | A/D | Partly built (unit) — resolve / auto-create at ingest; snapshots are phase D |
+| IMP-106 | Domain: account-key, balance, reconcile, transfers, card-bill | §46.3 | A–D | Built (unit) — account-key, balance, reconcile, transfers, card-bill |
+| IMP-107 | Parser: own account, balance, due date, `balance` result variant | §46.4 | A/D | Built (unit) — own account, balance, due date, `balance` variant (corpus) |
+| IMP-108 | Ingest: resolve / auto-create account, snapshots, idempotent sweep | §46.5 | A/D | Built (unit) — resolve / auto-create, snapshots at ingest, idempotent |
 | IMP-109 | Repositories + invariants + CSV columns | §46.6/§46.7 | A–C | Built (unit) — accounts, transfers, `accountIds` filter, CSV columns (`myAccount`, `transferPeerId`) |
-| IMP-110 | Card-bill reminder + widget schema v2 | §46.10 | E | Specified |
+| IMP-110 | Card-bill reminder + widget schema v2 | §46.10 | E | Built (unit) — reminder; snapshot `accounts` (v stays 1); `BalancesWidgetProvider` (compiles; on-device pending) |
 
 Open questions for the owner are listed in impl §46.12.
 
@@ -2342,3 +2342,27 @@ real SMS from ≥ 2 banks create two accounts with a **New** pill and a *New acc
 lands on the renamed account; Add with UPI preselects the only bank account; Transfer SBI → Cash saves one row that Home / Analytics ignore; a real
 SBI → HDFC move links on its own with "Linked as a transfer · Undo"; Unlink; delete + Undo of a transfer; the Accounts filter; the notification line.
 Phases D (balances) and E (card due dates, Balances widget — prototype first) are not built.
+
+**On-device check of A–C (2026-10-26, Samsung, release build `927eb7d`):** Pass — existing data unchanged after migration 0005; Settings
+shows My accounts and Merchant rules; a Cash account added; a manual Canara → Cash transfer saved as one row, Home unchanged. Not exercised:
+auto-link from two real bank texts, the card-bill card (no second bank / card) — covered by `accounts-pipeline.test.ts`.
+
+#### As built — phases D–E (2026-10-26, CR-36 / UI-UX CR-24)
+
+| Requirement | Where | Tests | Status |
+|---|---|---|---|
+| `HDFCBN` passes the sender gate | `constants/sms-senders.ts` | `sms-senders.test.ts` | Pass (unit) |
+| Parser: balance ("Avl Bal", "Avl Limit", …), card statement (total due + due date), `balance` result; promos and no-account balance texts still ignored | `parser/extract.ts`, `parse-sms.ts`, `types.ts` | corpus (balances on 6 fixtures, 4 new fixtures) | Pass (unit) |
+| Current balance = newest snapshot + rows after; total (cards apart); stale after 3 days | `domain/accounts/balance.ts` | `balance.test.ts` | Pass (unit) |
+| Needs a look: consecutive snapshots, ₹1 tolerance, newest 10 pairs, 30-day gap, "It's fine", cleared by a late row | `domain/accounts/reconcile.ts`, `db/repositories/balances.ts` | `balance.test.ts`, `balances.test.ts` (real SQLite) | Pass (unit) |
+| Snapshots at ingest (idempotent), balance-only texts, pending suggestions count, retention, merge carries balances | `sms-ingest.ts`, `balances.ts`, `maintenance.ts` | `sms-ingest.test.ts`, `balances.test.ts`, `accounts-pipeline.test.ts` | Pass (unit) |
+| My accounts: Total balance, Credit available, row balance + age (amber), Needs a look pill + cards, card bill line | `app/my-accounts.tsx`, `features/accounts/needs-a-look-cards.tsx` | `my-accounts.test.tsx` | Pass (unit) |
+| Home: real total or "Recorded net"; Needs a look card; Add transaction pre-fill | `(tabs)/index.tsx`, `balance-hero.tsx`, `transaction-sheet.tsx` | `index.test.tsx` | Pass (unit) |
+| Account sheet: Current balance / Available credit → manual snapshot when changed; Archive, Merge, duplicate message | `features/accounts/account-sheet.tsx` | `account-sheet.test.tsx` | Pass (unit) |
+| Card due date from statements (never rolled back); reminder 10:00 two days before; setting; tap → My accounts | `accounts.ts` `updateCardDue`, `card-bill-reminder.ts`, `sms-notifications.tsx`, `deep-link.ts` | `card-bill-reminder.test.ts`, `sms-notifications.test.tsx`, `deep-link.test.ts`, `accounts-pipeline.test.ts` | Pass (unit) |
+| Widget snapshot `accounts` (≤ 3 rows, largest first, cards out), `v` stays 1, republished on balance changes | `domain/widget-snapshot.ts`, `services/widgets/publish.ts`, `widget-sync.tsx` | `widget-snapshot.test.ts` | Pass (unit) |
+| Balances widget: 2×2 / 4×2, Hide amounts, old figure wording, no-balance / set-up states, tap → My accounts (prototype approved 2026-10-26) | `CoinflowWidgetProviders.kt` `BalancesWidgetProvider`, `WidgetStore.kt`, `res/layout/cf_widget_balances*.xml`, `res/xml/cf_widget_balances_info.xml`, `app.plugin.js`, `widget-link-router.tsx` | `widget-link-router.test.tsx`; Kotlin compiled (`:coinflow-sms:compileReleaseKotlin`) | Built — on-device pending |
+
+**Not yet checked on a device.** To check: a Canara text with "Total Avail.bal" gives Canara a balance on My accounts and Home switches to
+"Total balance"; typing a Current balance on Cash adds it to the total; Settings › SMS & notifications shows Card bill reminders; the widget
+picker lists **Balances**, it shows the total, and tapping it opens My accounts.

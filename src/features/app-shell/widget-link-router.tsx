@@ -54,6 +54,11 @@ function routeInitialUrl(url: string): void {
       useSheetRegistry.getState().open('confirm', { suggestionId: suggestion.id });
     }
   }
+  // CR-34 — the Balances widget
+  if (target === 'my-accounts') {
+    router.push('/my-accounts' as never);
+    return;
+  }
   // bare "coinflow://" (Summary widget root) needs no extra routing — Home is already there.
 }
 

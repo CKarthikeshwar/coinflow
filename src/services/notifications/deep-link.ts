@@ -31,6 +31,8 @@ export type NotificationTarget =
   | { kind: 'review' }
   /** V2 (§43.4) — the Splits page, on the segment that still makes sense for what was tapped. */
   | { kind: 'splits'; tab: 'owed' | 'owe' | 'requests' }
+  /** CR-34 (§46.10) — a card bill reminder opens My accounts. */
+  | { kind: 'myAccounts' }
   | { kind: 'home' };
 
 export type NotificationData = { kind?: string; suggestionId?: string; requestId?: string } | null | undefined;
@@ -39,6 +41,7 @@ export type NotificationData = { kind?: string; suggestionId?: string; requestId
 export function resolveNotificationTarget(data: NotificationData): NotificationTarget {
   if (!data) return { kind: 'home' };
   if (data.kind === 'group') return { kind: 'review' };
+  if (data.kind === 'card-bill') return { kind: 'myAccounts' };
 
   // V2 (§43.4) — the summary always lands on the Requests list.
   if (data.kind === 'split-group') return { kind: 'splits', tab: 'requests' };

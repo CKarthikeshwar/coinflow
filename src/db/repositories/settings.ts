@@ -58,7 +58,8 @@ export type SettingKey =
   // CR-25
   | 'defaultCategoryId'
   | 'defaultIncomeCategoryId' // CR-28
-  | 'installFirstOpenAt';
+  | 'installFirstOpenAt'
+  | 'cardBillRemindersEnabled'; // CR-34 (§46.7) — default true
 
 export function getSetting<T>(key: SettingKey | string, fallback: T): T {
   const row = db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).get();

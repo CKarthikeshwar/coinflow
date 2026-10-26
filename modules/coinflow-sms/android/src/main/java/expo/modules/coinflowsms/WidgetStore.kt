@@ -25,6 +25,12 @@ object WidgetStore {
   /** One row of the queue widget. */
   data class Item(val id: String, val amountMinor: Long, val isDebit: Boolean, val label: String)
 
+  /** CR-34 (§46.10) — one row of the Balances widget. */
+  data class AccountItem(val nickname: String, val balanceMinor: Long, val asOf: Long)
+
+  /** CR-34 — the Balances widget's block; absent in a snapshot published by an older app build. */
+  data class Accounts(val totalMinor: Long, val knownCount: Int, val updatedAt: Long, val items: List<AccountItem>)
+
   /** Parsed schema v1 (§44.2). */
   data class Snapshot(
     val periodEndMs: Long,
@@ -35,6 +41,7 @@ object WidgetStore {
     val pendingCount: Int,
     val items: List<Item>,
     val hideAmounts: Boolean,
+    val accounts: Accounts?,
   ) {
     companion object {
       fun parse(json: String): Snapshot? = try {
@@ -57,10 +64,30 @@ object WidgetStore {
             pendingCount = pending.getInt("count"),
             items = items,
             hideAmounts = o.optBoolean("hideAmounts", false),
+            accounts = parseAccounts(o),
           )
         }
       } catch (e: Exception) {
         Log.w(TAG, "snapshot did not parse: ${e.javaClass.simpleName}")
+        null
+      }
+
+      /** Additive key (the snapshot stays `v: 1`): a malformed block only blanks the Balances widget. */
+      private fun parseAccounts(o: JSONObject): Accounts? = try {
+        o.optJSONObject("accounts")?.let { a ->
+          val arr = a.getJSONArray("items")
+          Accounts(
+            totalMinor = a.getLong("totalMinor"),
+            knownCount = a.getInt("knownCount"),
+            updatedAt = a.optLong("updatedAt", 0),
+            items = (0 until arr.length()).map {
+              val r = arr.getJSONObject(it)
+              AccountItem(r.optString("nickname", ""), r.getLong("balanceMinor"), r.optLong("asOf", 0))
+            },
+          )
+        }
+      } catch (e: Exception) {
+        Log.w(TAG, "accounts block did not parse: ${e.javaClass.simpleName}")
         null
       }
     }
@@ -84,11 +111,11 @@ object WidgetStore {
     return json?.let { Snapshot.parse(it) }
   }
 
-  /** Redraws every placed instance of the three widgets from the stored snapshot. */
+  /** Redraws every placed instance of the four widgets from the stored snapshot. */
   fun refreshAll(context: Context) {
     val app = context.applicationContext
     val manager = AppWidgetManager.getInstance(app)
-    for (provider in listOf(SummaryWidgetProvider(), QueueWidgetProvider(), QuickAddWidgetProvider())) {
+    for (provider in listOf(SummaryWidgetProvider(), QueueWidgetProvider(), QuickAddWidgetProvider(), BalancesWidgetProvider())) {
       val ids = manager.getAppWidgetIds(ComponentName(app, provider.javaClass))
       if (ids.isNotEmpty()) provider.onUpdate(app, manager, ids)
     }

@@ -56,6 +56,13 @@ describe('WidgetLinkRouter cold start', () => {
     expect(mockOpen).toHaveBeenCalledWith('add', {});
   });
 
+  it('coinflow://my-accounts (Balances widget, CR-34) — opens My accounts', async () => {
+    mockInitialUrl = 'coinflow://my-accounts';
+    await render(<WidgetLinkRouter />);
+    expect(mockPush).toHaveBeenCalledWith('/my-accounts');
+    expect(mockOpen).not.toHaveBeenCalled();
+  });
+
   it('coinflow://review without ?open — lands on the Review Queue', async () => {
     mockInitialUrl = 'coinflow://review';
     await render(<WidgetLinkRouter />);

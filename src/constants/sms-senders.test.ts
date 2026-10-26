@@ -3,6 +3,7 @@ import { isKnownSender } from './sms-senders';
 describe('isKnownSender', () => {
   it('matches a DLT header id via the telco prefix + trailing suffix strip', () => {
     expect(isKnownSender('AD-HDFCBK-S')).toBe(true);
+    expect(isKnownSender('VM-HDFCBN-T')).toBe(true); // CR-36
     expect(isKnownSender('VM-SBIINB-T')).toBe(true);
   });
 

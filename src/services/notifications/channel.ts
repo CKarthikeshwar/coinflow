@@ -30,6 +30,9 @@ export const SPLIT_REQUESTS_CHANNEL_ID = 'split-requests';
 /** Daily "did you record today's transactions?" reminder — default importance, no heads-up. */
 export const DAILY_REMINDER_CHANNEL_ID = 'daily-reminder';
 
+/** CR-34 (§46.10) — "card bill due in 2 days" — default importance. */
+export const CARD_BILLS_CHANNEL_ID = 'card-bills';
+
 export async function ensureNotificationChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync(TXN_REVIEW_CHANNEL_ID, {
@@ -53,6 +56,13 @@ export async function ensureNotificationChannel(): Promise<void> {
   });
   await Notifications.setNotificationChannelAsync(DAILY_REMINDER_CHANNEL_ID, {
     name: 'Daily reminder',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    bypassDnd: false,
+    showBadge: false,
+  });
+  await Notifications.setNotificationChannelAsync(CARD_BILLS_CHANNEL_ID, {
+    name: 'Card bill reminders',
     importance: Notifications.AndroidImportance.DEFAULT,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
     bypassDnd: false,

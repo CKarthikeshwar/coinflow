@@ -143,3 +143,9 @@ describe('V2 split notifications (§43.4 stale-tap rule)', () => {
     expect(resolveNotificationTarget({ kind: 'split-request' })).toEqual({ kind: 'splits', tab: 'requests' });
   });
 });
+
+describe('CR-34 — card bill reminder', () => {
+  it('opens My accounts', () => {
+    expect(resolveNotificationTarget({ kind: 'card-bill' })).toEqual({ kind: 'myAccounts' });
+  });
+});
