@@ -33,7 +33,7 @@
  * lookup here, keep passing it in rather than importing `Colors`/`CategoryPalette` directly.
  */
 
-import { addDays } from 'date-fns';
+import { addDays, addMonths, startOfMonth } from 'date-fns';
 
 import { endOfLocalDayExclusive, startOfLocalDay, type Period } from './period';
 
@@ -124,4 +124,30 @@ export function resolveCategoryColor(
   if (category.key && category.key in palette) return palette[category.key];
   const hues = Object.values(palette);
   return hues[category.order % hues.length];
+}
+
+export type MonthlyPoint = { monthStartMs: number; spentMinor: number; incomeMinor: number };
+
+/**
+ * CR-27 — Income vs spending: one point per calendar month for the `months` months ending with the month that
+ * starts at `endMonthStartMs`, oldest first. `rows` are effective expense / income rows (the repo's job to filter);
+ * a month with nothing in it is a zero point, and the card draws it as a stub rather than leaving a gap.
+ */
+export function buildMonthlySeries(
+  rows: { occurredAt: number; type: string; amountMinor: number }[],
+  endMonthStartMs: number,
+  months = 6,
+): MonthlyPoint[] {
+  const points: MonthlyPoint[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    points.push({ monthStartMs: startOfMonth(addMonths(endMonthStartMs, -i)).getTime(), spentMinor: 0, incomeMinor: 0 });
+  }
+  const byStart = new Map(points.map((p) => [p.monthStartMs, p]));
+  for (const row of rows) {
+    const point = byStart.get(startOfMonth(row.occurredAt).getTime());
+    if (!point) continue;
+    if (row.type === 'expense') point.spentMinor += row.amountMinor;
+    else if (row.type === 'income') point.incomeMinor += row.amountMinor;
+  }
+  return points;
 }

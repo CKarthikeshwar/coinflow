@@ -19,6 +19,7 @@ import {
   listCardLast4s,
   markAccountSeen,
   mergeAccounts,
+  moveUnassignedTo,
   resolveAccountFromSms,
   unarchiveAccount,
   updateAccount,
@@ -184,5 +185,40 @@ describe('lookups', () => {
     const old = createAccount({ kind: 'credit_card', nickname: 'Old', bankName: 'SBI', last4: '1111' });
     archiveAccount(old.id);
     expect(listCardLast4s()).toEqual([{ id: card.id, last4: '4321' }]);
+  });
+});
+
+describe('moveUnassignedTo (D51 / CR-42)', () => {
+  const rowOf = (id: string) => db().select().from(transactions).where(eq(transactions.id, id)).get()!;
+
+  it('puts every live transaction with no account on the account, changing nothing else', () => {
+    const target = createAccount({ kind: 'bank', nickname: 'Canara', bankName: 'Canara Bank', last4: '672' }).id;
+    const a = insertTransaction(db(), { accountId: null, amountMinor: 900_000, direction: 'credit', type: 'income' });
+    const b = insertTransaction(db(), { accountId: null, amountMinor: 510, direction: 'debit', type: 'expense' });
+    const before = rowOf(a.id);
+    expect(moveUnassignedTo(target)).toBe(2);
+    const after = rowOf(a.id);
+    expect(after.accountId).toBe(target);
+    expect(rowOf(b.id).accountId).toBe(target);
+    expect({ ...after, accountId: null, updatedAt: 0 }).toEqual({ ...before, accountId: null, updatedAt: 0 });
+  });
+
+  it('leaves rows that already have an account, and deleted rows, alone', () => {
+    const target = createAccount({ kind: 'bank', nickname: 'Canara', bankName: 'Canara Bank', last4: '672' }).id;
+    const other = createAccount({ kind: 'cash', nickname: 'Cash' }).id;
+    const owned = insertTransaction(db(), { accountId: other, amountMinor: 100 });
+    const gone = insertTransaction(db(), { accountId: null, amountMinor: 100, deletedAt: 5 });
+    expect(moveUnassignedTo(target)).toBe(0);
+    expect(rowOf(owned.id).accountId).toBe(other);
+    expect(rowOf(gone.id).accountId).toBeNull();
+  });
+
+  it('an unknown or archived target writes nothing', () => {
+    const arch = createAccount({ kind: 'bank', nickname: 'Old', bankName: 'X', last4: '1111' }).id;
+    archiveAccount(arch);
+    const t = insertTransaction(db(), { accountId: null, amountMinor: 100 });
+    expect(moveUnassignedTo('nope')).toBe(0);
+    expect(moveUnassignedTo(arch)).toBe(0);
+    expect(rowOf(t.id).accountId).toBeNull();
   });
 });

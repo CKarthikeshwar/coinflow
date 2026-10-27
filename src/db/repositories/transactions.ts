@@ -272,11 +272,11 @@ export function useRecentTransactions(limit = 8) {
   );
 }
 
-export type DaySubtotal = { dayStartMs: number; spentMinor: number };
+export type DaySubtotal = { dayStartMs: number; spentMinor: number; incomeMinor: number };
 
 /**
  * The Transactions ledger query (§6.7). Search uses FTS5 when available, else the
- * `searchText LIKE` fallback (D27). `daySubtotals` is spend-only, bucketed by device-zone
+ * `searchText LIKE` fallback (D27). `daySubtotals` carries the day's expense and income totals (transfers excluded), bucketed by device-zone
  * day (the §27.3 helper refines the boundary in step 5).
  */
 /** The ledger query itself (exported so tests run the real SQL). */
@@ -332,14 +332,17 @@ export function transactionListQuery(query: TransactionListQuery) {
 export function useTransactionList(query: TransactionListQuery) {
   const q = useLiveQuery(transactionListQuery(query), [JSON.stringify(query)]);
 
-  const byDay = new Map<number, number>();
+  const byDay = new Map<number, { spentMinor: number; incomeMinor: number }>();
   for (const row of q.data) {
-    if (row.type !== 'expense') continue;
+    if (row.type !== 'expense' && row.type !== 'income') continue;
     const day = startOfLocalDay(row.occurredAt);
-    byDay.set(day, (byDay.get(day) ?? 0) + row.amountMinor);
+    const totals = byDay.get(day) ?? { spentMinor: 0, incomeMinor: 0 };
+    if (row.type === 'expense') totals.spentMinor += row.amountMinor;
+    else totals.incomeMinor += row.amountMinor;
+    byDay.set(day, totals);
   }
   const daySubtotals: DaySubtotal[] = [...byDay.entries()]
-    .map(([dayStartMs, spentMinor]) => ({ dayStartMs, spentMinor }))
+    .map(([dayStartMs, totals]) => ({ dayStartMs, ...totals }))
     .sort((a, b) => b.dayStartMs - a.dayStartMs);
 
   return { ...q, rows: q.data, daySubtotals };

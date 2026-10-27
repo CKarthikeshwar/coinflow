@@ -21,7 +21,7 @@
 
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
@@ -53,7 +53,7 @@ export default function AccountRulesScreen() {
     <SafeAreaView style={styles.screen}>
       <TopBar title="Merchant rules" onBack={() => router.back()} />
 
-      <View style={styles.body}>
+      <ScrollView contentContainerStyle={styles.body}>
         {(rules ?? []).length === 0 ? (
           <ThemedText type="body" themeColor="text3" style={styles.empty}>
             No rules yet. CoinFlow learns one automatically the first time you save a transaction
@@ -73,7 +73,7 @@ export default function AccountRulesScreen() {
             ))}
           </View>
         )}
-      </View>
+      </ScrollView>
 
       <ConfirmDialog
         visible={deleting !== null}
@@ -90,7 +90,7 @@ export default function AccountRulesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  body: { flex: 1, paddingHorizontal: Spacing.three },
+  body: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.five },
   list: { gap: Spacing.two, paddingTop: Spacing.two },
   empty: { paddingTop: Spacing.five, textAlign: 'center' },
 });

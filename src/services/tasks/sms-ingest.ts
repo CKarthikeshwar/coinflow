@@ -51,7 +51,6 @@ import * as Crypto from 'expo-crypto';
 import { isKnownSender } from '@/constants/sms-senders';
 import { getAccountRule } from '@/db/repositories/account-rules';
 import { listCardLast4s, resolveAccountFromSms, updateCardDue } from '@/db/repositories/accounts';
-import { recordSnapshot } from '@/db/repositories/balances';
 import { getSuggestion, insertIfNew } from '@/db/repositories/suggestions';
 import { hasDedupeKey } from '@/db/repositories/transactions';
 import { recordCardBillHint } from '@/db/repositories/transfers';
@@ -126,30 +125,19 @@ function resolveOwnAccount(
   }
 }
 
-/** Balance snapshot + card due date for an account already resolved. Never throws. */
-async function writeAccountFigures(
-  accountId: string,
-  balanceMinor: number | null,
-  due: DueRef | null,
-  receivedAt: number,
-): Promise<void> {
+/** Card due date for an account already resolved. Never throws. (A bank-reported balance is no longer stored — D50 / CR-41.) */
+async function writeAccountFigures(accountId: string, due: DueRef | null): Promise<void> {
   try {
-    if (balanceMinor !== null) recordSnapshot({ accountId, balanceMinor, asOf: receivedAt, source: 'sms' });
     if (due && updateCardDue(accountId, due)) await scheduleCardBillReminders();
   } catch (e) {
     console.warn('[smsIngestTask] account figures skipped:', (e as Error)?.name ?? 'unknown');
   }
 }
 
-async function recordAccountNews(
-  own: OwnAccountRef,
-  balanceMinor: number | null,
-  due: DueRef | null,
-  receivedAt: number,
-): Promise<void> {
+async function recordAccountNews(own: OwnAccountRef, due: DueRef | null): Promise<void> {
   try {
     const { id } = resolveAccountFromSms(own);
-    await writeAccountFigures(id, balanceMinor, due, receivedAt);
+    await writeAccountFigures(id, due);
   } catch (e) {
     console.warn('[smsIngestTask] account not resolved:', (e as Error)?.name ?? 'unknown');
   }
@@ -179,9 +167,10 @@ export async function smsIngestTask(
     // gates, §23.1/§23.5): a non-`transaction` result means nothing is created.
     const result = parseSms({ sender, body, receivedAt });
     if (result.kind === 'balance') {
-      // §46.5 — a balance-only text / card statement: a snapshot and / or a due date, no suggestion, no notification
+      // §46.5 / CR-41 — a balance-only text / card statement: it makes sure the account exists and keeps a card's due date;
+      // the balance it reports is not stored (an account's balance is its transactions' sum). No suggestion, no notification
       await ensureMigrated();
-      await recordAccountNews(result.ownAccount, result.balanceMinor, result.due, receivedAt);
+      await recordAccountNews(result.ownAccount, result.due);
       return;
     }
     if (result.kind !== 'transaction') return;
@@ -199,10 +188,10 @@ export async function smsIngestTask(
     );
     if (hasDedupeKey(dedupeKey)) return;
 
-    // Step 4b (§46.5, CR-34) — which of the user's own accounts this is; created on first sight. Its balance (and a
-    // card's due date) is written now, so it counts even while the transaction waits in the Review Queue.
+    // Step 4b (§46.5, CR-34) — which of the user's own accounts this is; created on first sight. A card's due date is
+    // written now, so it counts even while the transaction waits in the Review Queue.
     const own = resolveOwnAccount(result, body, dedupeKey);
-    if (own) await writeAccountFigures(own.id, result.fields.balanceMinor, result.fields.due, receivedAt);
+    if (own) await writeAccountFigures(own.id, result.fields.due);
 
     // Step 5 — write the Suggestion. `body` is never persisted (P-9).
     const { created, id } = insertIfNew({

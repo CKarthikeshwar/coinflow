@@ -7,13 +7,33 @@ it('shows the empty state when the series is empty', async () => {
   expect(getByText('Nothing recorded for this period.')).toBeTruthy();
 });
 
-it('shows the "avg" label with the formatted mean', async () => {
+it('shows the "avg" figure on the title line, with the previous period beside it (CR-27)', async () => {
   const series = [
     { dayStartMs: 1, amountMinor: 10000 },
     { dayStartMs: 2, amountMinor: 20000 },
   ];
-  const { getByText } = await render(<DailyChart series={series} yMax={20000} mean={15000} />);
+  const { getByText } = await render(
+    <DailyChart series={series} yMax={20000} mean={15000} previousMean={14267} previousLabel="Last month" />,
+  );
   expect(getByText('avg ₹150')).toBeTruthy();
+  expect(getByText(/Last month ₹142\.67/)).toBeTruthy();
+});
+
+it('leaves the comparison out when the previous period has no data', async () => {
+  const series = [{ dayStartMs: 1, amountMinor: 10000 }];
+  const { queryByText } = await render(<DailyChart series={series} yMax={10000} mean={10000} previousMean={null} />);
+  expect(queryByText(/Last month/)).toBeNull();
+});
+
+it('shows the first and last day under the graph and an optional note', async () => {
+  const series = [
+    { dayStartMs: new Date(2026, 9, 1).getTime(), amountMinor: 100 },
+    { dayStartMs: new Date(2026, 9, 27).getTime(), amountMinor: 100 },
+  ];
+  const { getByText } = await render(<DailyChart series={series} yMax={100} mean={100} note="Canara only" />);
+  expect(getByText('1 Oct')).toBeTruthy();
+  expect(getByText('27 Oct')).toBeTruthy();
+  expect(getByText('Canara only')).toBeTruthy();
 });
 
 it('renders the "Day by day" title', async () => {

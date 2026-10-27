@@ -2204,7 +2204,7 @@ Two phones: Samsung SM-S711B (Jio, +91 9390787053) and Motorola edge 60 pro (VIL
 | Save all with a default category (Samsung, real queue) | Pass — see UI-100 |
 | Swipe-away of the request notification keeps it Unattended | Pass — notification gone from the shade, `split_request_in` row still `unattended` |
 | Reject (in-app, Requests tab) | Pass — row → `rejected`, hidden from Requests, its notification dismissed, "Request rejected · Undo" |
-| Notification **Accept / Reject buttons** (headless) | **Not verified — no effect on the debug dev client.** The tap reached the app (`actionIdentifier: ACCEPT`, correct `requestId`), `coinflow.NOTIFICATION_RESPONSE` started and finished ~3 ms later, no JS log, the row stayed `unattended` (`updatedAt` unchanged) and the notification stayed in the shade. Matches the phase-0 warning that the debug client does not reliably host headless JS. **Re-check on a release-style build**; if it still does nothing there, it is a bug (fix as a patch) **Cause found (2026-10-26, CR-37):** R8 removed `RNHeadlessAppLoader` from the release build (`ClassNotFoundException` at every launch, absent from `mapping.txt`); keep rule added in `app.json`. **Re-check on the 2.1.0 build** — also the Save / Discard buttons on a transaction notification with the app swiped away |
+| Notification **Accept / Reject buttons** (headless) | **Not verified — no effect on the debug dev client.** The tap reached the app (`actionIdentifier: ACCEPT`, correct `requestId`), `coinflow.NOTIFICATION_RESPONSE` started and finished ~3 ms later, no JS log, the row stayed `unattended` (`updatedAt` unchanged) and the notification stayed in the shade. Matches the phase-0 warning that the debug client does not reliably host headless JS. **Re-check on a release-style build**; if it still does nothing there, it is a bug (fix as a patch) **Cause found (2026-10-26, CR-37):** R8 removed `RNHeadlessAppLoader` from the release build (`ClassNotFoundException` at every launch, absent from `mapping.txt`); keep rule added in `app.json`. **Checked on the 2.1.0 build (2026-10-26, Samsung):** a transaction notification's button works with the app swiped away (user). The split-request Accept / Reject use the same headless task; not separately exercised (needs an incoming request) |
 | Widgets: three widgets present, visuals | Checked informally by the user on the Samsung; taps, live update, Hide amounts, cold start, month rollover **not yet verified** |
 
 Notes: a plain `pm revoke` of SEND_SMS is not a valid denial test on the Motorola — the app re-requests and it is granted without a dialog; add `pm set-permission-flags --user 0 <pkg> android.permission.SEND_SMS user-fixed`. The Motorola's number is 9742590888; 9845897555 (the earlier assumption) was an old SIM.
@@ -2296,6 +2296,8 @@ the note; *Add a person* is under the search box. The calendar's ⅐-width fix s
 
 ### My accounts, balances & transfers (2026-10-25) — CR-34 / UI-UX CR-22 — phases A–C built 2026-10-26 (CR-35 / UI-UX CR-23)
 
+> **Balance rule changed 2026-10-27 (CR-41 / UI-UX CR-28).** Rows below that mention bank-reported balances, snapshots, staleness ("as of", amber), the Current balance field, **Needs a look**, reconcile, "oldest figure", or "Credit available" describe the earlier design and **no longer apply** — see the CR-41 section at the end of this file.
+
 | ID | Requirement | Spec | Phase | Status |
 |---|---|---|---|---|
 | UI-101 | "Paid to / from" and "Merchant rules" relabels | UI-UX §6.25 | A | Built (unit) |
@@ -2366,3 +2368,60 @@ auto-link from two real bank texts, the card-bill card (no second bank / card) �
 **Not yet checked on a device.** To check: a Canara text with "Total Avail.bal" gives Canara a balance on My accounts and Home switches to
 "Total balance"; typing a Current balance on Cash adds it to the total; Settings › SMS & notifications shows Card bill reminders; the widget
 picker lists **Balances**, it shows the total, and tapping it opens My accounts.
+
+## Analytics redesign (2026-10-27) — UI-UX CR-27 / impl CR-40
+
+Prototype `design-prototype/01-midnight/analytics-redesign.html` (approved 2026-10-27; `analytics-v3.html` is the earlier idea catalogue it superseded).
+Supersedes UI-UX CR-26 (arc removed) — the whole "This month" card is gone. Also on this change: Transactions day headers show income and expense
+(UI-UX CR-25 / impl CR-38).
+
+| Requirement | Component / service | Tests | Status |
+| --- | --- | --- | --- |
+| Account and hidden-category filter on the analytics queries; transfers never counted; the breakdown keeps hidden categories listed | `db/repositories/analytics.ts` (`accountCondition`, `hiddenCondition` — `COALESCE` so uncategorized rows survive `NOT`), `domain/analytics-filter.ts` | `analytics.test.ts` ("Analytics filters (CR-27) — real SQL"), `analytics-filter.test.ts` | Pass (unit, real SQL) |
+| Per-account spend / income (hidden categories applied, account filter not), six-month series | `accountTotalsQuery`, `monthlyRowsQuery`, `buildMonthlySeries` | `analytics.test.ts`, `domain/analytics.test.ts` | Pass (unit) |
+| Filters in memory only — survive period / tab changes, not closing the app | `stores/analytics-filter.ts` | `analytics-filter.test.ts` (store) | Pass (unit) |
+| Page order, filter chips, banner + Reset, empty-with-filters state, Income vs spending in Month mode only, "Last week" label | `app/(tabs)/analytics.tsx`, `features/analytics/filter-bar.tsx` | `analytics.test.tsx`, `filter-bar.test.tsx` | Pass (unit) |
+| Day by day first and taller; title line carries the average and last period's; first / last day under the graph | `features/analytics/daily-chart.tsx` | `daily-chart.test.tsx` | Pass (unit) |
+| Breakdown: Spent / Income switch, shown total in the donut, eye hides / shows a category, hidden rows stay listed, Hidden line + Show all, everything-hidden state, accounts carried to Transactions | `features/analytics/category-breakdown.tsx` | `category-breakdown.test.tsx` | Pass (unit) |
+| By account (tap filters, tap again clears, "Not in this view", No account row, left out with one row) | `features/analytics/account-breakdown.tsx` | `account-breakdown.test.tsx` | Pass (unit) |
+| Income vs spending (six months, empty months as stubs, left out when all empty) | `features/analytics/income-vs-spending.tsx` | `income-vs-spending.test.tsx` | Pass (unit) |
+| Accounts sheet and Categories sheet (draft until Apply, Select all / Only / Reset, spending and income independent) | `features/analytics/accounts-sheet.tsx`, `categories-sheet.tsx`, `stores/sheet-registry.ts`, `features/app-shell/sheet-host.tsx` | `accounts-sheet.test.tsx`, `categories-sheet.test.tsx` | Pass (unit) |
+| Removed: `BalanceArcCard`, `MeanMedianTile` and their tests | — | — | Done |
+
+**Not yet checked on a device.** To check: with two accounts the By account card shows both and tapping one filters the page; hiding the laptop's
+category drops the pie's grey slice and moves the daily average; the chips turn white and the banner appears; closing and reopening the app clears
+the filters; Week mode has no Income vs spending card.
+
+## My accounts — balance = sum of the account's transactions, from zero (2026-10-27) — impl CR-41 / UI-UX CR-28
+
+Supersedes D44 (bank-anchored balances), D45 (derived discrepancies) and D49's "available limit" figure; adds D50. Cards are still left out of the Total
+balance. The `account_balance` table stays in the schema, unused (no destructive migration).
+
+| Requirement | Component / service | Tests | Status |
+| --- | --- | --- | --- |
+| Balance of an account = Σ signed `amountMinor` of its non-deleted transactions (credit +, debit −, raw amounts, both transfer legs, pending suggestions not counted, never unknown, ₹0 when empty) | `domain/accounts/balance.ts` (`accountBalance`, `totalBalance`), `db/repositories/balances.ts` (`deriveAccountViews`, `listAccountViews`, `useAccountViews`) | `balance.test.ts`, `balances.test.ts` (real SQL: transfers, deleted, other accounts, shared expense in full, pending, a card going negative, merge, archived) | Pass (unit) |
+| Total balance = bank + wallet + cash (cards out, archived out), "across N accounts"; no "oldest figure", no "without a balance", no "Credit available" | `my-accounts.tsx` `TotalCard`, `(tabs)/index.tsx` | `my-accounts.test.tsx`, `index.test.tsx` | Pass (unit) |
+| A card row shows what is owed / in credit / nothing owed; Home keeps "Recorded net" when there is no bank / wallet / cash account | `my-accounts.tsx` `AccountRow`, `(tabs)/index.tsx` | `my-accounts.test.tsx`, `index.test.tsx` | Pass (unit) |
+| No Current balance / Available credit field; Merge moves the balance with the transactions | `features/accounts/account-sheet.tsx`, `stores/account-draft.ts` | `account-sheet.test.tsx` | Pass (unit) |
+| A balance SMS no longer changes any figure; it still resolves / creates the account and keeps a card's due date; the account's balance follows saved transactions only | `services/tasks/sms-ingest.ts` | `sms-ingest.test.ts`, `accounts-pipeline.test.ts` | Pass (unit) |
+| Balances widget: same totals, `updatedAt` and every `asOf` = 0 so the existing Kotlin prints no "updated … ago" / "· 3d old" (no native change); `widget-sync` no longer watches `account_balance` | `domain/widget-snapshot.ts`, `services/widgets/publish.ts`, `widget-sync.tsx` | `widget-snapshot.test.ts` | Pass (unit) — widget not re-checked on a device |
+| Removed: `reconcile.ts`, `needs-a-look-cards.tsx`, snapshot / acknowledge / purge functions | — | — | Done |
+
+**Not yet checked on a device.** To check: Home's Total balance and each My accounts row now equal the sum of that account's transactions (and so can differ from
+the bank's own figure); a new account shows ₹0; a card shows "owed"; the Edit account sheet has no balance field; the Balances widget shows the same total with no
+"updated … ago". To start an account at what the bank really holds, add a transaction (for example income "Balance adjustment").
+
+## My accounts — the total counts every transaction; move no-account transactions onto an account (2026-10-27) — impl CR-42 / UI-UX CR-29
+
+Adds D51. Found on the Samsung: the CR-41 total (−₹7,776.60) left out transactions saved before accounts existed, because they belong to no account. An account's own balance (D50) is unchanged.
+
+| Requirement | Component / service | Tests | Status |
+| --- | --- | --- | --- |
+| Total balance = Σ of every non-deleted transaction not on a card: bank / wallet / cash accounts (archived too) **plus** transactions with no account; "across N accounts + unassigned" | `domain/accounts/balance.ts` `totalBalance(accounts, unassignedMinor)`, `totalCaption`; `my-accounts.tsx` `TotalCard`; `(tabs)/index.tsx` hero | `balance.test.ts`, `my-accounts.test.tsx`, `index.test.tsx` | Done |
+| The no-account total and count are read live and synchronously | `db/repositories/balances.ts` `useUnassigned`, `unassignedSummary` | `balances.test.ts` (real SQL) | Done |
+| A **No account** row (only while some transactions have none) opens the Move to account sheet | `my-accounts.tsx` `NoAccountRow`; `stores/sheet-registry.ts` `moveUnassigned`; `features/app-shell/sheet-host.tsx` | `my-accounts.test.tsx` | Done |
+| Move to account: pick a live account, **Move** puts every no-account transaction on it (only `accountId` / `updatedAt` change), toast "Moved N transactions to …" | `features/accounts/move-unassigned-sheet.tsx`; `db/repositories/accounts.ts` `moveUnassignedTo` | `move-unassigned-sheet.test.tsx`, `accounts.test.ts` | Done |
+| Balances widget total is the complete total | `domain/widget-snapshot.ts` `buildWidgetAccounts(accounts, unassignedMinor)`; `services/widgets/publish.ts` | `widget-snapshot.test.ts` | Done |
+
+**Not yet checked on a device.** To check: My accounts shows a **No account** row with the sum of the old transactions; Home's total equals the old "Recorded net" figure
+(≈ ₹1,847) before the move; after **Move** to Canara the row disappears, Canara's balance equals that total and the total does not change.

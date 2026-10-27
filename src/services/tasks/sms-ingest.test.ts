@@ -28,7 +28,6 @@ jest.mock('@/db/repositories/accounts', () => ({
   listCardLast4s: jest.fn().mockReturnValue([]),
   updateCardDue: jest.fn().mockReturnValue(true),
 }));
-jest.mock('@/db/repositories/balances', () => ({ recordSnapshot: jest.fn() }));
 jest.mock('@/services/notifications/card-bill-reminder', () => ({ scheduleCardBillReminders: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@/db/repositories/transfers', () => ({ recordCardBillHint: jest.fn() }));
 jest.mock('@/db/repositories/transactions', () => ({
@@ -291,19 +290,18 @@ describe('smsIngestTask — V2 request branch (§42.2, IMP-079)', () => {
 
 
 describe('smsIngestTask — balances and card bills (§46.5, phase D / E)', () => {
-  const balances = jest.requireMock('@/db/repositories/balances') as { recordSnapshot: jest.Mock };
-  const accounts = jest.requireMock('@/db/repositories/accounts') as { updateCardDue: jest.Mock };
+  const accounts = jest.requireMock('@/db/repositories/accounts') as { updateCardDue: jest.Mock; resolveAccountFromSms: jest.Mock };
   const reminders = jest.requireMock('@/services/notifications/card-bill-reminder') as { scheduleCardBillReminders: jest.Mock };
 
-  it('a transaction with "Avl Bal" writes a snapshot at ingest, as of when the text arrived', async () => {
+  it('a transaction with "Avl Bal" is still saved as a suggestion; the bank\'s balance is not stored (D50 / CR-41)', async () => {
     await smsIngestTask({ ...QUALIFYING_SMS, body: 'Rs.450.00 debited from A/c XX1234 to VPA m@okhdfcbank. Avl Bal Rs.9,550.00' });
-    expect(balances.recordSnapshot).toHaveBeenCalledWith({ accountId: 'acc-hdfc', balanceMinor: 955000, asOf: 1_700_000_000_000, source: 'sms' });
     expect(insertIfNewMock).toHaveBeenCalledTimes(1);
   });
 
-  it('a balance-only text about your account: a snapshot, no suggestion, no notification', async () => {
+  it('a balance-only text about your account: the account is resolved, no suggestion, no notification', async () => {
+    accounts.resolveAccountFromSms.mockClear();
     await smsIngestTask({ ...QUALIFYING_SMS, body: 'Your A/c XX1234 Avl Bal is Rs.12,340.00 as of 20-10-26.' });
-    expect(balances.recordSnapshot).toHaveBeenCalledWith(expect.objectContaining({ balanceMinor: 1234000 }));
+    expect(accounts.resolveAccountFromSms).toHaveBeenCalledTimes(1);
     expect(insertIfNewMock).not.toHaveBeenCalled();
     expect(postForSuggestionMock).not.toHaveBeenCalled();
   });
@@ -324,11 +322,11 @@ describe('smsIngestTask — balances and card bills (§46.5, phase D / E)', () =
     expect(reminders.scheduleCardBillReminders).not.toHaveBeenCalled();
   });
 
-  it('a snapshot failure never drops the transaction', async () => {
-    balances.recordSnapshot.mockImplementationOnce(() => {
+  it('a due-date write failure never drops the transaction', async () => {
+    accounts.updateCardDue.mockImplementationOnce(() => {
       throw new Error('db');
     });
-    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Rs.450.00 debited from A/c XX1234 to VPA m@okhdfcbank. Avl Bal Rs.9,550.00' });
+    await smsIngestTask({ ...QUALIFYING_SMS, body: 'Rs.450.00 debited from A/c XX1234 to VPA m@okhdfcbank. Total due Rs.14,200.00, due date 05-Nov-26.' });
     expect(insertIfNewMock).toHaveBeenCalledTimes(1);
   });
 });

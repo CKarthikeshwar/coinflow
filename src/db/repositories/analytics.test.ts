@@ -9,13 +9,17 @@ import { eq } from 'drizzle-orm';
 
 import { monthPeriod, type Period } from '@/domain/period';
 
-import { categories, transactions } from '../schema';
+import { categories, myAccounts, transactions } from '../schema';
 import { insertTransaction } from '../test-support/fixtures';
 import { createMemoryDb } from '../test-support/memory-db';
+import { NO_ACCOUNT_ID, UNCATEGORIZED_ID } from '@/domain/analytics-filter';
+
 import {
+  accountTotalsQuery,
   categoryBreakdownQuery,
   dailyExpenseRowsQuery,
   largestExpensesQuery,
+  monthlyRowsQuery,
   periodSummaryQuery,
   runningBalanceQuery,
 } from './analytics';
@@ -281,5 +285,82 @@ describe('income categories (CR-28)', () => {
     db().update(transactions).set({ categoryId: 'c-salary' }).where(eq(transactions.type, 'income')).run();
     expect(summary()).toEqual(before.s);
     expect(balance()).toBe(before.b);
+  });
+});
+
+describe('Analytics filters (CR-27) — real SQL', () => {
+  beforeEach(() => {
+    db().insert(myAccounts).values([
+      { id: 'a-bank', kind: 'bank', nickname: 'Canara ··672', createdAt: 1, updatedAt: 1 },
+      { id: 'a-card', kind: 'credit_card', nickname: 'HDFC Card', createdAt: 2, updatedAt: 2 },
+    ]).run();
+    // bank: food 1000, cab 400, uncategorized 50, income 9000 (uncategorized)
+    expense(1000, { accountId: 'a-bank', categoryId: 'c-food' });
+    expense(400, { accountId: 'a-bank', categoryId: 'c-cab' });
+    expense(50, { accountId: 'a-bank', categoryId: null });
+    income(9000, { accountId: 'a-bank', categoryId: null });
+    // card: food 300
+    expense(300, { accountId: 'a-card', categoryId: 'c-food' });
+    // no account: cab 70
+    expense(70, { accountId: null, categoryId: 'c-cab' });
+    // a transfer must never count, whatever the filter
+    insertTransaction(db(), { direction: 'debit', type: 'transfer', amountMinor: 5000, occurredAt: inMonth(12), accountId: 'a-bank' });
+  });
+
+  const emptyFilter = { accountIds: [], hiddenExpense: [], hiddenIncome: [] };
+
+  it('with no filter every account counts and transfers stay out', () => {
+    expect(periodSummaryQuery(period, emptyFilter).get()).toEqual({ spentMinor: 1820, incomeMinor: 9000 });
+  });
+
+  it('one account', () => {
+    const f = { ...emptyFilter, accountIds: ['a-bank'] };
+    expect(periodSummaryQuery(period, f).get()).toEqual({ spentMinor: 1450, incomeMinor: 9000 });
+    expect(largestExpensesQuery(period, 5, f).all().map((r) => r.amountMinor)).toEqual([1000, 400, 50]);
+  });
+
+  it('several accounts, and the "No account" bucket on its own or together with an account', () => {
+    expect(periodSummaryQuery(period, { ...emptyFilter, accountIds: ['a-bank', 'a-card'] }).get()!.spentMinor).toBe(1750);
+    expect(periodSummaryQuery(period, { ...emptyFilter, accountIds: [NO_ACCOUNT_ID] }).get()).toEqual({ spentMinor: 70, incomeMinor: 0 });
+    expect(periodSummaryQuery(period, { ...emptyFilter, accountIds: [NO_ACCOUNT_ID, 'a-card'] }).get()!.spentMinor).toBe(370);
+  });
+
+  it('hiding a spending category removes it from the summary, the largest list and the daily rows — and income is untouched', () => {
+    const f = { ...emptyFilter, hiddenExpense: ['c-food'] };
+    expect(periodSummaryQuery(period, f).get()).toEqual({ spentMinor: 520, incomeMinor: 9000 });
+    expect(largestExpensesQuery(period, 5, f).all().map((r) => r.amountMinor)).toEqual([400, 70, 50]);
+    expect(dailyExpenseRowsQuery(period, f).all().reduce((n, r) => n + r.amountMinor, 0)).toBe(520);
+  });
+
+  it('hiding Uncategorized works for spending and for income separately', () => {
+    expect(periodSummaryQuery(period, { ...emptyFilter, hiddenExpense: [UNCATEGORIZED_ID] }).get()).toEqual({ spentMinor: 1770, incomeMinor: 9000 });
+    expect(periodSummaryQuery(period, { ...emptyFilter, hiddenIncome: [UNCATEGORIZED_ID] }).get()).toEqual({ spentMinor: 1820, incomeMinor: 0 });
+  });
+
+  it('hidden categories and an account filter combine', () => {
+    const f = { accountIds: ['a-bank'], hiddenExpense: ['c-food', UNCATEGORIZED_ID], hiddenIncome: [] };
+    expect(periodSummaryQuery(period, f).get()).toEqual({ spentMinor: 400, incomeMinor: 9000 });
+  });
+
+  it('the category breakdown follows the account filter but still lists hidden categories (so the eye can bring them back)', () => {
+    const f = { accountIds: ['a-bank'], hiddenExpense: ['c-food'], hiddenIncome: [] };
+    const rows = categoryBreakdownQuery(period, 'expense', f).all();
+    expect(rows.map((r) => [r.categoryId, r.amountMinor])).toEqual([['c-food', 1000], ['c-cab', 400], [null, 50]]);
+    // …whereas the "changes" variant drops them
+    const changes = categoryBreakdownQuery(period, 'expense', f, true).all();
+    expect(changes.map((r) => r.categoryId)).toEqual(['c-cab', null]);
+  });
+
+  it('account totals ignore the account filter, apply hidden categories, and report the No-account bucket as null', () => {
+    const rows = accountTotalsQuery(period, { accountIds: ['a-bank'], hiddenExpense: ['c-food'], hiddenIncome: [] }).all();
+    const by = Object.fromEntries(rows.map((r) => [r.accountId ?? 'none', [r.spentMinor, r.incomeMinor]]));
+    expect(by).toEqual({ 'a-bank': [450, 9000], none: [70, 0] }); // the card's only row is a hidden Food spend, so it has no row at all
+  });
+
+  it('the six-month rows follow both filters and stay inside the window', () => {
+    const f = { accountIds: ['a-bank'], hiddenExpense: ['c-food'], hiddenIncome: [] };
+    const rows = monthlyRowsQuery(period, f).all();
+    expect(rows.reduce((n, r) => n + (r.type === 'expense' ? r.amountMinor : 0), 0)).toBe(450);
+    expect(rows.every((r) => r.type === 'expense' || r.type === 'income')).toBe(true);
   });
 });

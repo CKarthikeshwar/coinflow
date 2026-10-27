@@ -503,6 +503,22 @@ describe('Confirm mode', () => {
     await second.unmount();
   });
 
+  // CR-43 — the remount above drops the component's SMS ref; the save must still carry the suggestion's dedupeKey,
+  // or the sweep re-queues the same SMS once the confirmed suggestion is purged.
+  it('still saves with the SMS dedupeKey after a remount', async () => {
+    mockGetSuggestion.mockReturnValue(suggestion({ amountMinor: 45000, account: 'Swiggy' }));
+    useSheetRegistry.setState({ params: { suggestionId: 'sug-1' } });
+    const first = await render(<TransactionSheetBody mode="confirm" />);
+    await first.unmount();
+
+    const { getByText } = await render(<TransactionSheetBody mode="confirm" />);
+    await fireEvent.press(getByText('Add'));
+    expect(mockWriteConfirmedTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dedupeKey: 'dedupe-1' }),
+    );
+  });
+
   // A remount for a genuinely *different* Suggestion (not the sub-picker return-trip case above)
   // must still re-seed — the guard shouldn't over-fire and get stuck showing stale data forever.
   it('still re-seeds on a remount for a different Suggestion', async () => {

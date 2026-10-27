@@ -3,10 +3,12 @@
  * ------------
  * My accounts (SPEC-UI-UX.md §6.25 UI-103, SPEC-implementation.md §46.9) — the user's own bank accounts, cards,
  * wallets and cash, in four sections (Bank accounts · Cards · Wallets · Cash), under a **Total balance** card
- * (bank + wallet + cash; cards are not your money, D49 — they add a "Credit available" line). Each row shows its
- * balance and how old that figure is ("as of 3h ago", amber after 3 days — an old figure must not look current), a
- * **Needs a look** pill when the bank's balance moved more than the recorded transactions explain (UI-107), and for a
- * card its next bill ("Bill ₹14,200 due 5 Nov", UI-108). Tap a row to edit it; **Add account** under each section.
+ * (every transaction except a card's, D51 / CR-42: bank + wallet + cash accounts plus transactions with no account; cards
+ * are not your money, D49). A **No account** row under it — only while some transactions have no account — opens the Move
+ * to account sheet, which puts them all on one account. Each row shows its balance — the sum of that account's own
+ * transactions from zero (D50 / CR-41), so there is no "as of" line and no stale warning. A card shows what is
+ * **owed** ("₹14,200 owed", or "₹300 in credit") and its next bill ("Bill ₹14,200 due 5 Nov", UI-108). Tap a row to
+ * edit it; **Add account** under each section.
  * Accounts detected from bank texts carry a **New** pill until opened (UI-104). Archived ones hide behind
  * "Show archived".
  *
@@ -24,13 +26,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useAccounts } from '@/db/repositories/accounts';
-import { useAccountViews, type AccountView } from '@/db/repositories/balances';
-import { totalBalance } from '@/domain/accounts/balance';
+import { useAccountViews, useUnassigned, type AccountView, type Unassigned } from '@/db/repositories/balances';
+import { totalBalance, totalCaption } from '@/domain/accounts/balance';
 import { ACCOUNT_SECTIONS } from '@/domain/accounts/method-kinds';
 import { formatMoney } from '@/domain/format/money';
-import { formatWhen } from '@/domain/format/when';
 import { ACCOUNT_KIND_ICON, accountSubtitle } from '@/features/accounts/account-label';
-import { NeedsALookCards } from '@/features/accounts/needs-a-look-cards';
 import { useSheetRegistry } from '@/stores';
 
 import { Card } from '@/ui/card';
@@ -52,7 +52,7 @@ function Pill({ label, tone }: { label: string; tone: 'new' | 'warn' }) {
 }
 
 function AccountRow({ view, now, onPress }: { view: AccountView; now: number; onPress: () => void }) {
-  const { account, balance, stale, discrepancies } = view;
+  const { account, balanceMinor } = view;
   const isCard = account.kind === 'credit_card';
   const billDue = isCard && account.dueAt !== null && account.dueAmountMinor !== null && account.dueAt >= now - 86_400_000;
   return (
@@ -66,7 +66,6 @@ function AccountRow({ view, now, onPress }: { view: AccountView; now: number; on
             {account.nickname}
           </ThemedText>
           {account.autoCreated ? <Pill label="New" tone="new" /> : null}
-          {discrepancies.length > 0 ? <Pill label="Needs a look" tone="warn" /> : null}
         </View>
         <ThemedText type="caption" themeColor="text3" numberOfLines={1}>
           {accountSubtitle(account)}
@@ -79,18 +78,19 @@ function AccountRow({ view, now, onPress }: { view: AccountView; now: number; on
         ) : null}
       </View>
       <View style={styles.amountCol}>
-        {balance ? (
+        {isCard ? (
+          // A card's balance is what the transactions on it add up to: negative = owed (D50)
           <>
             <ThemedText type="body" themeColor="text">
-              {money(balance.balanceMinor)}
+              {formatMoney(Math.abs(balanceMinor), { sign: 'none' })}
             </ThemedText>
-            <ThemedText type="caption" themeColor={stale ? 'warn' : 'text3'}>
-              {isCard ? 'available · ' : ''}as of {formatWhen(balance.asOf, now)}
+            <ThemedText type="caption" themeColor="text3">
+              {balanceMinor < 0 ? 'owed' : balanceMinor > 0 ? 'in credit' : 'nothing owed'}
             </ThemedText>
           </>
         ) : (
-          <ThemedText type="caption" themeColor="text3">
-            No balance yet
+          <ThemedText type="body" themeColor="text">
+            {money(balanceMinor)}
           </ThemedText>
         )}
       </View>
@@ -99,35 +99,53 @@ function AccountRow({ view, now, onPress }: { view: AccountView; now: number; on
   );
 }
 
-function TotalCard({ views, now }: { views: readonly AccountView[]; now: number }) {
-  const total = totalBalance(
-    views.map((v) => ({ kind: v.account.kind, archived: v.account.archivedAt !== null, balance: v.balance })),
+/** D51 (CR-42) — the transactions that belong to no account; tapping opens the Move to account sheet. */
+function NoAccountRow({ unassigned, onPress }: { unassigned: Unassigned; onPress: () => void }) {
+  return (
+    <View style={[styles.section, styles.noAccount]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="No account" onPress={onPress} style={styles.row}>
+        <View style={styles.tile}>
+          <Icon name="wallet" size={18} />
+        </View>
+        <View style={styles.rowText}>
+          <ThemedText type="body" themeColor="text" numberOfLines={1}>
+            No account
+          </ThemedText>
+          <ThemedText type="caption" themeColor="text3" numberOfLines={1}>
+            {unassigned.count} transaction{unassigned.count === 1 ? '' : 's'} not on any account
+          </ThemedText>
+        </View>
+        <ThemedText type="body" themeColor="text">
+          {money(unassigned.balanceMinor)}
+        </ThemedText>
+        <Icon name="chevron-right" size={16} color="text3" />
+      </Pressable>
+    </View>
   );
-  const accountsWord = (n: number) => `${n} account${n === 1 ? '' : 's'}`;
+}
+
+function TotalCard({ views, unassigned }: { views: readonly AccountView[]; unassigned: Unassigned }) {
+  const total = totalBalance(
+    views.map((v) => ({ kind: v.account.kind, archived: v.account.archivedAt !== null, balanceMinor: v.balanceMinor })),
+    unassigned.balanceMinor,
+  );
   return (
     <Card elevation="card" style={styles.total}>
       <ThemedText type="label" themeColor="text2">
         Total balance
       </ThemedText>
-      {total.knownCount > 0 ? (
+      {total.accountCount > 0 || unassigned.count > 0 ? (
         <>
           <ThemedText type="analyticsNet">{money(total.totalMinor)}</ThemedText>
           <ThemedText type="caption" themeColor="text3">
-            across {accountsWord(total.knownCount)}
-            {total.oldestAsOf !== null ? ` · oldest figure ${formatWhen(total.oldestAsOf, now)}` : ''}
-            {total.unknownCount > 0 ? ` · ${accountsWord(total.unknownCount)} without a balance` : ''}
+            {totalCaption(total.accountCount, unassigned.count)}
           </ThemedText>
         </>
       ) : (
         <ThemedText type="caption" themeColor="text3">
-          No balances yet — they appear as your bank texts arrive, or type one into an account.
+          Add a bank account, wallet or cash to see your total here.
         </ThemedText>
       )}
-      {total.creditAvailableMinor !== null ? (
-        <ThemedText type="label" themeColor="text2">
-          Credit available {formatMoney(total.creditAvailableMinor, { sign: 'none' })}
-        </ThemedText>
-      ) : null}
     </Card>
   );
 }
@@ -135,6 +153,7 @@ function TotalCard({ views, now }: { views: readonly AccountView[]; now: number 
 export default function MyAccountsScreen() {
   const { data: accounts } = useAccounts();
   const views = useAccountViews(accounts ?? []);
+  const unassigned = useUnassigned();
   const openSheet = useSheetRegistry((s) => s.open);
   const [showArchived, setShowArchived] = useState(false);
   const [now] = useState(() => Date.now());
@@ -151,7 +170,7 @@ export default function MyAccountsScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.body}>
-        {views.length === 0 ? (
+        {views.length === 0 && unassigned.count === 0 ? (
           <EmptyState
             glyph="landmark"
             line="Accounts appear here as your bank texts arrive — or add one yourself."
@@ -159,10 +178,8 @@ export default function MyAccountsScreen() {
           />
         ) : (
           <>
-            <TotalCard views={views} now={now} />
-            <View style={styles.needs}>
-              <NeedsALookCards views={views} />
-            </View>
+            <TotalCard views={views} unassigned={unassigned} />
+            {unassigned.count > 0 ? <NoAccountRow unassigned={unassigned} onPress={() => openSheet('moveUnassigned', {})} /> : null}
             {ACCOUNT_SECTIONS.map(({ kind, title }) => {
               const rows = visible.filter((v) => v.account.kind === kind);
               return (
@@ -213,8 +230,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   body: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.five },
   total: { gap: Spacing.one },
-  needs: { paddingTop: Spacing.two },
   sectionLabel: { paddingTop: Spacing.three, paddingBottom: Spacing.one },
+  noAccount: { marginTop: Spacing.three },
   section: { borderRadius: 14, backgroundColor: Colors.dark.surface2, paddingHorizontal: Spacing.two },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, minHeight: 64, paddingVertical: Spacing.two },
   tile: {

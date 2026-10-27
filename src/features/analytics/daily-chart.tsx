@@ -8,6 +8,7 @@
  * axis ceiling, then its real value is written above the point as text, not silently truncated.
  */
 
+import { format } from 'date-fns';
 import { area, line } from 'd3-shape';
 import { scaleLinear } from 'd3-scale';
 import { StyleSheet, View } from 'react-native';
@@ -21,12 +22,22 @@ import { Card } from '@/ui/card';
 import { ThemedText } from '@/ui/themed-text';
 
 const WIDTH = 320;
-const HEIGHT = 110;
+const HEIGHT = 150; // CR-27 — the graph is the hero of the page, so it is taller than the V1 card's 110
 const LABEL_GUTTER = 18;
 
-export type DailyChartProps = { series: DailyPoint[]; yMax: number; mean: number };
+export type DailyChartProps = {
+  series: DailyPoint[];
+  yMax: number;
+  mean: number;
+  /** The previous period's mean; `null` (or omitted) when it has no expense data — the comparison is left out. */
+  previousMean?: number | null;
+  /** "Last month" or "Last week", tracking the period control. */
+  previousLabel?: string;
+  /** A small note under the graph, centre — e.g. which filter is on. */
+  note?: string;
+};
 
-export function DailyChart({ series, yMax, mean }: DailyChartProps) {
+export function DailyChart({ series, yMax, mean, previousMean = null, previousLabel = 'Last month', note }: DailyChartProps) {
   if (series.length === 0) {
     return (
       <Card style={styles.card}>
@@ -61,9 +72,17 @@ export function DailyChart({ series, yMax, mean }: DailyChartProps) {
 
   return (
     <Card style={styles.card}>
-      <ThemedText type="label" themeColor="text3">
-        Day by day
-      </ThemedText>
+      <View style={styles.titleRow}>
+        <ThemedText type="label" themeColor="text3">
+          Day by day
+        </ThemedText>
+        <ThemedText type="caption" themeColor="text3">
+          <ThemedText type="caption" themeColor="text">
+            {`avg ${formatMoney(mean, { sign: 'none' })}`}
+          </ThemedText>
+          {previousMean == null ? '' : ` · ${previousLabel} ${formatMoney(previousMean, { sign: 'none' })}`}
+        </ThemedText>
+      </View>
       <View style={styles.chartWrap}>
         <Svg
           width={WIDTH}
@@ -96,9 +115,19 @@ export function DailyChart({ series, yMax, mean }: DailyChartProps) {
           ))}
         </Svg>
       </View>
-      <ThemedText type="caption" themeColor="text3" style={styles.avgLabel}>
-        avg {formatMoney(mean, { sign: 'none' })}
-      </ThemedText>
+      <View style={styles.axisRow}>
+        <ThemedText type="caption" themeColor="text3">
+          {format(series[0].dayStartMs, 'd MMM')}
+        </ThemedText>
+        {note ? (
+          <ThemedText type="caption" themeColor="text3">
+            {note}
+          </ThemedText>
+        ) : null}
+        <ThemedText type="caption" themeColor="text3">
+          {format(series[series.length - 1].dayStartMs, 'd MMM')}
+        </ThemedText>
+      </View>
     </Card>
   );
 }
@@ -107,5 +136,6 @@ const styles = StyleSheet.create({
   card: { gap: Spacing.two },
   empty: { paddingVertical: Spacing.three, textAlign: 'center' },
   chartWrap: { alignItems: 'center' },
-  avgLabel: { textAlign: 'right' },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  axisRow: { flexDirection: 'row', justifyContent: 'space-between' },
 });

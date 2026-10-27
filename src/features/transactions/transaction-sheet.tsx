@@ -478,7 +478,16 @@ export function TransactionSheetBody({ mode }: { mode: TransactionSheetMode }) {
         savedTransactionId = current.sourceId;
       } else {
         // §30.6/§30.7 — Add/Confirm's save toast; Edit's own spec (§30.8) doesn't have one.
-        const { transactionId, linkedPeerId } = writeConfirmedTransaction(current, smsRefRef.current);
+        // The ref is lost when the sheet remounts mid-session (e.g. returning from the Category picker, which
+        // keeps the draft), so a Confirm re-reads the suggestion — otherwise the saved row has no dedupeKey and
+        // the sweep re-queues the same SMS once the confirmed suggestion is purged (CR-43).
+        const confirmed = current.mode === 'confirm' && current.sourceId ? getSuggestion(current.sourceId) : null;
+        const smsRef: SmsRef =
+          smsRefRef.current ??
+          (confirmed
+            ? { sender: confirmed.smsSender, receivedAt: confirmed.smsReceivedAt, dedupeKey: confirmed.dedupeKey }
+            : null);
+        const { transactionId, linkedPeerId } = writeConfirmedTransaction(current, smsRef);
         savedTransactionId = transactionId;
         if (linkedPeerId) {
           // UI-106 — it matched a row on another of your accounts: it is a transfer now, not spending / income

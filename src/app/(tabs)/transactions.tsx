@@ -48,7 +48,7 @@ import { TransactionCard } from '@/ui/transaction-card';
 import { DayGroupHeader } from '@/ui/day-group-header';
 
 type ListItem =
-  | { kind: 'header'; key: string; dayStartMs: number; subtotalMinor: number }
+  | { kind: 'header'; key: string; dayStartMs: number; spentMinor: number; incomeMinor: number }
   | { kind: 'row'; key: string; txn: Transaction };
 
 function formatShort(ms: number): string {
@@ -141,13 +141,13 @@ export default function TransactionsScreen() {
     router.setParams({ categoryIds: '', uncategorized: '', type: '', methods: '', accountIds: '', from: '', to: '' });
 
   const items = useMemo<ListItem[]>(() => {
-    const subtotalByDay = new Map(daySubtotals.map((d) => [d.dayStartMs, d.spentMinor]));
+    const subtotalByDay = new Map(daySubtotals.map((d) => [d.dayStartMs, d]));
     const out: ListItem[] = [];
     let lastDay: number | null = null;
     for (const txn of rows) {
       const day = startOfLocalDay(txn.occurredAt);
       if (day !== lastDay) {
-        out.push({ kind: 'header', key: `h-${day}`, dayStartMs: day, subtotalMinor: subtotalByDay.get(day) ?? 0 });
+        out.push({ kind: 'header', key: `h-${day}`, dayStartMs: day, spentMinor: subtotalByDay.get(day)?.spentMinor ?? 0, incomeMinor: subtotalByDay.get(day)?.incomeMinor ?? 0 });
         lastDay = day;
       }
       out.push({ kind: 'row', key: txn.id, txn });
@@ -226,7 +226,7 @@ export default function TransactionsScreen() {
           contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + Spacing.three }]}
           renderItem={({ item }) =>
             item.kind === 'header' ? (
-              <DayGroupHeader dayStartMs={item.dayStartMs} subtotalMinor={item.subtotalMinor} />
+              <DayGroupHeader dayStartMs={item.dayStartMs} spentMinor={item.spentMinor} incomeMinor={item.incomeMinor} />
             ) : (
               <View style={styles.rowWrap}>
                 <TransactionCard

@@ -1,6 +1,6 @@
 /**
  * `DayGroupHeader` — SPEC-UI-UX.md §3.6 / SPEC-implementation.md §29.4. Plain label (date +
- * optional subtotal) between card groups on the Transactions list — not a card (§6.7).
+ * optional income / expense totals) between card groups on the Transactions list — not a card (§6.7).
  */
 
 import { StyleSheet, View } from 'react-native';
@@ -13,18 +13,21 @@ import { ThemedText } from './themed-text';
 
 export type DayGroupHeaderProps = {
   dayStartMs: number;
-  subtotalMinor?: number;
+  spentMinor?: number;
+  incomeMinor?: number;
 };
 
-export function DayGroupHeader({ dayStartMs, subtotalMinor }: DayGroupHeaderProps) {
+export function DayGroupHeader({ dayStartMs, spentMinor = 0, incomeMinor = 0 }: DayGroupHeaderProps) {
   return (
     <View style={styles.row}>
       <ThemedText type="label" themeColor="text3">
         {formatDayHeader(dayStartMs)}
       </ThemedText>
-      {subtotalMinor !== undefined && subtotalMinor > 0 ? (
+      {incomeMinor > 0 || spentMinor > 0 ? (
         <ThemedText type="label" themeColor="text3">
-          {formatMoney(subtotalMinor, { sign: 'none' })}
+          {[incomeMinor > 0 ? formatMoney(incomeMinor) : null, spentMinor > 0 ? formatMoney(-spentMinor) : null]
+            .filter(Boolean)
+            .join('  ')}
         </ThemedText>
       ) : null}
     </View>

@@ -71,6 +71,9 @@ import { useAccountDraft, useAccountRuleDraft, useAddSheetDraft, useCategoryDraf
 import { useSplitDraft } from '@/stores/split-draft';
 
 import { AccountSheet } from '@/features/accounts/account-sheet';
+import { MoveUnassignedSheet } from '@/features/accounts/move-unassigned-sheet';
+import { AnalyticsAccountsSheet } from '@/features/analytics/accounts-sheet';
+import { AnalyticsCategoriesSheet } from '@/features/analytics/categories-sheet';
 import { CategoryEditorSheet } from '@/features/categories/category-editor-sheet';
 import { CategoryPickerSheet } from '@/features/categories/category-picker-sheet';
 import { AccountRuleEditorSheet } from '@/features/settings/account-rule-editor-sheet';
@@ -116,7 +119,7 @@ export function SheetHost() {
     ? categoryDirty
     : isAccountSheet
       ? accountDirty
-      : current === 'filter' || current === 'merge'
+      : current === 'filter' || current === 'merge' || current === 'moveUnassigned'
         ? false
         : current === 'editAccountRule'
           ? accountRuleDirty
@@ -242,6 +245,9 @@ export function SheetHost() {
       {current === 'split' ? <SplitSheet /> : null}
       {current === 'merge' ? <MergeSheet /> : null}
       {isAccountSheet ? <AccountSheet /> : null}
+      {current === 'analyticsAccounts' ? <AnalyticsAccountsSheet /> : null}
+      {current === 'analyticsCategories' ? <AnalyticsCategoriesSheet /> : null}
+      {current === 'moveUnassigned' ? <MoveUnassignedSheet /> : null}
     </BottomSheetModal>
   );
 }

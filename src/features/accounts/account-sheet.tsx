@@ -4,9 +4,8 @@
  * section's Add button), an id ⇒ "Edit account" pre-filled from the stored row.
  *
  * Fields: Kind · Nickname (required) · Bank name (bank / card only) · Last 4 digits (optional — what SMS matching
- * uses) · **Current balance** (optional — what the bank app shows today; saved as a manual snapshot, D44, only when
- * changed; texts keep it fresh afterwards; a card's figure is its available credit). Edit adds Archive / Unarchive and
- * **Merge into…** (one real account detected twice: everything moves to the chosen account, this one is removed).
+ * uses). There is no balance field: an account's balance is the sum of its own transactions from zero (D50 / CR-41), so
+ * Merge moves the balance with the transactions. Edit adds Archive / Unarchive and **Merge into…** (one real account detected twice: everything moves to the chosen account, this one is removed).
  *
  * Opening an auto-created account clears its **New** pill (UI-104) — "until the user opens it" (§46.2).
  */
@@ -28,7 +27,6 @@ import {
   updateAccount,
   useAccounts,
 } from '@/db/repositories/accounts';
-import { listAccountViews, recordSnapshot } from '@/db/repositories/balances';
 import { scheduleCardBillReminders } from '@/services/notifications/card-bill-reminder';
 import type { AccountKind, MyAccount } from '@/db/schema';
 import { useSheetRegistry } from '@/stores';
@@ -49,25 +47,6 @@ const KIND_OPTIONS: readonly { value: AccountKind; label: string }[] = [
   { value: 'wallet', label: 'Wallet' },
   { value: 'cash', label: 'Cash' },
 ];
-
-/** "12,340.50" / "-500" → paise; "" or junk → null. */
-export function parseRupees(text: string): number | null {
-  const t = text.replace(/,/g, '').trim();
-  if (!/^-?\d+(\.\d{1,2})?$/.test(t)) return null;
-  const negative = t.startsWith('-');
-  const [major, frac = ''] = t.replace('-', '').split('.');
-  const minor = parseInt(major, 10) * 100 + parseInt((frac + '00').slice(0, 2), 10);
-  return negative ? -minor : minor;
-}
-
-/** paise → "12340.5" for editing (no grouping, so it types back cleanly); undefined → "". */
-function rupeesText(minor: number | undefined): string {
-  if (minor === undefined) return '';
-  const abs = Math.abs(minor);
-  const frac = abs % 100;
-  const text = `${Math.floor(abs / 100)}${frac ? `.${String(frac).padStart(2, '0')}` : ''}`;
-  return minor < 0 ? `-${text}` : text;
-}
 
 export function AccountSheet() {
   const params = useSheetRegistry((s) => s.params) as { accountId?: string; kind?: AccountKind };
@@ -96,7 +75,6 @@ export function AccountSheet() {
         nickname: account.nickname,
         bankName: account.bankName ?? '',
         last4: account.last4 ?? '',
-        balanceText: rupeesText(listAccountViews({ includeArchived: true }).find((v) => v.account.id === account.id)?.balance?.balanceMinor),
       });
       if (account.autoCreated) markAccountSeen(account.id);
     } else {
@@ -105,8 +83,7 @@ export function AccountSheet() {
   }, [params.accountId, params.kind, close]);
 
   const hasBank = draft.kind === 'bank' || draft.kind === 'credit_card';
-  const saveDisabled =
-    draft.nickname.trim().length === 0 || (draft.balanceText.trim() !== '' && parseRupees(draft.balanceText) === null);
+  const saveDisabled = draft.nickname.trim().length === 0;
 
   const handleCancel = useCallback(() => {
     if (useAccountDraft.getState().dirty) setShowDiscardConfirm(true);
@@ -134,12 +111,8 @@ export function AccountSheet() {
       last4: draft.kind === 'cash' ? null : draft.last4,
     };
     try {
-      const id = draft.accountId ?? createAccount(fields).id;
       if (draft.accountId) updateAccount(draft.accountId, fields);
-      const typed = parseRupees(draft.balanceText);
-      if (draft.balanceText !== useAccountDraft.getState()._initial.balanceText && typed !== null) {
-        recordSnapshot({ accountId: id, balanceMinor: typed, asOf: Date.now(), source: 'manual' });
-      }
+      else createAccount(fields);
       scheduleCardBillReminders().catch(() => {}); // a kind change / archive can add or drop a card's reminder
       finish();
     } catch (e) {
@@ -242,22 +215,6 @@ export function AccountSheet() {
           </>
         ) : null}
 
-        <ThemedText type="label" themeColor="text3" style={styles.label}>
-          {draft.kind === 'credit_card' ? 'Available credit' : 'Current balance'}
-        </ThemedText>
-        <TextField
-          value={draft.balanceText}
-          onChangeText={(balanceText) => draft.patch({ balanceText: balanceText.replace(/[^\d.,-]/g, '') })}
-          maxLength={16}
-          keyboardType="decimal-pad"
-          placeholder="Optional — what your bank app shows today"
-        />
-        {draft.balanceText.trim() && parseRupees(draft.balanceText) === null ? (
-          <ThemedText type="caption" themeColor="text" style={styles.error}>
-            That is not an amount.
-          </ThemedText>
-        ) : null}
-
         {draft.error ? (
           <ThemedText type="label" themeColor="text" style={styles.error}>
             {draft.error}
@@ -333,7 +290,7 @@ export function AccountSheet() {
         visible={mergeTarget !== null}
         glyph="triangle-alert"
         title={`Merge into ${mergeTarget?.nickname ?? ''}?`}
-        body={`${mergeCount} transaction${mergeCount === 1 ? '' : 's'} and its balances move to ${mergeTarget?.nickname ?? ''}. This account is removed.`}
+        body={`${mergeCount} transaction${mergeCount === 1 ? '' : 's'} move to ${mergeTarget?.nickname ?? ''}, and the balance with them. This account is removed.`}
         confirmLabel="Merge"
         onConfirm={doMerge}
         onCancel={() => setMergeTarget(null)}

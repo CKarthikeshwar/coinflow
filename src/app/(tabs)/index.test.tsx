@@ -34,10 +34,8 @@ jest.mock('@/db/repositories/split-hooks', () => ({
 // CR-34 — your accounts' balances (none by default: the hero shows the recorded net)
 let mockAccountViews: unknown[] = [];
 jest.mock('@/db/repositories/accounts', () => ({ useAccounts: () => ({ data: [] }) }));
-jest.mock('@/db/repositories/balances', () => ({
-  useAccountViews: () => mockAccountViews,
-  acknowledgeDiscrepancy: jest.fn(),
-}));
+let mockUnassigned = { balanceMinor: 0, count: 0 };
+jest.mock('@/db/repositories/balances', () => ({ useAccountViews: () => mockAccountViews, useUnassigned: () => mockUnassigned }));
 jest.mock('@/features/accounts/use-account-labels', () => ({
   useAccountLabels: () => ({ account: () => undefined, transfer: () => undefined }),
 }));
@@ -270,12 +268,10 @@ describe('permission banner', () => {
   });
 });
 
-describe('CR-34 — Total balance from your accounts (UI-109) and Needs a look (UI-107)', () => {
+describe('CR-34 / CR-41 — Total balance from your accounts (UI-109): the sum of each account\u2019s transactions', () => {
   const view = (over: Record<string, unknown> = {}) => ({
     account: { id: 'hdfc', kind: 'bank', nickname: 'HDFC ··672', archivedAt: null },
-    balance: { balanceMinor: 12_340_00, asOf: Date.now() - 2 * 3_600_000 },
-    stale: false,
-    discrepancies: [],
+    balanceMinor: 12_340_00,
     ...over,
   });
   beforeEach(() => {
@@ -285,26 +281,55 @@ describe('CR-34 — Total balance from your accounts (UI-109) and Needs a look (
   });
   afterEach(() => {
     mockAccountViews = [];
+    mockUnassigned = { balanceMinor: 0, count: 0 };
   });
 
-  it('with no known balance, the old figure reads "Recorded net"', async () => {
+  it('with no bank / wallet / cash account, the old figure reads "Recorded net"', async () => {
     const { getByText } = await render(<HomeScreen />);
     expect(getByText('Recorded net')).toBeTruthy();
   });
 
-  it('with a known balance, the hero is the real total across your accounts', async () => {
+  it('with an account, the hero is the real total across your accounts — and says nothing about how old it is', async () => {
     mockAccountViews = [view()];
-    const { getByText } = await render(<HomeScreen />);
+    const { getByText, queryByText } = await render(<HomeScreen />);
     expect(getByText('Total balance')).toBeTruthy();
-    expect(getByText('across 1 account · oldest figure 2h ago')).toBeTruthy();
+    expect(getByText('across 1 account')).toBeTruthy();
+    expect(queryByText(/oldest figure/)).toBeNull();
   });
 
-  it('an unexplained gap shows a Needs a look card', async () => {
-    mockAccountViews = [view({ discrepancies: [{ snapshotId: 's2', fromAsOf: 0, toAsOf: 1, diffMinor: -1_200_00 }] })];
+  it('an account with nothing recorded still counts, at ₹0 (not "unknown")', async () => {
+    mockAccountViews = [view({ balanceMinor: 0 })];
+    const { getByText, queryByText } = await render(<HomeScreen />);
+    expect(getByText('across 1 account')).toBeTruthy();
+    expect(queryByText('Recorded net')).toBeNull();
+  });
+
+  it('a credit card is not in the total; on its own it leaves the hero on "Recorded net"', async () => {
+    mockAccountViews = [view({ account: { id: 'c', kind: 'credit_card', nickname: 'Card', archivedAt: null }, balanceMinor: -14_200_00 })];
     const { getByText } = await render(<HomeScreen />);
-    expect(getByText("₹1,200 left HDFC ··672 that isn't recorded")).toBeTruthy();
-    await fireEvent.press(getByText("It's fine"));
-    const { acknowledgeDiscrepancy } = jest.requireMock('@/db/repositories/balances') as { acknowledgeDiscrepancy: jest.Mock };
-    expect(acknowledgeDiscrepancy).toHaveBeenCalledWith('s2');
+    expect(getByText('Recorded net')).toBeTruthy();
+  });
+
+  it('D51 — transactions with no account are in the total, and the caption says so', async () => {
+    mockAccountViews = [view({ balanceMinor: -777_660 })];
+    mockUnassigned = { balanceMinor: 962_370, count: 14 };
+    const { getByText } = await render(<HomeScreen />);
+    expect(getByText('across 1 account + unassigned')).toBeTruthy();
+    expect(getByText(/1,847\.10/)).toBeTruthy();
+  });
+
+  it('D51 — with no account at all but unassigned rows, the hero is still the Total balance', async () => {
+    mockUnassigned = { balanceMinor: 500, count: 2 };
+    const { getByText, queryByText } = await render(<HomeScreen />);
+    expect(getByText('Total balance')).toBeTruthy();
+    expect(getByText('not on any account')).toBeTruthy();
+    expect(queryByText('Recorded net')).toBeNull();
+  });
+
+  it('there is no Needs a look card any more', async () => {
+    mockAccountViews = [view()];
+    const { queryByText } = await render(<HomeScreen />);
+    expect(queryByText(/that isn't recorded/)).toBeNull();
+    expect(queryByText("It's fine")).toBeNull();
   });
 });

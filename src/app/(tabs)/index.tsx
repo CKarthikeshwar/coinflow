@@ -40,10 +40,8 @@ import { requestSmsPermissions } from '@/services/sms';
 import { useSheetRegistry } from '@/stores';
 
 import { useAccounts } from '@/db/repositories/accounts';
-import { useAccountViews } from '@/db/repositories/balances';
-import { totalBalance } from '@/domain/accounts/balance';
-import { formatWhen } from '@/domain/format/when';
-import { NeedsALookCards } from '@/features/accounts/needs-a-look-cards';
+import { useAccountViews, useUnassigned } from '@/db/repositories/balances';
+import { totalBalance, totalCaption } from '@/domain/accounts/balance';
 import { useAccountLabels } from '@/features/accounts/use-account-labels';
 import { ActionStripRow } from '@/features/home/action-strip';
 import { BalanceHero } from '@/features/home/balance-hero';
@@ -79,11 +77,13 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
   const pending = usePendingCount();
   const recent = useRecentTransactions(8);
   const accountLabels = useAccountLabels(recent.data); // CR-34 (UI-109)
-  // CR-34 (UI-109) — the real total of your accounts once any balance is known; before that, the recorded net
+  // CR-34 (UI-109) — the real total of your accounts (each = Σ of its own transactions from zero, D50 / CR-41); with no bank / wallet / cash account and no unassigned transaction, the recorded net
   const { data: myAccountRows } = useAccounts();
   const accountViews = useAccountViews(myAccountRows ?? []);
+  const unassigned = useUnassigned(); // D51 (CR-42): transactions with no account count in the total too
   const myTotal = totalBalance(
-    accountViews.map((v) => ({ kind: v.account.kind, archived: v.account.archivedAt !== null, balance: v.balance })),
+    accountViews.map((v) => ({ kind: v.account.kind, archived: v.account.archivedAt !== null, balanceMinor: v.balanceMinor })),
+    unassigned.balanceMinor,
   );
   const splitBadges = useSplitBadges(); // V2 (UI-075): "Split · 1 of 3 paid" on shared transactions
   const owed = useSplitsOverview(); // V2 (UI-081): the "Owed to you ₹N" row, only while N > 0
@@ -133,18 +133,12 @@ function HomeContent({ onRetry }: { onRetry: () => void }) {
 
       {/* UI-103 — the balance card opens My accounts */}
       <Pressable accessibilityRole="button" accessibilityLabel="My accounts" onPress={() => router.push('/my-accounts' as never)}>
-        {myTotal.knownCount > 0 ? (
-          <BalanceHero
-            balanceMinor={myTotal.totalMinor}
-            caption={`across ${myTotal.knownCount} account${myTotal.knownCount === 1 ? '' : 's'}${
-              myTotal.oldestAsOf !== null ? ` · oldest figure ${formatWhen(myTotal.oldestAsOf)}` : ''
-            }`}
-          />
+        {myTotal.accountCount > 0 || unassigned.count > 0 ? (
+          <BalanceHero balanceMinor={myTotal.totalMinor} caption={totalCaption(myTotal.accountCount, unassigned.count)} />
         ) : (
           <BalanceHero balanceMinor={balance.balanceMinor} label="Recorded net" />
         )}
       </Pressable>
-      <NeedsALookCards views={accountViews} />
 
       <View style={styles.tileRow}>
         <StatTile

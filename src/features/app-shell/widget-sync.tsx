@@ -22,7 +22,7 @@ import { AppState } from 'react-native';
 import { db } from '@/db/client';
 import { useSplitChangeSignal } from '@/db/repositories/analytics';
 import { useSetting } from '@/db/repositories/settings';
-import { accountBalances, myAccounts, suggestions, transactions } from '@/db/schema';
+import { myAccounts, suggestions, transactions } from '@/db/schema';
 import { useLiveQuery } from '@/hooks/use-live-query';
 import { schedulePublish } from '@/services/widgets/publish';
 
@@ -31,18 +31,16 @@ export function WidgetSync() {
   const txns = useLiveQuery(db.select({ id: transactions.id }).from(transactions));
   const sugg = useLiveQuery(db.select({ id: suggestions.id }).from(suggestions));
   const hide = useSetting<boolean>('widgetHideAmounts');
-  // CR-34 — a new balance (or a renamed / archived account) changes the Balances figures
-  const snaps = useLiveQuery(db.select({ id: accountBalances.id }).from(accountBalances));
+  // CR-34 — a renamed / archived account changes the Balances figures (the balances themselves follow `transactions`, CR-41)
   const accts = useLiveQuery(db.select({ id: myAccounts.id }).from(myAccounts));
 
   const txnAt = txns.updatedAt?.getTime() ?? 0;
   const suggAt = sugg.updatedAt?.getTime() ?? 0;
-  const snapsAt = snaps.updatedAt?.getTime() ?? 0;
   const acctsAt = accts.updatedAt?.getTime() ?? 0;
 
   useEffect(() => {
     schedulePublish();
-  }, [splitSignal, txnAt, suggAt, snapsAt, acctsAt, hide.value]);
+  }, [splitSignal, txnAt, suggAt, acctsAt, hide.value]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {

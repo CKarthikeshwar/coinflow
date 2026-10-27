@@ -72,31 +72,40 @@ describe('buildWidgetSnapshot (§44.2 schema v1)', () => {
 
 
 describe('buildWidgetAccounts (CR-34, §46.10)', () => {
-  const a = (id: string, kind: 'bank' | 'credit_card' | 'wallet' | 'cash', balanceMinor: number | null, asOf = 10, archived = false) => ({
-    id, nickname: id, kind, archived, balance: balanceMinor === null ? null : { balanceMinor, asOf },
+  const a = (id: string, kind: 'bank' | 'credit_card' | 'wallet' | 'cash', balanceMinor: number, archived = false) => ({
+    id, nickname: id, kind, archived, balanceMinor,
   });
 
-  it('total of bank / wallet / cash with a known balance; ≤ 3 rows, largest first; cards and archived left out', () => {
+  it('total of bank / wallet / cash (archived too); ≤ 3 live rows, largest first; cards left out; no age on anything (CR-41, D51)', () => {
     expect(
       buildWidgetAccounts([
-        a('sbi', 'bank', 50_000, 30),
-        a('hdfc', 'bank', 120_000, 20),
-        a('paytm', 'wallet', 2_000, 40),
-        a('cash', 'cash', 9_000, 50),
-        a('card', 'credit_card', 1_000_000),
-        a('old', 'bank', 7, 1, true),
-        a('none', 'bank', null),
+        a('sbi', 'bank', 50_000),
+        a('hdfc', 'bank', 120_000),
+        a('paytm', 'wallet', 2_000),
+        a('cash', 'cash', 9_000),
+        a('card', 'credit_card', -1_000_000),
+        a('old', 'bank', 7, true),
+        a('empty', 'bank', 0),
       ]),
     ).toEqual({
-      totalMinor: 181_000,
-      knownCount: 4,
-      updatedAt: 20,
+      totalMinor: 181_007, // the archived account's 7 paise are still yours
+      knownCount: 5,
+      updatedAt: 0,
       items: [
-        { id: 'hdfc', nickname: 'hdfc', balanceMinor: 120_000, asOf: 20 },
-        { id: 'sbi', nickname: 'sbi', balanceMinor: 50_000, asOf: 30 },
-        { id: 'cash', nickname: 'cash', balanceMinor: 9_000, asOf: 50 },
+        { id: 'hdfc', nickname: 'hdfc', balanceMinor: 120_000, asOf: 0 },
+        { id: 'sbi', nickname: 'sbi', balanceMinor: 50_000, asOf: 0 },
+        { id: 'cash', nickname: 'cash', balanceMinor: 9_000, asOf: 0 },
       ],
     });
+  });
+
+  it('transactions with no account are part of the total (D51)', () => {
+    expect(buildWidgetAccounts([a('hdfc', 'bank', -777_660)], 962_370)).toMatchObject({ totalMinor: 184_710, knownCount: 1 });
+    expect(buildWidgetAccounts([], -500)).toMatchObject({ totalMinor: -500, knownCount: 0, items: [] });
+  });
+
+  it('an account with nothing recorded counts at ₹0 (it is not "unknown")', () => {
+    expect(buildWidgetAccounts([a('new', 'bank', 0)])).toMatchObject({ totalMinor: 0, knownCount: 1 });
   });
 
   it('keeps v at 1 — the native store rejects any other version', () => {

@@ -32,6 +32,7 @@ import {
   ChartColumnBig,
   ChartLine,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleQuestionMark,
   Clapperboard,
@@ -40,6 +41,8 @@ import {
   Delete,
   Download,
   EllipsisVertical,
+  Eye,
+  EyeOff,
   Funnel,
   GraduationCap,
   HandCoins,
@@ -121,6 +124,9 @@ const ICONS = {
   'sliders-horizontal': SlidersHorizontal,
   plus: Plus,
   'chevron-right': ChevronRight,
+  'chevron-down': ChevronDown, // CR-27 — Analytics filter chips
+  eye: Eye, // CR-27 — show a hidden category
+  'eye-off': EyeOff, // CR-27 — hide a category
   'arrow-left': ArrowLeft,
   x: X,
   'more-vertical': EllipsisVertical,

@@ -45,15 +45,24 @@
  * trustworthy as a running total (it can include transactions this app never saw).
  */
 
-import { and, count, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
+import { addMonths, startOfMonth } from 'date-fns';
+import { and, count, desc, eq, getTableColumns, inArray, isNull, not, or, sql, type SQL } from 'drizzle-orm';
 
 import {
   buildDailySeries,
+  buildMonthlySeries,
   dailyChartYMax,
   meanDailySpend,
   medianDailySpend,
   percentDelta,
 } from '@/domain/analytics';
+import {
+  type AnalyticsFilter,
+  EMPTY_FILTER,
+  filterSignature,
+  NO_ACCOUNT_ID,
+  UNCATEGORIZED_ID,
+} from '@/domain/analytics-filter';
 import { monthPeriod, previousPeriod, type Period } from '@/domain/period';
 import { useLiveQuery } from '@/hooks/use-live-query';
 
@@ -91,6 +100,42 @@ export function useSplitChangeSignal(): number {
   return (a.updatedAt?.getTime() ?? 0) + (b.updatedAt?.getTime() ?? 0) + (c.updatedAt?.getTime() ?? 0);
 }
 
+/** Rows on one of the chosen accounts; `undefined` (no condition) when none are chosen = all accounts. */
+function accountCondition(accountIds: string[]): SQL | undefined {
+  if (accountIds.length === 0) return undefined;
+  const real = accountIds.filter((id) => id !== NO_ACCOUNT_ID);
+  const parts: SQL[] = [];
+  if (real.length > 0) parts.push(inArray(transactions.accountId, real));
+  if (accountIds.includes(NO_ACCOUNT_ID)) parts.push(isNull(transactions.accountId));
+  return parts.length === 1 ? parts[0] : or(...parts);
+}
+
+/** Rows that are NOT in a hidden category (spending and income hide independently); `undefined` when nothing is hidden. */
+function hiddenCondition(filter: AnalyticsFilter): SQL | undefined {
+  const forType = (type: 'expense' | 'income', ids: string[]): SQL | undefined => {
+    if (ids.length === 0) return undefined;
+    const real = ids.filter((id) => id !== UNCATEGORIZED_ID);
+    const cats: SQL[] = [];
+    // COALESCE: `NULL IN (...)` is NULL, and NOT(NULL) would drop every uncategorized row instead of keeping it.
+    if (real.length > 0) cats.push(sql`coalesce(${inArray(transactions.categoryId, real)}, 0)`);
+    if (ids.includes(UNCATEGORIZED_ID)) cats.push(isNull(transactions.categoryId));
+    return and(eq(transactions.type, type), cats.length === 1 ? cats[0] : or(...cats));
+  };
+  const hidden = [forType('expense', filter.hiddenExpense), forType('income', filter.hiddenIncome)].filter(
+    (c): c is SQL => c !== undefined,
+  );
+  if (hidden.length === 0) return undefined;
+  return not(hidden.length === 1 ? hidden[0] : or(...hidden)!);
+}
+
+/** The filter as extra WHERE conditions. `hidden: false` keeps hidden categories in (the Breakdown list must still show them). */
+function filterConditions(filter: AnalyticsFilter, scope: { accounts?: boolean; hidden?: boolean } = {}): SQL[] {
+  const { accounts = true, hidden = true } = scope;
+  return [accounts ? accountCondition(filter.accountIds) : undefined, hidden ? hiddenCondition(filter) : undefined].filter(
+    (c): c is SQL => c !== undefined,
+  );
+}
+
 const inPeriod = (period: Period) => [
   sql`${transactions.occurredAt} >= ${period.startMs}`,
   sql`${transactions.occurredAt} < ${period.endMsExclusive}`,
@@ -114,20 +159,25 @@ export function useRunningBalance() {
 }
 
 /** §26.1 — effective Spent / Income for one period. */
-export function periodSummaryQuery(period: Period) {
+export function periodSummaryQuery(period: Period, filter: AnalyticsFilter = EMPTY_FILTER) {
   return db
     .select({
       spentMinor: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${effectiveAmountSql} END), 0)`,
       incomeMinor: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${effectiveAmountSql} END), 0)`,
     })
     .from(transactions)
-    .where(and(isNull(transactions.deletedAt), ...inPeriod(period)));
+    .where(and(isNull(transactions.deletedAt), ...inPeriod(period), ...filterConditions(filter)));
 }
 
 /** §26.1 — Spent / Income for one period. Defaults to the current calendar month. */
-export function usePeriodSummary(period: Period = monthPeriod()) {
+export function usePeriodSummary(period: Period = monthPeriod(), filter: AnalyticsFilter = EMPTY_FILTER) {
   const signal = useSplitChangeSignal();
-  const q = useLiveQuery(periodSummaryQuery(period), [period.startMs, period.endMsExclusive, signal]);
+  const q = useLiveQuery(periodSummaryQuery(period, filter), [
+    period.startMs,
+    period.endMsExclusive,
+    signal,
+    filterSignature(filter),
+  ]);
   const row = q.data[0];
   return {
     spentMinor: row?.spentMinor ?? 0,
@@ -178,7 +228,12 @@ export function useUncategorizedCount(period?: Period) {
  * §26.4 — effective spend per category. Expenses whose effective amount is 0 (fully covered by others) are left out.
  * CR-28: `type = 'income'` gives the same breakdown for income ("Where it came from").
  */
-export function categoryBreakdownQuery(period: Period, type: 'expense' | 'income' = 'expense') {
+export function categoryBreakdownQuery(
+  period: Period,
+  type: 'expense' | 'income' = 'expense',
+  filter: AnalyticsFilter = EMPTY_FILTER,
+  applyHidden = false,
+) {
   return db
     .select({
       categoryId: transactions.categoryId,
@@ -191,6 +246,7 @@ export function categoryBreakdownQuery(period: Period, type: 'expense' | 'income
         isNull(transactions.deletedAt),
         eq(transactions.type, type),
         ...inPeriod(period),
+        ...filterConditions(filter, { hidden: applyHidden }),
         sql`${effectiveAmountSql} > 0`,
       ),
     )
@@ -200,21 +256,31 @@ export function categoryBreakdownQuery(period: Period, type: 'expense' | 'income
 
 /** §26.4 — "Where it went". `categoryId: null` is the Uncategorized bucket (own row, hatched,
  * IMP-033), ordered by spend descending. */
-export function useCategoryBreakdown(period: Period) {
+export function useCategoryBreakdown(period: Period, filter: AnalyticsFilter = EMPTY_FILTER) {
   const signal = useSplitChangeSignal();
-  const q = useLiveQuery(categoryBreakdownQuery(period), [period.startMs, period.endMsExclusive, signal]);
+  const q = useLiveQuery(categoryBreakdownQuery(period, 'expense', filter), [
+    period.startMs,
+    period.endMsExclusive,
+    signal,
+    filterSignature(filter),
+  ]);
   return { rows: q.data, error: q.error, updatedAt: q.updatedAt };
 }
 
 /** CR-28 — income per category for the period ("Where it came from"); `categoryId: null` is Uncategorized income. */
-export function useIncomeBreakdown(period: Period) {
+export function useIncomeBreakdown(period: Period, filter: AnalyticsFilter = EMPTY_FILTER) {
   const signal = useSplitChangeSignal();
-  const q = useLiveQuery(categoryBreakdownQuery(period, 'income'), [period.startMs, period.endMsExclusive, signal]);
+  const q = useLiveQuery(categoryBreakdownQuery(period, 'income', filter), [
+    period.startMs,
+    period.endMsExclusive,
+    signal,
+    filterSignature(filter),
+  ]);
   return { rows: q.data, error: q.error, updatedAt: q.updatedAt };
 }
 
 /** §26.5 — expenses ranked by *effective* amount, ties by most recent; each row's `amountMinor` is the effective amount. */
-export function largestExpensesQuery(period: Period, limit = 5) {
+export function largestExpensesQuery(period: Period, limit = 5, filter: AnalyticsFilter = EMPTY_FILTER) {
   return db
     .select({ ...getTableColumns(transactions), amountMinor: effectiveAmountSql })
     .from(transactions)
@@ -223,6 +289,7 @@ export function largestExpensesQuery(period: Period, limit = 5) {
         isNull(transactions.deletedAt),
         eq(transactions.type, 'expense'),
         ...inPeriod(period),
+        ...filterConditions(filter),
         sql`${effectiveAmountSql} > 0`,
       ),
     )
@@ -232,14 +299,20 @@ export function largestExpensesQuery(period: Period, limit = 5) {
 
 /** §26.5 — top 5 expenses in the period by amount, ties broken by most recent. A shared expense ranks
  * (and shows) at what it cost *you*, consistent with the Spent total (§41). */
-export function useLargestExpenses(period: Period, limit = 5) {
+export function useLargestExpenses(period: Period, limit = 5, filter: AnalyticsFilter = EMPTY_FILTER) {
   const signal = useSplitChangeSignal();
-  const q = useLiveQuery(largestExpensesQuery(period, limit), [period.startMs, period.endMsExclusive, limit, signal]);
+  const q = useLiveQuery(largestExpensesQuery(period, limit, filter), [
+    period.startMs,
+    period.endMsExclusive,
+    limit,
+    signal,
+    filterSignature(filter),
+  ]);
   return { rows: q.data, error: q.error, updatedAt: q.updatedAt };
 }
 
 /** Effective expense rows (date + amount) for one period, feeding the daily series. */
-export function dailyExpenseRowsQuery(period: Period) {
+export function dailyExpenseRowsQuery(period: Period, filter: AnalyticsFilter = EMPTY_FILTER) {
   return db
     .select({ occurredAt: transactions.occurredAt, amountMinor: effectiveAmountSql })
     .from(transactions)
@@ -248,6 +321,7 @@ export function dailyExpenseRowsQuery(period: Period) {
         isNull(transactions.deletedAt),
         eq(transactions.type, 'expense'),
         ...inPeriod(period),
+        ...filterConditions(filter),
         sql`${effectiveAmountSql} > 0`,
       ),
     );
@@ -259,12 +333,13 @@ export function dailyExpenseRowsQuery(period: Period) {
  * has no expense rows at all, IMP-032 — same "nothing to compare against" convention `useMoMDeltas`
  * already uses, just gated on row presence rather than a derived value being exactly 0).
  */
-export function useDailySeries(period: Period) {
+export function useDailySeries(period: Period, filter: AnalyticsFilter = EMPTY_FILTER) {
   const previous = previousPeriod(period);
 
   const signal = useSplitChangeSignal();
-  const current = useLiveQuery(dailyExpenseRowsQuery(period), [period.startMs, period.endMsExclusive, signal]);
-  const prev = useLiveQuery(dailyExpenseRowsQuery(previous), [previous.startMs, previous.endMsExclusive, signal]);
+  const sig = filterSignature(filter);
+  const current = useLiveQuery(dailyExpenseRowsQuery(period, filter), [period.startMs, period.endMsExclusive, signal, sig]);
+  const prev = useLiveQuery(dailyExpenseRowsQuery(previous, filter), [previous.startMs, previous.endMsExclusive, signal, sig]);
 
   const series = buildDailySeries(current.data, period);
   const hasPreviousData = prev.data.length > 0;
@@ -279,5 +354,79 @@ export function useDailySeries(period: Period) {
     previousMedian: hasPreviousData ? medianDailySpend(previousSeries) : null,
     error: current.error ?? prev.error,
     updatedAt: current.updatedAt && prev.updatedAt ? current.updatedAt : undefined,
+  };
+}
+
+/**
+ * CR-27 — spend and income per account for the period. The *hidden categories* apply, the *account filter does not*,
+ * so every account row in "By account" carries its real figure while the page is filtered to one of them.
+ * `accountId: null` is the "No account" bucket.
+ */
+export function accountTotalsQuery(period: Period, filter: AnalyticsFilter = EMPTY_FILTER) {
+  return db
+    .select({
+      accountId: transactions.accountId,
+      spentMinor: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${effectiveAmountSql} END), 0)`,
+      incomeMinor: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${effectiveAmountSql} END), 0)`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        isNull(transactions.deletedAt),
+        inArray(transactions.type, ['expense', 'income']),
+        ...inPeriod(period),
+        ...filterConditions(filter, { accounts: false }),
+      ),
+    )
+    .groupBy(transactions.accountId);
+}
+
+export function useAccountTotals(period: Period, filter: AnalyticsFilter = EMPTY_FILTER) {
+  const signal = useSplitChangeSignal();
+  const q = useLiveQuery(accountTotalsQuery(period, filter), [
+    period.startMs,
+    period.endMsExclusive,
+    signal,
+    filterSignature(filter),
+  ]);
+  return { rows: q.data, error: q.error, updatedAt: q.updatedAt };
+}
+
+/** Effective expense / income rows for the six calendar months ending with `period`'s month (CR-27). */
+export function monthlyRowsQuery(period: Period, filter: AnalyticsFilter = EMPTY_FILTER, months = 6) {
+  const fromMs = startOfMonth(addMonths(period.startMs, -(months - 1))).getTime();
+  return db
+    .select({
+      occurredAt: transactions.occurredAt,
+      type: transactions.type,
+      amountMinor: effectiveAmountSql,
+    })
+    .from(transactions)
+    .where(
+      and(
+        isNull(transactions.deletedAt),
+        inArray(transactions.type, ['expense', 'income']),
+        sql`${transactions.occurredAt} >= ${fromMs}`,
+        sql`${transactions.occurredAt} < ${period.endMsExclusive}`,
+        ...filterConditions(filter),
+        sql`${effectiveAmountSql} > 0`,
+      ),
+    );
+}
+
+/** Income vs spending for six months — Month mode only (the card is hidden in Week mode). */
+export function useMonthlySeries(period: Period, filter: AnalyticsFilter = EMPTY_FILTER, months = 6) {
+  const signal = useSplitChangeSignal();
+  const q = useLiveQuery(monthlyRowsQuery(period, filter, months), [
+    period.startMs,
+    period.endMsExclusive,
+    months,
+    signal,
+    filterSignature(filter),
+  ]);
+  return {
+    series: buildMonthlySeries(q.data, period.startMs, months),
+    error: q.error,
+    updatedAt: q.updatedAt,
   };
 }

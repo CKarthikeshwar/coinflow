@@ -1,5 +1,6 @@
 import {
   buildDailySeries,
+  buildMonthlySeries,
   dailyChartYMax,
   meanDailySpend,
   medianDailySpend,
@@ -171,5 +172,34 @@ describe('resolveCategoryColor', () => {
 
   it('a key not present in the palette (defensive) also falls back to cycling', () => {
     expect(resolveCategoryColor({ key: 'not-a-real-key', order: 2 }, palette)).toBe('#00f');
+  });
+});
+
+describe('buildMonthlySeries (CR-27)', () => {
+  const oct = new Date(2026, 9, 1).getTime();
+  const at = (m: number, d: number) => new Date(2026, m, d, 10).getTime();
+
+  it('returns six months oldest-first ending with the given month, empty months as zero points', () => {
+    const series = buildMonthlySeries([], oct);
+    expect(series).toHaveLength(6);
+    expect(series[0].monthStartMs).toBe(new Date(2026, 4, 1).getTime());
+    expect(series[5].monthStartMs).toBe(oct);
+    expect(series.every((p) => p.spentMinor === 0 && p.incomeMinor === 0)).toBe(true);
+  });
+
+  it('adds expense and income into their own month and ignores rows outside the window', () => {
+    const series = buildMonthlySeries(
+      [
+        { occurredAt: at(9, 3), type: 'expense', amountMinor: 100 },
+        { occurredAt: at(9, 20), type: 'expense', amountMinor: 50 },
+        { occurredAt: at(9, 5), type: 'income', amountMinor: 900 },
+        { occurredAt: at(7, 5), type: 'expense', amountMinor: 70 },
+        { occurredAt: at(3, 5), type: 'expense', amountMinor: 999 },
+      ],
+      oct,
+    );
+    expect(series[5]).toMatchObject({ spentMinor: 150, incomeMinor: 900 });
+    expect(series[3]).toMatchObject({ spentMinor: 70, incomeMinor: 0 });
+    expect(series.reduce((s, p) => s + p.spentMinor, 0)).toBe(220);
   });
 });

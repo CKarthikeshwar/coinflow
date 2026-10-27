@@ -20,11 +20,15 @@ export type WidgetPendingItem = {
   label: string;
 };
 
-/** CR-34 (§46.10) — the Balances widget's figures: your accounts' total and the 3 largest known balances. */
+/**
+ * CR-34 (§46.10) — the Balances widget's figures: your accounts' total and the 3 largest balances. Since D50 / CR-41 a
+ * balance is the sum of the account's transactions, so it is never old: `updatedAt` and each item's `asOf` are 0, which the
+ * widget reads as "say nothing about age" (no "updated … ago", no "· 3d old"). The keys stay so older native code keeps working.
+ */
 export type WidgetAccounts = {
   totalMinor: number;
+  /** how many accounts are in the total (name kept for the native side) */
   knownCount: number;
-  /** the oldest figure in the total ("updated 3h ago" / "· 3d old" on the widget); 0 when none is known */
   updatedAt: number;
   items: { id: string; nickname: string; balanceMinor: number; asOf: number }[];
 };
@@ -56,19 +60,23 @@ export type AccountForWidget = {
   nickname: string;
   kind: 'bank' | 'credit_card' | 'wallet' | 'cash';
   archived: boolean;
-  balance: { balanceMinor: number; asOf: number } | null;
+  balanceMinor: number;
 };
 
-/** Bank / wallet / cash accounts with a known balance (cards are not in the total, D49), largest first, ≤ 3 rows. */
-export function buildWidgetAccounts(accounts: readonly AccountForWidget[]): WidgetAccounts {
-  const known = accounts.filter((a) => !a.archived && a.kind !== 'credit_card' && a.balance !== null);
-  const totalMinor = known.reduce((sum, a) => sum + a.balance!.balanceMinor, 0);
-  const updatedAt = known.length ? Math.min(...known.map((a) => a.balance!.asOf)) : 0;
-  const items = [...known]
-    .sort((a, b) => b.balance!.balanceMinor - a.balance!.balanceMinor)
+/**
+ * The complete total (D51, CR-42): bank / wallet / cash accounts (cards are not in the total, D49; archived ones are, their
+ * money is still yours) plus the transactions that belong to no account. The rows are the live (non-archived) accounts,
+ * largest balance first, ≤ 3.
+ */
+export function buildWidgetAccounts(accounts: readonly AccountForWidget[], unassignedMinor = 0): WidgetAccounts {
+  const inTotal = accounts.filter((a) => a.kind !== 'credit_card');
+  const totalMinor = inTotal.reduce((sum, a) => sum + a.balanceMinor, unassignedMinor);
+  const counted = inTotal.filter((a) => !a.archived);
+  const items = [...counted]
+    .sort((a, b) => b.balanceMinor - a.balanceMinor)
     .slice(0, WIDGET_SNAPSHOT_MAX_ITEMS)
-    .map((a) => ({ id: a.id, nickname: a.nickname, balanceMinor: a.balance!.balanceMinor, asOf: a.balance!.asOf }));
-  return { totalMinor, knownCount: known.length, updatedAt, items };
+    .map((a) => ({ id: a.id, nickname: a.nickname, balanceMinor: a.balanceMinor, asOf: 0 }));
+  return { totalMinor, knownCount: counted.length, updatedAt: 0, items };
 }
 
 export type PendingSuggestionLike = {
@@ -92,6 +100,8 @@ export function buildWidgetSnapshot(input: {
   pendingSuggestions: readonly PendingSuggestionLike[];
   hideAmounts: boolean;
   accounts?: readonly AccountForWidget[];
+  /** D51 — the signed sum of the transactions with no account; part of the total */
+  unassignedMinor?: number;
 }): WidgetSnapshot {
   const items: WidgetPendingItem[] = [];
   for (const s of input.pendingSuggestions) {
@@ -110,6 +120,6 @@ export function buildWidgetSnapshot(input: {
     balanceMinor: input.balanceMinor,
     pending: { count: input.pendingSuggestions.length, items },
     hideAmounts: input.hideAmounts,
-    accounts: buildWidgetAccounts(input.accounts ?? []),
+    accounts: buildWidgetAccounts(input.accounts ?? [], input.unassignedMinor ?? 0),
   };
 }

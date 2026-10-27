@@ -39,7 +39,10 @@ export type SheetName =
   | 'split' // V2 — the Split sheet (SPEC-UI-UX.md §6.17)
   | 'merge' // V2 — the Merge sheet (SPEC-UI-UX.md §6.20)
   | 'createAccount' // CR-34 — Add / Edit account (SPEC-UI-UX.md §6.25, UI-103a)
-  | 'editAccount';
+  | 'editAccount'
+  | 'analyticsAccounts' // CR-27 — Analytics › Accounts filter (SPEC-UI-UX.md §6.10)
+  | 'analyticsCategories' // CR-27 — Analytics › Categories filter
+  | 'moveUnassigned'; // CR-29 — My accounts › No account › Move to account
 
 type SheetRegistryStore = {
   current: SheetName | null;

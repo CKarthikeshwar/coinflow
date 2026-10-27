@@ -18,7 +18,7 @@
  */
 
 import { periodSummaryQuery } from '@/db/repositories/analytics';
-import { listAccountViews } from '@/db/repositories/balances';
+import { listAccountViews, unassignedSummary } from '@/db/repositories/balances';
 import { getSetting, setSetting } from '@/db/repositories/settings';
 import { listPending } from '@/db/repositories/suggestions';
 import { monthPeriod } from '@/domain/period';
@@ -42,12 +42,13 @@ export function computeWidgetSnapshot(now: number = Date.now()): WidgetSnapshot 
     pendingSuggestions: listPending(),
     hideAmounts: getSetting<boolean>('widgetHideAmounts', false),
     // CR-34 (§46.10) — the Balances widget's data; the widget itself waits for the prototype approval (UI-099 gate)
-    accounts: listAccountViews({ now }).map((v) => ({
+    unassignedMinor: unassignedSummary().balanceMinor,
+    accounts: listAccountViews({ includeArchived: true }).map((v) => ({
       id: v.account.id,
       nickname: v.account.nickname,
       kind: v.account.kind,
       archived: v.account.archivedAt !== null,
-      balance: v.balance,
+      balanceMinor: v.balanceMinor,
     })),
   });
 }

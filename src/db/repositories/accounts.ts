@@ -190,6 +190,21 @@ export function mergeAccounts(fromId: string, intoId: string): void {
 }
 
 /**
+ * D51 (CR-42) — every non-deleted transaction that belongs to no account moves onto `accountId`, in one step. Only the
+ * account changes (amount, date, category, split, note stay). Returns how many moved; an unknown or archived target
+ * writes nothing and returns 0.
+ */
+export function moveUnassignedTo(accountId: string): number {
+  const target = getAccount(accountId);
+  if (!target || target.archivedAt) return 0;
+  return db
+    .update(transactions)
+    .set({ accountId, updatedAt: Date.now() })
+    .where(and(isNull(transactions.accountId), isNull(transactions.deletedAt)))
+    .run().changes;
+}
+
+/**
  * §46.5 — the account an SMS is about: found by `bankKey:last4`, or created (`autoCreated`, nickname "HDFC ··672",
  * kind from the message). Returns the id. An archived match is still used (the history stays on it) but not revived.
  */

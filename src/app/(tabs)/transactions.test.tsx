@@ -1,6 +1,7 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
 import type { Category, Transaction } from '@/db/schema';
+import { startOfLocalDay } from '@/domain/period';
 import { useSheetRegistry } from '@/stores';
 
 import TransactionsScreen from './transactions';
@@ -29,7 +30,7 @@ const mockCategories: Category[] = [
   { id: 'cat-food', key: null, name: 'Food', icon: 'utensils', kind: 'custom', appliesTo: 'expense', isProtected: false, order: 1, createdAt: 0, updatedAt: 0 },
 ];
 
-let mockListResult: { rows: Transaction[]; daySubtotals: { dayStartMs: number; spentMinor: number }[]; updatedAt: number | undefined };
+let mockListResult: { rows: Transaction[]; daySubtotals: { dayStartMs: number; spentMinor: number; incomeMinor: number }[]; updatedAt: number | undefined };
 
 jest.mock('@/db/repositories/split-hooks', () => ({ useSplitBadges: () => new Map() }));
 jest.mock('@/features/accounts/use-account-labels', () => ({
@@ -107,10 +108,11 @@ it('no-match empty state (search active) is visually distinct from no-data', asy
 it('renders rows grouped under a day header and navigates to Details on tap', async () => {
   mockListResult = {
     rows: [transaction()],
-    daySubtotals: [{ dayStartMs: 1_699_999_200_000, spentMinor: 45000 }],
+    daySubtotals: [{ dayStartMs: startOfLocalDay(1_700_000_000_000), spentMinor: 45000, incomeMinor: 120000 }],
     updatedAt: Date.now(),
   };
   const { getByText } = await render(<TransactionsScreen />);
+  expect(getByText(/\+.*1,200.*450/)).toBeTruthy();
   await fireEvent.press(getByText('Lunch'));
   expect(mockRouterPush).toHaveBeenCalledWith('/transaction/txn-1');
 });
